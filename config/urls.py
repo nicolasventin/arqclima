@@ -11,6 +11,7 @@ urlpatterns = [
     path("importaciones/", include("apps.imports.urls")),
     path("clientes/", include("apps.clients.urls")),
     path("presupuestos/", include("apps.quotes.urls")),
+    path("tareas/", include("apps.tasks.urls")),
     path("", include("apps.dashboard.urls")),
 ]
 

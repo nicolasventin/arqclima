@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "apps.imports",
     "apps.clients",
     "apps.quotes",
+    "apps.tasks",
 ]
 
 MIDDLEWARE = [

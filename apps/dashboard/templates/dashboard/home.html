@@ -30,10 +30,34 @@
     <div class="col-md-4">
         <div class="card h-100">
             <div class="card-body">
+                <h5 class="card-title">Mis tareas</h5>
+                {% if mis_tareas %}
+                <ul class="list-unstyled mb-2">
+                    {% for tarea in mis_tareas %}
+                    <li class="{% if tarea.esta_vencida %}text-danger{% endif %}">
+                        {{ tarea.titulo }}
+                        {% if tarea.fecha_limite %}<span class="text-muted small">({{ tarea.fecha_limite|date:"d/m" }})</span>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="card-text text-muted">No tenés tareas pendientes.</p>
+                {% endif %}
+                <a href="{% url 'tasks:mis_tareas' %}" class="btn btn-sm btn-primary">Ver todas</a>
+                {% if puede_gestionar_tareas %}
+                <a href="{% url 'tasks:lista' %}" class="btn btn-sm btn-outline-secondary">Tareas del equipo</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
                 <h5 class="card-title">Próximamente</h5>
                 <p class="card-text text-muted">
-                    Catálogo, presupuestos, stock y trabajos se van a ir sumando acá
-                    a medida que avancemos con las próximas etapas.
+                    Stock y trabajos se van a ir sumando acá a medida que avancemos
+                    con las próximas etapas.
                 </p>
             </div>
         </div>

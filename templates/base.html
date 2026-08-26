@@ -39,6 +39,16 @@
                         <a class="nav-link" href="{% url 'quotes:lista' %}">Presupuestos</a>
                     </li>
                     {% endif %}
+                    {% if perms.tasks.view_tarea %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'tasks:mis_tareas' %}">Mis tareas</a>
+                    </li>
+                    {% endif %}
+                    {% if perms.tasks.add_tarea %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'tasks:lista' %}">Tareas del equipo</a>
+                    </li>
+                    {% endif %}
                     {% if perms.pricing.manage_margenes %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'pricing:configuracion' %}">Configuración de precios</a>
