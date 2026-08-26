@@ -2,7 +2,7 @@
 
 ## Estado de avance del proyecto
 
-**Última actualización: 2026-08-26**, al cierre de la Etapa 5 (rama `feature/etapa-5-clientes-presupuestos`, a punto de mergearse a `main`). Esta sección se actualiza al cerrar cada etapa para que una sesión nueva no tenga que reconstruir el contexto a mano.
+**Última actualización: 2026-08-26**, al cierre de la Etapa 6 (rama `feature/etapa-6-tareas`, todavía sin mergear a `main`). Esta sección se actualiza al cerrar cada etapa para que una sesión nueva no tenga que reconstruir el contexto a mano.
 
 ### Etapas cerradas
 
@@ -10,9 +10,10 @@
 - **Etapa 2 (Catálogo)**: productos (marca+código), marcas, categorías, proveedores, línea de repuestos de Gabriel. `apps.catalog`.
 - **Etapa 3 (Precios)**: historial de costos inmutable (trigger de Postgres), márgenes configurables por producto/marca/categoría/general, flete, costo financiero, `margen_mano_obra`. `apps.pricing`.
 - **Etapa 4 (Importaciones)**: carga de listas de precios (Excel) con vista previa antes de confirmar. `apps.imports`.
-- **Etapa 5 (Clientes + Presupuestos)**: **cerrada en 4 partes** — ver decisiones abajo. `apps.clients`, `apps.quotes`. 40 tests nuevos (81 en total en el proyecto, todos verdes desde una base de datos de test creada de cero).
+- **Etapa 5 (Clientes + Presupuestos)**: **cerrada en 4 partes** — ver decisiones abajo. `apps.clients`, `apps.quotes`. Mergeada a `main` en `e2ffc05` (incluye el fix de `revert_presupuesto_aceptado` en `7542e76`).
+- **Etapa 6 (Tareas)**: modelo `Tarea` (regla 14), máquina de estados propia, permisos y alcance de visibilidad por rol, integrada al dashboard de la Etapa 1. `apps.tasks`. Ver decisiones abajo. **105 tests en total en el proyecto, todos verdes desde una base de datos de test creada de cero.**
 
-**Siguiente etapa según el plan original: Etapa 6 (Tareas).**
+**Siguiente etapa según el plan original: Etapa 7 (Stock).**
 
 ### Decisiones de diseño puntuales tomadas en el camino (no estaban en la versión original de este archivo)
 
@@ -44,6 +45,16 @@ Reglas de negocio 1-15 más abajo siguen siendo la fuente de verdad general; est
 17. **Alta de ítems de catálogo en la UI**: se elige directamente la combinación producto+proveedor en un solo `<select>` (sin cascada de dropdowns ni JavaScript — el proyecto no usa ningún framework de frontend), para no violar la regla de "nunca auto-elegir proveedor". El precio/costo sugerido se trae vía un GET con `?producto_proveedor=<id>` y queda editable antes de guardar.
 18. **`xhtml2pdf`** elegido para exportar presupuestos a PDF (puro Python, sin dependencias de sistema como pango/cairo) en vez de WeasyPrint (mejor fidelidad CSS pero requiere librerías nativas) o ReportLab (más control pero sin templates HTML).
 19. **Apps separadas por concepto**, mismo criterio que el resto del proyecto: `apps/clients` (Cliente) y `apps/quotes` (Presupuesto/Sección/Ítem/PlantillaCondiciones) — no una única `apps/sales`.
+
+**Etapa 6 (Tareas):**
+
+20. **`Tarea` es de una sola persona** (`asignado_a` FK, no M2M): con más de un asignado se diluye la responsabilidad; si dos personas tienen que trabajar lo mismo, se crean dos tareas.
+21. **Sin estado "Vencida"**: a diferencia de `Presupuesto` (donde "Vencido" ya estaba en la enumeración original de estados, regla 9), la regla 14 define la máquina de estados de Tarea con solo tres valores. `Tarea.esta_vencida` es una property calculada (`fecha_limite < hoy AND estado != Completada`), sin persistir ni requerir ningún management command — no hay ningún estado al que transicionar.
+22. **Sin tabla de historial de estados propia para Tarea**: se reutiliza el `AuditLog` genérico de la Etapa 1 vía `cambiar_estado_tarea()`, mismo patrón que `Presupuesto.cambiar_estado()`. `Tarea.completada_en` es la única excepción — un campo denormalizado de lectura para no tener que ir a buscar el `AuditLog` para mostrar la fecha de cierre en un listado.
+23. **Transiciones de Tarea**: `Pendiente → {En proceso, Completada}` (se puede saltar directo a Completada, una tarea de dos minutos no debería obligar el paso intermedio), `En proceso → {Completada}`, `Completada` terminal (sin reabrir — igual que `Cancelado` en Presupuesto).
+24. **`Tarea.asignado_a` con `on_delete=SET_NULL`** (a diferencia de las FKs "núcleo" de Etapa 5 como `Presupuesto.cliente`, que son `PROTECT`): si se borra el usuario, la tarea queda sin asignar en vez de bloquear el borrado — decisión explícita del usuario, mismo criterio que `creado_por`/`asignado_por` en el resto del proyecto.
+25. **Permisos de Tarea**: Administrador/Ventas y Presupuestos/Service y Repuestos comparten `add_tarea`/`change_tarea` (cualquiera de los tres puede crear y reasignar cualquier tarea, no solo las que creó). Depósito/Técnico de Campo NO tienen esos permisos, pero sí pueden mover el estado de una tarea propia libremente (Pendiente↔En proceso↔Completada) vía un chequeo de fila (`asignado_a == request.user`), sin necesidad de un permiso Django de por medio.
+26. **Alcance de visibilidad de listados de Tarea** (`queryset_tareas_visibles`): Diego ve las de todo el equipo (`view_all_tareas`); Rodrigo/Gabriel ven lo que ellos asignaron + lo que tienen asignado a sí mismos; Contri/Andrés ven solo lo propio.
 
 ## Contexto
 
