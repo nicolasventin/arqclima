@@ -31,12 +31,18 @@ def registrar_movimiento(
     requiere_devolucion=False,
     salida_relacionada=None,
     referencia_libre="",
+    trabajo=None,
+    material_trabajo=None,
     detalle="",
 ):
     """
     Único punto de entrada para crear un MovimientoStock — nunca se
     inserta directo con .create() fuera de acá, para que la validación
     de signo/tipo y la auditoría sean parejas en todos los flujos.
+
+    `trabajo`/`material_trabajo` (Etapa 8): se pasan en el mismo INSERT
+    porque MovimientoStock es append-only — un UPDATE posterior para
+    completarlos violaría el propio trigger de inmutabilidad.
     """
     signo_esperado = SIGNO_ESPERADO.get(tipo)
     if signo_esperado is not None and cantidad * signo_esperado <= 0:
@@ -57,6 +63,8 @@ def registrar_movimiento(
         requiere_devolucion=requiere_devolucion,
         salida_relacionada=salida_relacionada,
         referencia_libre=referencia_libre,
+        trabajo=trabajo,
+        material_trabajo=material_trabajo,
         registrado_por=usuario,
     )
     log_action(

@@ -10,6 +10,8 @@ from apps.catalog.models import Marca, Producto
 from apps.clients.models import Cliente
 from apps.quotes.models import EstadoPresupuesto, ItemPresupuesto, Presupuesto, SeccionPresupuesto
 from apps.quotes.services import cambiar_estado, enviar_presupuesto
+from apps.stock.models import Deposito
+from apps.stock.services import stock_actual
 
 from .models import EstadoTrabajo, EtapaTrabajo, MaterialTrabajo, ORDEN_ESTADOS, Trabajo
 from .permissions import (
@@ -18,14 +20,22 @@ from .permissions import (
     puede_cancelar_trabajo,
     puede_crear_trabajo,
     puede_gestionar_materiales,
+    puede_registrar_consumo_material,
     queryset_trabajos_visibles,
 )
 from .services import (
     TransicionInvalidaError,
     cambiar_estado_trabajo,
     cancelar_trabajo,
+    cantidad_enviada,
+    cantidad_pendiente_envio,
+    cantidad_usada_neta,
     crear_trabajo,
+    enviar_material,
+    enviar_materiales_pendientes,
     generar_listado_materiales,
+    materiales_pendientes_de_envio,
+    registrar_sobrante,
 )
 
 
@@ -656,3 +666,235 @@ class PuedeGestionarMaterialesTests(TestCase):
         self.assertTrue(puede_gestionar_materiales(contri))
         self.assertFalse(puede_gestionar_materiales(rodrigo))
         self.assertFalse(puede_gestionar_materiales(andres))
+
+
+class EnviarYConsumoMaterialTests(TestCase):
+    """Parte 3: envío y consumo real de materiales (regla de negocio 11)."""
+
+    def setUp(self):
+        self.diego = _crear_usuario("diego_envio_material", "Administrador")
+        self.andres = _crear_usuario("andres_envio_material", "Técnico de Campo")
+        cliente = Cliente.objects.create(nombre="Cliente Envio Material")
+        presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
+        self.trabajo = crear_trabajo(presupuesto, self.diego, tecnico_asignado=self.andres)
+        generar_listado_materiales(self.trabajo, self.diego)
+        self.material = self.trabajo.materiales.get(producto__codigo="MAT-A", etapa__titulo="1era etapa")
+
+    def test_cantidad_pendiente_envio_antes_de_enviar(self):
+        self.assertEqual(cantidad_pendiente_envio(self.material), self.material.cantidad_necesaria)
+
+    def test_material_manual_no_tiene_conexion_con_stock(self):
+        manual = MaterialTrabajo.objects.create(
+            trabajo=self.trabajo, descripcion_manual="Sin catálogo", cantidad_necesaria=5
+        )
+        self.assertEqual(cantidad_pendiente_envio(manual), Decimal("0"))
+        with self.assertRaises(ValueError):
+            enviar_material(manual, self.diego)
+
+    def test_enviar_material_crea_salida_en_stock_general(self):
+        stock_antes = stock_actual(self.material.producto, Deposito.GENERAL)
+        enviar_material(self.material, self.diego)
+        stock_despues = stock_actual(self.material.producto, Deposito.GENERAL)
+        self.assertEqual(stock_antes - stock_despues, self.material.cantidad_necesaria)
+        self.assertEqual(cantidad_pendiente_envio(self.material), Decimal("0"))
+
+    def test_movimiento_queda_vinculado_al_trabajo_y_al_material(self):
+        movimiento = enviar_material(self.material, self.diego)
+        self.assertEqual(movimiento.trabajo, self.trabajo)
+        self.assertEqual(movimiento.material_trabajo, self.material)
+
+    def test_no_se_puede_enviar_dos_veces_si_no_cambio_la_cantidad(self):
+        enviar_material(self.material, self.diego)
+        with self.assertRaises(ValueError):
+            enviar_material(self.material, self.diego)
+
+    def test_enviar_de_nuevo_manda_solo_el_delta_si_se_edito_la_cantidad(self):
+        enviar_material(self.material, self.diego)
+        self.material.cantidad_necesaria += Decimal("3")
+        self.material.save()
+        movimiento = enviar_material(self.material, self.diego)
+        self.assertEqual(abs(movimiento.cantidad), Decimal("3"))
+
+    def test_enviar_materiales_pendientes_en_bloque(self):
+        enviados = enviar_materiales_pendientes(self.trabajo, self.diego)
+        self.assertEqual(len(enviados), 3)  # los 3 materiales de catálogo generados
+        self.assertEqual(materiales_pendientes_de_envio(self.trabajo), [])
+
+    def test_registrar_sobrante_crea_entrada_y_reduce_neto(self):
+        enviar_material(self.material, self.diego)
+        registrar_sobrante(self.material, Decimal("1"), self.andres)
+        self.assertEqual(cantidad_usada_neta(self.material), self.material.cantidad_necesaria - Decimal("1"))
+        stock = stock_actual(self.material.producto, Deposito.GENERAL)
+        self.assertEqual(stock, -(self.material.cantidad_necesaria - Decimal("1")))
+
+    def test_no_se_puede_devolver_mas_de_lo_enviado(self):
+        enviar_material(self.material, self.diego)
+        with self.assertRaises(ValueError):
+            registrar_sobrante(self.material, self.material.cantidad_necesaria + Decimal("1"), self.andres)
+
+    def test_no_se_puede_registrar_sobrante_cero_o_negativo(self):
+        enviar_material(self.material, self.diego)
+        with self.assertRaises(ValueError):
+            registrar_sobrante(self.material, Decimal("0"), self.andres)
+
+    def test_no_se_reusa_tipo_devolucion_para_sobrante_general(self):
+        """
+        Confirma la decisión de diseño: el sobrante de obra es una
+        ENTRADA simple, no el tipo Devolución (reservado al circuito de
+        repuestos de Gabriel, atado a requiere_devolucion/salida_relacionada).
+        """
+        enviar_material(self.material, self.diego)
+        movimiento = registrar_sobrante(self.material, Decimal("1"), self.andres)
+        self.assertEqual(movimiento.tipo, "entrada")
+        self.assertFalse(movimiento.requiere_devolucion)
+
+
+class MarcarListoConPendientesTests(TestCase):
+    """
+    Regla 6/criterio de Stock aplicado a Trabajo: marcar Listo con
+    material sin enviar NO bloquea, pero audita con detalle — mismo
+    patrón que enviar_presupuesto() con margen bajo.
+    """
+
+    def setUp(self):
+        self.diego = _crear_usuario("diego_listo_pendientes", "Administrador")
+        cliente = Cliente.objects.create(nombre="Cliente Listo Pendientes")
+        presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
+        self.trabajo = crear_trabajo(presupuesto, self.diego)
+        generar_listado_materiales(self.trabajo, self.diego)
+
+    def test_marcar_listo_con_pendientes_audita_accion_especifica(self):
+        from apps.audit.models import AuditLog
+
+        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.LISTO, self.diego)
+        self.trabajo.refresh_from_db()
+        self.assertEqual(self.trabajo.estado, EstadoTrabajo.LISTO)  # no bloquea
+
+        log = AuditLog.objects.latest("id")
+        self.assertEqual(log.accion, "trabajo_marcado_listo_con_pendientes")
+        self.assertIn("pendiente de envío", log.detalle)
+
+    def test_marcar_listo_sin_pendientes_audita_normal(self):
+        from apps.audit.models import AuditLog
+
+        enviar_materiales_pendientes(self.trabajo, self.diego)
+        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.LISTO, self.diego)
+
+        log = AuditLog.objects.latest("id")
+        self.assertEqual(log.accion, "cambiar_estado_trabajo")
+
+    def test_advertencia_persistente_en_el_detalle_hasta_resolverse(self):
+        self.client.login(username="diego_listo_pendientes", password="clave12345")
+        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.LISTO, self.diego)
+
+        response = self.client.get(reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertContains(response, "Quedan materiales sin enviar")
+
+        enviar_materiales_pendientes(self.trabajo, self.diego)
+        response = self.client.get(reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertNotContains(response, "Quedan materiales sin enviar")
+
+    def test_sin_advertencia_mientras_no_llega_a_listo(self):
+        self.client.login(username="diego_listo_pendientes", password="clave12345")
+        response = self.client.get(reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertNotContains(response, "Quedan materiales sin enviar")
+
+
+class PuedeRegistrarConsumoMaterialTests(TestCase):
+    def setUp(self):
+        self.diego = _crear_usuario("diego_consumo_material", "Administrador")
+        self.andres = _crear_usuario("andres_consumo_material", "Técnico de Campo")
+        self.otro_tecnico = _crear_usuario("otro_tecnico_consumo_material", "Técnico de Campo")
+        self.contri = _crear_usuario("contri_consumo_material", "Depósito")
+        cliente = Cliente.objects.create(nombre="Cliente Consumo Material")
+        presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
+        self.trabajo = crear_trabajo(presupuesto, self.diego, tecnico_asignado=self.andres)
+        generar_listado_materiales(self.trabajo, self.diego)
+        self.material = self.trabajo.materiales.first()
+
+    def test_diego_siempre_puede(self):
+        self.assertTrue(puede_registrar_consumo_material(self.diego, self.material))
+
+    def test_tecnico_asignado_puede(self):
+        self.assertTrue(puede_registrar_consumo_material(self.andres, self.material))
+
+    def test_otro_tecnico_no_puede(self):
+        self.assertFalse(puede_registrar_consumo_material(self.otro_tecnico, self.material))
+
+    def test_contri_no_puede(self):
+        self.assertFalse(puede_registrar_consumo_material(self.contri, self.material))
+
+
+class RegistrarConsumoViewTests(TestCase):
+    def setUp(self):
+        self.diego = _crear_usuario("diego_vista_consumo", "Administrador")
+        self.andres = _crear_usuario("andres_vista_consumo", "Técnico de Campo")
+        self.otro_tecnico = _crear_usuario("otro_tecnico_vista_consumo", "Técnico de Campo")
+        cliente = Cliente.objects.create(nombre="Cliente Vista Consumo")
+        presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
+        self.trabajo = crear_trabajo(presupuesto, self.diego, tecnico_asignado=self.andres)
+        generar_listado_materiales(self.trabajo, self.diego)
+        self.material = self.trabajo.materiales.first()
+        enviar_material(self.material, self.diego)
+
+    def test_get_prefill_con_lo_enviado(self):
+        self.client.login(username="andres_vista_consumo", password="clave12345")
+        response = self.client.get(reverse("jobs:registrar_consumo_material", args=[self.material.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'value="{self.material.cantidad_necesaria}"')
+
+    def test_andres_registra_sobrante(self):
+        self.client.login(username="andres_vista_consumo", password="clave12345")
+        usada = self.material.cantidad_necesaria - Decimal("1")
+        response = self.client.post(
+            reverse("jobs:registrar_consumo_material", args=[self.material.pk]),
+            {"cantidad_usada": str(usada)},
+        )
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertEqual(cantidad_usada_neta(self.material), usada)
+
+    def test_no_puede_usar_mas_de_lo_enviado(self):
+        self.client.login(username="andres_vista_consumo", password="clave12345")
+        de_mas = self.material.cantidad_necesaria + Decimal("5")
+        response = self.client.post(
+            reverse("jobs:registrar_consumo_material", args=[self.material.pk]),
+            {"cantidad_usada": str(de_mas)},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(cantidad_usada_neta(self.material), self.material.cantidad_necesaria)
+
+    def test_otro_tecnico_no_puede_registrar_consumo(self):
+        self.client.login(username="otro_tecnico_vista_consumo", password="clave12345")
+        response = self.client.get(reverse("jobs:registrar_consumo_material", args=[self.material.pk]))
+        self.assertEqual(response.status_code, 403)
+
+
+class EnviarMaterialViewTests(TestCase):
+    def setUp(self):
+        self.diego = _crear_usuario("diego_vista_enviar", "Administrador")
+        self.contri = _crear_usuario("contri_vista_enviar", "Depósito")
+        self.rodrigo = _crear_usuario("rodrigo_vista_enviar", "Ventas y Presupuestos")
+        cliente = Cliente.objects.create(nombre="Cliente Vista Enviar")
+        presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
+        self.trabajo = crear_trabajo(presupuesto, self.diego)
+        generar_listado_materiales(self.trabajo, self.diego)
+        self.material = self.trabajo.materiales.first()
+
+    def test_contri_puede_enviar_un_material(self):
+        self.client.login(username="contri_vista_enviar", password="clave12345")
+        response = self.client.post(reverse("jobs:enviar_material", args=[self.material.pk]))
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertEqual(cantidad_pendiente_envio(self.material), Decimal("0"))
+
+    def test_rodrigo_no_puede_enviar_material(self):
+        self.client.login(username="rodrigo_vista_enviar", password="clave12345")
+        response = self.client.post(reverse("jobs:enviar_material", args=[self.material.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_enviar_pendientes_en_bloque_via_vista(self):
+        self.client.login(username="contri_vista_enviar", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:enviar_materiales_pendientes", args=[self.trabajo.pk])
+        )
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertEqual(materiales_pendientes_de_envio(self.trabajo), [])

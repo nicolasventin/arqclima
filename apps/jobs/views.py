@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import DetailView, ListView
 
@@ -16,6 +16,7 @@ from .forms import (
     EtapaTrabajoForm,
     MaterialCatalogoForm,
     MaterialManualForm,
+    RegistrarConsumoForm,
 )
 from .models import ORDEN_ESTADOS, EstadoTrabajo, EtapaTrabajo, MaterialTrabajo, Trabajo
 from .permissions import (
@@ -24,14 +25,22 @@ from .permissions import (
     puede_cancelar_trabajo,
     puede_crear_trabajo,
     puede_gestionar_materiales,
+    puede_registrar_consumo_material,
     queryset_trabajos_visibles,
 )
 from .services import (
     TransicionInvalidaError,
     cambiar_estado_trabajo,
     cancelar_trabajo,
+    cantidad_enviada,
+    cantidad_pendiente_envio,
+    cantidad_usada_neta,
     crear_trabajo,
+    enviar_material,
+    enviar_materiales_pendientes,
     generar_listado_materiales,
+    materiales_pendientes_de_envio,
+    registrar_sobrante,
 )
 
 
@@ -92,18 +101,53 @@ class TrabajoDetailView(PermisoRequeridoMixin, DetailView):
         context["puede_gestionar_materiales"] = puede_materiales
         context["listado_generado"] = trabajo.materiales.exists() or trabajo.etapas.exists()
 
+        def _fila(material):
+            pendiente = cantidad_pendiente_envio(material)
+            enviado = cantidad_enviada(material)
+            neto = cantidad_usada_neta(material)
+            return {
+                "material": material,
+                "pendiente_envio": pendiente,
+                "enviado": enviado,
+                "neto_enviado": neto,
+                "puede_enviar": (
+                    material.producto_id is not None and pendiente > 0 and puede_materiales
+                ),
+                "puede_consumo": (
+                    material.producto_id is not None
+                    and neto > 0
+                    and puede_registrar_consumo_material(self.request.user, material)
+                ),
+            }
+
         etapas = trabajo.etapas.prefetch_related("materiales__producto").all()
         context["etapas"] = [
-            {"etapa": etapa, "materiales": etapa.materiales.all()} for etapa in etapas
+            {"etapa": etapa, "filas": [_fila(m) for m in etapa.materiales.all()]} for etapa in etapas
         ]
-        context["materiales_sin_etapa"] = trabajo.materiales.filter(etapa__isnull=True).select_related(
-            "producto"
-        )
+        context["filas_sin_etapa"] = [
+            _fila(m)
+            for m in trabajo.materiales.filter(etapa__isnull=True).select_related("producto")
+        ]
 
         if puede_materiales:
             context["etapa_form"] = EtapaTrabajoForm()
             context["material_catalogo_form"] = MaterialCatalogoForm(trabajo=trabajo)
             context["material_manual_form"] = MaterialManualForm(trabajo=trabajo)
+            context["puede_enviar_pendientes"] = bool(materiales_pendientes_de_envio(trabajo))
+
+        # Advertencia persistente (no bloqueante) mientras el trabajo
+        # esté en Listo o más adelante y sigan quedando materiales sin
+        # enviar — se recalcula en vivo en cada render, no es un flag
+        # guardado: si después alguien termina de enviarlos, deja de
+        # mostrarse sola. El registro en AuditLog de que en su momento
+        # se marcó Listo con pendientes queda igual, aparte de esto.
+        pendientes = materiales_pendientes_de_envio(trabajo)
+        context["mostrar_advertencia_pendientes"] = (
+            trabajo.estado in ORDEN_ESTADOS
+            and ORDEN_ESTADOS.index(trabajo.estado) >= ORDEN_ESTADOS.index(EstadoTrabajo.LISTO)
+            and bool(pendientes)
+        )
+        context["materiales_pendientes_envio"] = pendientes
 
         return context
 
@@ -310,3 +354,76 @@ class EliminarMaterialView(UserPassesTestMixin, View):
         trabajo_pk = self.material.trabajo_id
         self.material.delete()
         return redirect("jobs:detalle", pk=trabajo_pk)
+
+
+class EnviarMaterialView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.material = get_object_or_404(MaterialTrabajo, pk=self.kwargs["material_pk"])
+        return puede_gestionar_materiales(self.request.user)
+
+    def post(self, request, material_pk):
+        try:
+            enviar_material(self.material, request.user)
+            messages.success(request, "Material enviado.")
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        return redirect("jobs:detalle", pk=self.material.trabajo_id)
+
+
+class EnviarMaterialesPendientesView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
+        return puede_gestionar_materiales(self.request.user)
+
+    def post(self, request, pk):
+        enviados = enviar_materiales_pendientes(self.trabajo, request.user)
+        if enviados:
+            messages.success(request, f"{len(enviados)} material(es) enviado(s).")
+        else:
+            messages.info(request, "No había materiales pendientes de envío.")
+        return redirect("jobs:detalle", pk=pk)
+
+
+class RegistrarConsumoMaterialView(UserPassesTestMixin, View):
+    template_name = "jobs/registrar_consumo_form.html"
+    raise_exception = True
+
+    def test_func(self):
+        self.material = get_object_or_404(MaterialTrabajo, pk=self.kwargs["material_pk"])
+        return puede_registrar_consumo_material(self.request.user, self.material)
+
+    def get(self, request, material_pk):
+        neto = cantidad_usada_neta(self.material)
+        form = RegistrarConsumoForm(initial={"cantidad_usada": neto})
+        return render(
+            request, self.template_name, {"form": form, "material": self.material, "neto": neto}
+        )
+
+    def post(self, request, material_pk):
+        neto = cantidad_usada_neta(self.material)
+        form = RegistrarConsumoForm(request.POST)
+        if not form.is_valid():
+            return render(
+                request, self.template_name, {"form": form, "material": self.material, "neto": neto}
+            )
+
+        usada = form.cleaned_data["cantidad_usada"]
+        sobrante = neto - usada
+        if sobrante > 0:
+            try:
+                registrar_sobrante(self.material, sobrante, request.user)
+                messages.success(request, f"Sobrante registrado: {sobrante} vuelven a stock.")
+            except ValueError as exc:
+                messages.error(request, str(exc))
+        elif sobrante < 0:
+            form.add_error("cantidad_usada", f"No puede ser mayor a lo enviado ({neto}).")
+            return render(
+                request, self.template_name, {"form": form, "material": self.material, "neto": neto}
+            )
+        else:
+            messages.info(request, "Sin sobrante — se usó todo lo enviado.")
+        return redirect("jobs:detalle", pk=self.material.trabajo_id)

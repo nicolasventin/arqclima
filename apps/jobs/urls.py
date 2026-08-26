@@ -42,4 +42,19 @@ urlpatterns = [
         views.EliminarMaterialView.as_view(),
         name="eliminar_material",
     ),
+    path(
+        "materiales/<int:material_pk>/enviar/",
+        views.EnviarMaterialView.as_view(),
+        name="enviar_material",
+    ),
+    path(
+        "<int:pk>/materiales/enviar-pendientes/",
+        views.EnviarMaterialesPendientesView.as_view(),
+        name="enviar_materiales_pendientes",
+    ),
+    path(
+        "materiales/<int:material_pk>/consumo/",
+        views.RegistrarConsumoMaterialView.as_view(),
+        name="registrar_consumo_material",
+    ),
 ]

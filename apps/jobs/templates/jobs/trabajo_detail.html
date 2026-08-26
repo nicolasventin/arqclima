@@ -76,6 +76,17 @@
 </form>
 {% endif %}
 
+{% if mostrar_advertencia_pendientes %}
+<div class="alert alert-warning">
+    <strong>⚠️ Quedan materiales sin enviar</strong> con el trabajo ya en "{{ trabajo.get_estado_display }}":
+    <ul class="mb-0">
+        {% for material in materiales_pendientes_envio %}
+        <li>{{ material.producto|default:material.descripcion_manual }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 <h2 class="h5 mt-4">Listado de materiales</h2>
 
 {% if not listado_generado %}
@@ -88,6 +99,13 @@
     <p class="text-muted">Todavía no se generó el listado de materiales.</p>
     {% endif %}
 {% else %}
+    {% if puede_enviar_pendientes %}
+    <form method="post" action="{% url 'jobs:enviar_materiales_pendientes' trabajo.pk %}" class="mb-3">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-primary">Enviar todo lo pendiente</button>
+    </form>
+    {% endif %}
+
     {% for grupo in etapas %}
     <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -108,16 +126,16 @@
             {% endif %}
         </div>
         <div class="card-body p-0">
-            {% include "jobs/_tabla_materiales.html" with materiales=grupo.materiales %}
+            {% include "jobs/_tabla_materiales.html" with filas=grupo.filas %}
         </div>
     </div>
     {% endfor %}
 
-    {% if materiales_sin_etapa or not etapas %}
+    {% if filas_sin_etapa or not etapas %}
     <div class="card mb-3">
         {% if etapas %}<div class="card-header"><strong>Sin etapa</strong></div>{% endif %}
         <div class="card-body p-0">
-            {% include "jobs/_tabla_materiales.html" with materiales=materiales_sin_etapa %}
+            {% include "jobs/_tabla_materiales.html" with filas=filas_sin_etapa %}
         </div>
     </div>
     {% endif %}

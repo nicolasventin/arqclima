@@ -95,3 +95,16 @@ class ActualizarCantidadMaterialForm(forms.ModelForm):
         widgets = {
             "cantidad_necesaria": forms.NumberInput(attrs={"class": "form-control form-control-sm", "step": "0.01"}),
         }
+
+
+class RegistrarConsumoForm(forms.Form):
+    """
+    Regla de negocio 11: se precarga con lo enviado (se asume que se
+    usó todo) — el técnico solo la edita hacia abajo si sobró algo. La
+    vista convierte la diferencia en un registro de sobrante.
+    """
+
+    cantidad_usada = forms.DecimalField(
+        max_digits=10, decimal_places=2, min_value=0,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+    )

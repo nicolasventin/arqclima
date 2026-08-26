@@ -40,6 +40,21 @@ def puede_gestionar_materiales(user):
     return user.has_perm("jobs.change_trabajo") or user.has_perm("jobs.manage_preparacion")
 
 
+def puede_registrar_consumo_material(user, material):
+    """
+    Regla de negocio 11: "el técnico solo edita el número si sobró
+    algo" — el técnico asignado corrige el consumo de SU PROPIO
+    trabajo, mismo alcance que manage_ejecucion_propia (Parte 1). No es
+    un permiso nuevo: es la misma responsabilidad de ejecución de obra.
+    """
+    if user.has_perm("jobs.change_trabajo"):
+        return True
+    return (
+        user.has_perm("jobs.manage_ejecucion_propia")
+        and material.trabajo.tecnico_asignado_id == user.id
+    )
+
+
 def puede_cambiar_estado_trabajo(user, trabajo, nuevo_estado):
     """
     Gobierna tanto avanzar como retroceder: no distingue dirección,
