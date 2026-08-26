@@ -85,6 +85,46 @@ class ItemPresupuestoConstraintTests(TestCase):
         )
         self.assertFalse(item.incluido)
 
+    def test_no_puede_tener_ni_producto_ni_descripcion(self):
+        """
+        Fix retroactivo (Etapa 8): esto quedó sin CheckConstraint en el
+        diseño original, confiando en que la UI ofrece dos formularios
+        separados (ItemCatalogoForm/ItemManualForm) — un INSERT directo
+        (saltándose esos formularios) tampoco puede dejar la fila en un
+        estado inválido, mismo patrón ya aplicado en MaterialTrabajo.
+        """
+        cliente = Cliente.objects.create(nombre="Cliente Item Sin Nada")
+        presupuesto = Presupuesto.objects.create(cliente=cliente)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ItemPresupuesto.objects.create(
+                    presupuesto=presupuesto, precio_unitario=Decimal("100")
+                )
+
+    def test_no_puede_tener_los_dos_a_la_vez(self):
+        cliente = Cliente.objects.create(nombre="Cliente Item Con Ambos")
+        presupuesto = Presupuesto.objects.create(cliente=cliente)
+        marca = Marca.objects.create(nombre="Marca Constraint Item")
+        producto = Producto.objects.create(marca=marca, codigo="CI-1", nombre="Producto Constraint")
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ItemPresupuesto.objects.create(
+                    presupuesto=presupuesto,
+                    producto=producto,
+                    descripcion_manual="También manual",
+                    precio_unitario=Decimal("100"),
+                )
+
+    def test_solo_producto_es_valido(self):
+        cliente = Cliente.objects.create(nombre="Cliente Item Solo Producto")
+        presupuesto = Presupuesto.objects.create(cliente=cliente)
+        marca = Marca.objects.create(nombre="Marca Constraint Item 2")
+        producto = Producto.objects.create(marca=marca, codigo="CI-2", nombre="Producto Constraint 2")
+        item = ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, producto=producto, precio_unitario=Decimal("100")
+        )
+        self.assertIsNotNone(item.pk)
+
 
 class CalcularTotalesTests(TestCase):
     def setUp(self):

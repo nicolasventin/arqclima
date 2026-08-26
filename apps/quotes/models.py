@@ -163,6 +163,15 @@ class ItemPresupuesto(models.Model):
     - opcional=False, incluido=False -> inválido: un ítem no opcional
       (obligatorio) no puede estar excluido del total. Prohibido por
       CheckConstraint a nivel de base de datos.
+
+    `producto`/`descripcion_manual` son alternativas — un ítem es un
+    producto de catálogo O un concepto manual (mano de obra,
+    instalación), nunca los dos ni ninguno. Esto quedó sin
+    CheckConstraint en el diseño original (Etapa 5), confiando en que
+    la UI ofrece dos formularios separados (ItemCatalogoForm/
+    ItemManualForm) — fix retroactivo (Etapa 8) que le agrega la misma
+    garantía real en la base que ya tenía opcional/incluido, mismo
+    patrón aplicado después en MaterialTrabajo (apps.jobs).
     """
 
     presupuesto = models.ForeignKey(
@@ -237,6 +246,13 @@ class ItemPresupuesto(models.Model):
             models.CheckConstraint(
                 check=models.Q(opcional=True) | models.Q(incluido=True),
                 name="item_no_opcional_y_no_incluido",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(producto__isnull=False, descripcion_manual="")
+                    | models.Q(producto__isnull=True, descripcion_manual__gt="")
+                ),
+                name="itempresupuesto_producto_xor_descripcion_manual",
             ),
         ]
         verbose_name = "Ítem de presupuesto"
