@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth.models import Group, Permission
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
@@ -504,6 +505,48 @@ class GenerarListadoMaterialesTests(TestCase):
         generar_listado_materiales(self.trabajo, self.diego)
         with self.assertRaises(ValueError):
             generar_listado_materiales(self.trabajo, self.diego)
+
+
+class MaterialTrabajoConstraintTests(TestCase):
+    """
+    A diferencia de ItemPresupuesto (sin CheckConstraint, confiando en
+    los dos formularios separados), acá la garantía vive en la base:
+    un INSERT que se salte los dos formularios (un script, el admin,
+    un bug futuro) tampoco puede dejar la fila en un estado inválido.
+    """
+
+    def setUp(self):
+        self.diego = _crear_usuario("diego_constraint_material", "Administrador")
+        cliente = Cliente.objects.create(nombre="Cliente Constraint Material")
+        presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
+        self.trabajo = crear_trabajo(presupuesto, self.diego)
+
+    def test_no_puede_tener_ni_producto_ni_descripcion(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                MaterialTrabajo.objects.create(trabajo=self.trabajo, cantidad_necesaria=1)
+
+    def test_no_puede_tener_los_dos_a_la_vez(self):
+        producto = Producto.objects.filter(codigo="MAT-A").first()
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                MaterialTrabajo.objects.create(
+                    trabajo=self.trabajo, producto=producto,
+                    descripcion_manual="También manual", cantidad_necesaria=1,
+                )
+
+    def test_solo_producto_es_valido(self):
+        producto = Producto.objects.filter(codigo="MAT-A").first()
+        material = MaterialTrabajo.objects.create(
+            trabajo=self.trabajo, producto=producto, cantidad_necesaria=1
+        )
+        self.assertIsNotNone(material.pk)
+
+    def test_solo_descripcion_manual_es_valida(self):
+        material = MaterialTrabajo.objects.create(
+            trabajo=self.trabajo, descripcion_manual="Caño sin catálogo", cantidad_necesaria=1
+        )
+        self.assertIsNotNone(material.pk)
 
 
 class MaterialTrabajoViewsTests(TestCase):

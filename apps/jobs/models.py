@@ -139,6 +139,16 @@ class MaterialTrabajo(models.Model):
     catálogo. Sin producto, esta línea queda fuera de la conexión con
     Stock de la Parte 3 (no hay contra qué descontar) hasta que se
     cargue el producto real.
+
+    A diferencia de ItemPresupuesto (donde se dejó sin
+    CheckConstraint, confiando en que producto/descripcion_manual se
+    cargan desde dos formularios separados), acá SÍ hay un
+    CheckConstraint: exactamente uno de los dos tiene que estar
+    cargado, nunca los dos ni ninguno. Que la UI ofrezca dos caminos
+    separados no es una garantía real — un script, el admin de Django
+    o un bug futuro podrían crear una fila inválida sin pasar por esos
+    formularios, y acá si importa (esta línea alimenta directamente la
+    conexión con Stock en la Parte 3).
     """
 
     trabajo = models.ForeignKey(Trabajo, on_delete=models.CASCADE, related_name="materiales")
@@ -173,6 +183,15 @@ class MaterialTrabajo(models.Model):
 
     class Meta:
         ordering = ["trabajo_id", "etapa_id", "orden"]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(producto__isnull=False, descripcion_manual="")
+                    | models.Q(producto__isnull=True, descripcion_manual__gt="")
+                ),
+                name="materialtrabajo_producto_xor_descripcion_manual",
+            ),
+        ]
         verbose_name = "Material de trabajo"
         verbose_name_plural = "Materiales de trabajo"
 
