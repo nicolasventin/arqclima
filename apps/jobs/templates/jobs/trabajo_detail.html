@@ -23,13 +23,26 @@
     {% endif %}
 </dl>
 
-{% if estados_disponibles %}
-<div class="d-flex gap-2">
-    {% for estado in estados_disponibles %}
+{% if estados_para_avanzar %}
+<div class="d-flex gap-2 mb-2">
+    {% for estado in estados_para_avanzar %}
     <form method="post" action="{% url 'jobs:cambiar_estado' trabajo.pk %}">
         {% csrf_token %}
         <input type="hidden" name="estado" value="{{ estado.valor }}">
         <button type="submit" class="btn btn-sm btn-primary">Marcar {{ estado.etiqueta }}</button>
+    </form>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if estados_para_retroceder %}
+<div class="d-flex gap-2 align-items-center">
+    <span class="text-muted small">Corregir estado (retroceder):</span>
+    {% for estado in estados_para_retroceder %}
+    <form method="post" action="{% url 'jobs:cambiar_estado' trabajo.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="estado" value="{{ estado.valor }}">
+        <button type="submit" class="btn btn-sm btn-outline-warning">Volver a {{ estado.etiqueta }}</button>
     </form>
     {% endfor %}
 </div>

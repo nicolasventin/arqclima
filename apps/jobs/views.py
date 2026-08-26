@@ -36,12 +36,16 @@ class TrabajoDetailView(PermisoRequeridoMixin, DetailView):
         context = super().get_context_data(**kwargs)
         trabajo = self.object
         idx_actual = ORDEN_ESTADOS.index(trabajo.estado)
-        siguientes = [
-            {"valor": estado, "etiqueta": EstadoTrabajo(estado).label}
-            for estado in ORDEN_ESTADOS[idx_actual + 1 :]
-            if puede_cambiar_estado_trabajo(self.request.user, trabajo, estado)
-        ]
-        context["estados_disponibles"] = siguientes
+
+        def _opciones(estados):
+            return [
+                {"valor": estado, "etiqueta": EstadoTrabajo(estado).label}
+                for estado in estados
+                if puede_cambiar_estado_trabajo(self.request.user, trabajo, estado)
+            ]
+
+        context["estados_para_avanzar"] = _opciones(ORDEN_ESTADOS[idx_actual + 1 :])
+        context["estados_para_retroceder"] = _opciones(ORDEN_ESTADOS[:idx_actual])
         return context
 
 

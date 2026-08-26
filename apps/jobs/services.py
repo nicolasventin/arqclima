@@ -33,10 +33,23 @@ def crear_trabajo(presupuesto, usuario, tecnico_asignado=None):
 
 def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
     """
-    El estado de un Trabajo solo avanza (regla de negocio 10) — se
-    puede saltear etapas (ej. Pendiente→Listo directo si ya había
-    stock disponible), pero nunca retroceder. Se valida comparando la
-    posición en ORDEN_ESTADOS, no con un grafo de pares explícito.
+    El estado de un Trabajo normalmente avanza —y se puede saltear
+    etapas (ej. Pendiente→Listo directo)— pero TAMBIÉN se puede
+    retroceder para corregir un error de carga (ej. Contri marcó
+    "Listo" sin que estuviera completo el material, o Andrés avanzó a
+    "En ejecución" antes de tiempo). Mismo criterio que Presupuesto,
+    que también tiene transiciones explícitas de vuelta atrás
+    (Enviado→Borrador, Rechazado→Borrador): no hay razón de negocio
+    para que Trabajo sea estrictamente irreversible, y menos acá,
+    donde presupuesto.trabajo es OneToOne — si un estado avanzado por
+    error quedara sin forma de corregirse, no habría ni siquiera el
+    workaround de "crear uno nuevo" que tiene Tarea.
+
+    Esta función NO valida permisos — es la misma separación de
+    responsabilidades que Presupuesto.cambiar_estado(): quién puede
+    pedir qué transición (en cualquier dirección) se resuelve en
+    apps.jobs.permissions.puede_cambiar_estado_trabajo(), llamado
+    desde la vista.
     """
     try:
         idx_actual = ORDEN_ESTADOS.index(trabajo.estado)
@@ -44,16 +57,18 @@ def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
     except ValueError:
         raise TransicionInvalidaError(f"Estado desconocido: '{nuevo_estado}'.")
 
-    if idx_nuevo <= idx_actual:
-        raise TransicionInvalidaError(
-            f"No se puede pasar de '{trabajo.estado}' a '{nuevo_estado}': "
-            "el estado de un Trabajo solo avanza, nunca retrocede."
-        )
+    if idx_nuevo == idx_actual:
+        raise TransicionInvalidaError(f"El trabajo ya está en estado '{trabajo.estado}'.")
 
     estado_anterior = trabajo.estado
     trabajo.estado = nuevo_estado
     trabajo.save(update_fields=["estado"])
+
+    direccion = "avanzado" if idx_nuevo > idx_actual else "retrocedido"
     log_action(
-        usuario, "cambiar_estado_trabajo", trabajo, detail=detalle or f"{estado_anterior} → {nuevo_estado}"
+        usuario,
+        "cambiar_estado_trabajo",
+        trabajo,
+        detail=detalle or f"{direccion}: {estado_anterior} → {nuevo_estado}",
     )
     return trabajo

@@ -96,10 +96,21 @@ class TransicionesTrabajoTests(TestCase):
         self.trabajo.refresh_from_db()
         self.assertEqual(self.trabajo.estado, EstadoTrabajo.TERMINADO)
 
-    def test_no_puede_retroceder(self):
+    def test_permite_retroceder_para_corregir_un_error(self):
+        """
+        El servicio en sí no bloquea retroceder — Presupuesto tampoco
+        es estrictamente irreversible (Enviado→Borrador, Rechazado→
+        Borrador), y acá con más razón: Trabajo es OneToOne con su
+        Presupuesto, así que ni existe el workaround de "crear uno
+        nuevo" que tiene Tarea si un estado se avanza por error.
+        """
         cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.LISTO, self.diego)
-        with self.assertRaises(TransicionInvalidaError):
-            cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.PREPARANDO_MATERIALES, self.diego)
+        cambiar_estado_trabajo(
+            self.trabajo, EstadoTrabajo.PREPARANDO_MATERIALES, self.diego,
+            detalle="Se marcó Listo por error, faltaba material",
+        )
+        self.trabajo.refresh_from_db()
+        self.assertEqual(self.trabajo.estado, EstadoTrabajo.PREPARANDO_MATERIALES)
 
     def test_no_puede_quedarse_en_el_mismo_estado(self):
         with self.assertRaises(TransicionInvalidaError):
@@ -172,6 +183,29 @@ class PermisosTrabajoTests(TestCase):
         self.assertFalse(
             puede_cambiar_estado_trabajo(self.andres, self.trabajo, EstadoTrabajo.PREPARANDO_MATERIALES)
         )
+
+    def test_contri_puede_retroceder_un_listo_marcado_por_error(self):
+        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.LISTO, self.diego)
+        self.assertTrue(
+            puede_cambiar_estado_trabajo(self.contri, self.trabajo, EstadoTrabajo.PREPARANDO_MATERIALES)
+        )
+
+    def test_andres_puede_retroceder_dentro_de_su_propio_rango(self):
+        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.TERMINADO, self.diego)
+        self.assertTrue(
+            puede_cambiar_estado_trabajo(self.andres, self.trabajo, EstadoTrabajo.EN_EJECUCION)
+        )
+
+    def test_andres_no_puede_retroceder_al_territorio_de_contri(self):
+        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.EN_EJECUCION, self.diego)
+        self.assertFalse(puede_cambiar_estado_trabajo(self.andres, self.trabajo, EstadoTrabajo.LISTO))
+
+    def test_solo_diego_puede_retroceder_hasta_pendiente(self):
+        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.PREPARANDO_MATERIALES, self.diego)
+        self.assertFalse(
+            puede_cambiar_estado_trabajo(self.contri, self.trabajo, EstadoTrabajo.PENDIENTE)
+        )
+        self.assertTrue(puede_cambiar_estado_trabajo(self.diego, self.trabajo, EstadoTrabajo.PENDIENTE))
 
     def test_visibilidad_andres_solo_lo_propio(self):
         otro_trabajo = crear_trabajo(
@@ -250,3 +284,18 @@ class TrabajoViewsTests(TestCase):
             reverse("jobs:cambiar_estado", args=[trabajo.pk]), {"estado": "en_ejecucion"}
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_contri_puede_retroceder_via_vista(self):
+        cliente = Cliente.objects.create(nombre="Cliente Vista Retroceder")
+        presupuesto = _presupuesto_aceptado(cliente, self.diego)
+        trabajo = crear_trabajo(presupuesto, self.diego)
+        cambiar_estado_trabajo(trabajo, EstadoTrabajo.LISTO, self.diego)
+
+        self.client.login(username="contri_vistas_trabajo", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:cambiar_estado", args=[trabajo.pk]),
+            {"estado": "preparando_materiales"},
+        )
+        self.assertRedirects(response, reverse("jobs:detalle", args=[trabajo.pk]))
+        trabajo.refresh_from_db()
+        self.assertEqual(trabajo.estado, EstadoTrabajo.PREPARANDO_MATERIALES)
