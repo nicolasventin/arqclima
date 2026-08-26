@@ -114,6 +114,12 @@ class Presupuesto(models.Model):
 
     class Meta:
         ordering = ["-numero"]
+        permissions = [
+            (
+                "revert_presupuesto_aceptado",
+                "Puede revertir un presupuesto Aceptado (volverlo a Cancelado)",
+            ),
+        ]
         verbose_name = "Presupuesto"
         verbose_name_plural = "Presupuestos"
 
@@ -175,6 +181,18 @@ class ItemPresupuesto(models.Model):
         null=True,
         blank=True,
         related_name="items_presupuesto",
+    )
+    producto_proveedor = models.ForeignKey(
+        "catalog.ProductoProveedor",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="items_presupuesto",
+        help_text=(
+            "Proveedor puntual usado para fijar precio_unitario/costo_unitario. "
+            "Se guarda para que 'duplicar y recalcular' pueda refrescar el costo "
+            "desde ESE proveedor sin auto-elegir uno nuevo (regla de negocio 2)."
+        ),
     )
     descripcion_manual = models.CharField(
         max_length=255,
