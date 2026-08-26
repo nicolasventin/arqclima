@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Mis tareas — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Mis tareas</h1>
+
+<table class="table table-sm table-hover bg-white">
+    <thead>
+        <tr>
+            <th>Título</th>
+            <th>Prioridad</th>
+            <th>Fecha límite</th>
+            <th>Estado</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for tarea in tareas %}
+        <tr class="{% if tarea.esta_vencida %}table-danger{% endif %}">
+            <td>
+                {{ tarea.titulo }}
+                {% if tarea.descripcion %}<div class="text-muted small">{{ tarea.descripcion }}</div>{% endif %}
+            </td>
+            <td>{{ tarea.get_prioridad_display }}</td>
+            <td>
+                {{ tarea.fecha_limite|date:"d/m/Y"|default:"—" }}
+                {% if tarea.esta_vencida %}<span class="badge bg-danger">Vencida</span>{% endif %}
+            </td>
+            <td><span class="badge bg-secondary">{{ tarea.get_estado_display }}</span></td>
+            <td class="d-flex gap-1">
+                {% if tarea.estado == "pendiente" %}
+                <form method="post" action="{% url 'tasks:cambiar_estado' tarea.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="estado" value="en_proceso">
+                    <input type="hidden" name="next" value="{% url 'tasks:mis_tareas' %}">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Iniciar</button>
+                </form>
+                {% endif %}
+                {% if tarea.estado == "pendiente" or tarea.estado == "en_proceso" %}
+                <form method="post" action="{% url 'tasks:cambiar_estado' tarea.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="estado" value="completada">
+                    <input type="hidden" name="next" value="{% url 'tasks:mis_tareas' %}">
+                    <button type="submit" class="btn btn-sm btn-success">Completar</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">No tenés tareas pendientes.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
