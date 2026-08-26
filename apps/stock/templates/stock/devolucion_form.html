@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Registrar devolución — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Registrar devolución</h1>
+
+<p>
+    <strong>{{ salida.producto }}</strong> — enviado el {{ salida.creado_en|date:"d/m/Y" }},
+    pendiente de devolución: <strong>{{ pendiente }}</strong>
+</p>
+
+<form method="post" class="row g-3" style="max-width: 400px;">
+    {% csrf_token %}
+    <div class="col-12">
+        <label class="form-label">Cantidad que vuelve a stock</label>
+        {{ form.cantidad }}
+        {% if form.cantidad.errors %}<div class="text-danger small">{{ form.cantidad.errors }}</div>{% endif %}
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Registrar</button>
+    </div>
+</form>
+{% endblock %}

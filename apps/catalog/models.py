@@ -104,6 +104,20 @@ class Producto(models.Model):
             "el resto de los datos de un producto de su línea."
         ),
     )
+    stock_minimo_general = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text=(
+            "Umbral de alerta de stock general (obra). Vacío = sin alerta "
+            "configurada. Exclusivo de Diego (Etapa 7)."
+        ),
+    )
+    stock_minimo_repuestos = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text=(
+            "Umbral de alerta de stock de repuestos (service). Vacío = sin "
+            "alerta configurada. Exclusivo de Diego (Etapa 7)."
+        ),
+    )
 
     proveedores = models.ManyToManyField(
         Proveedor, through="ProductoProveedor", related_name="productos"
