@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo presupuesto — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Nuevo presupuesto</h1>
+
+<form method="post" class="row g-3" style="max-width: 700px;">
+    {% csrf_token %}
+    <div class="col-12">
+        <label class="form-label">Cliente</label>
+        {{ form.cliente }}
+    </div>
+    <div class="col-12">
+        <label class="form-label">Dirección de la obra</label>
+        {{ form.direccion }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Fecha de vencimiento</label>
+        {{ form.fecha_vencimiento }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Cantidad de unidades</label>
+        {{ form.cantidad_unidades }}
+        <div class="form-text">Para multiplicar el total cuando se cotiza por unidad habitacional.</div>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Descuento general</label>
+        {{ form.descuento_general_tipo }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Valor del descuento</label>
+        {{ form.descuento_general_valor }}
+    </div>
+    <div class="col-12">
+        <label class="form-label">Plantilla de condiciones</label>
+        {{ form.plantilla_condiciones }}
+        <div class="form-text">Se copia el texto a este presupuesto; después se puede editar solo acá.</div>
+    </div>
+    <div class="col-12">
+        <label class="form-label">Notas generales</label>
+        {{ form.notas_generales }}
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Crear presupuesto</button>
+    </div>
+</form>
+{% endblock %}

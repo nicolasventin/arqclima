@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Agregar ítem manual — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Agregar ítem manual al presupuesto #{{ presupuesto.numero }}</h1>
+
+<form method="post" class="row g-3" style="max-width: 700px;">
+    {% csrf_token %}
+    <div class="col-12">
+        <label class="form-label">Descripción</label>
+        {{ form.descripcion_manual }}
+        <div class="form-text">Ej. "Mano de obra", "Instalación", "Flete".</div>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Sección (opcional)</label>
+        {{ form.seccion }}
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Cantidad</label>
+        {{ form.cantidad }}
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Descuento (%)</label>
+        {{ form.descuento_pct }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Precio unitario</label>
+        {{ form.precio_unitario }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Costo unitario (opcional)</label>
+        {{ form.costo_unitario }}
+        <div class="form-text">
+            Sin costo cargado, este ítem queda fuera del chequeo de margen bajo.
+        </div>
+    </div>
+    <div class="col-12">
+        <button type="submit" name="sugerir_costo" class="btn btn-sm btn-outline-secondary">
+            Sugerir costo (mano de obra)
+        </button>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">IVA</label>
+        {{ form.tipo_iva }}
+    </div>
+    <div class="col-md-4 form-check mt-4">
+        {{ form.opcional }}
+        <label class="form-check-label">Opcional (mejora recomendada)</label>
+    </div>
+    <div class="col-md-4 form-check mt-4">
+        {{ form.incluido }}
+        <label class="form-check-label">Incluido en el total</label>
+    </div>
+    {% if form.non_field_errors %}
+    <div class="col-12 text-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Agregar ítem</button>
+        <a href="{% url 'quotes:detalle' presupuesto.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+</form>
+{% endblock %}

@@ -1,0 +1,46 @@
+<table class="table table-sm bg-white">
+    <thead>
+        <tr>
+            <th>Ítem</th>
+            <th>Cant.</th>
+            <th>P. unitario</th>
+            <th>Desc. %</th>
+            <th>IVA</th>
+            <th>Opcional</th>
+            <th>Incluido</th>
+            <th>Margen</th>
+            {% if puede_editar_estructura %}<th></th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for fila in filas %}
+        <tr class="{% if fila.bajo_margen %}table-warning{% endif %}">
+            <td>{{ fila.item.producto|default:fila.item.descripcion_manual }}</td>
+            <td>{{ fila.item.cantidad }}</td>
+            <td>${{ fila.item.precio_unitario }}</td>
+            <td>{{ fila.item.descuento_pct }}%</td>
+            <td>{{ fila.item.get_tipo_iva_display }}</td>
+            <td>{% if fila.item.opcional %}Sí{% else %}No{% endif %}</td>
+            <td>{% if fila.item.incluido %}Sí{% else %}No{% endif %}</td>
+            <td>
+                {% if fila.margen is not None %}
+                    {{ fila.margen|floatformat:1 }}%
+                    {% if fila.bajo_margen %}<span title="Margen por debajo del mínimo configurado">⚠️</span>{% endif %}
+                {% else %}
+                    <span class="text-muted">—</span>
+                {% endif %}
+            </td>
+            {% if puede_editar_estructura %}
+            <td>
+                <form method="post" action="{% url 'quotes:eliminar_item' fila.item.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Quitar</button>
+                </form>
+            </td>
+            {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-muted">Sin ítems.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>

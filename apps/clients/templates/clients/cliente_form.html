@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Editar cliente{% else %}Nuevo cliente{% endif %} — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">{% if object %}Editar cliente{% else %}Nuevo cliente{% endif %}</h1>
+
+<form method="post" class="row g-3" style="max-width: 600px;">
+    {% csrf_token %}
+    <div class="col-12">
+        <label class="form-label">Nombre / Razón social</label>
+        {{ form.nombre }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Tipo</label>
+        {{ form.tipo }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">CUIT/DNI</label>
+        {{ form.cuit_dni }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Teléfono</label>
+        {{ form.telefono }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Email</label>
+        {{ form.email }}
+    </div>
+    <div class="col-md-6 form-check">
+        {{ form.activo }}
+        <label class="form-check-label">Activo</label>
+    </div>
+    <div class="col-12">
+        <label class="form-label">Notas</label>
+        {{ form.notas }}
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+</form>
+{% endblock %}

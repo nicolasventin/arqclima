@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Clientes — ARQCLIMA{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Clientes</h1>
+    {% if puede_crear %}
+    <a href="{% url 'clients:nuevo' %}" class="btn btn-primary btn-sm">+ Nuevo cliente</a>
+    {% endif %}
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-auto">
+        <input type="text" name="q" value="{{ request.GET.q }}" class="form-control form-control-sm" placeholder="Buscar por nombre, CUIT/DNI o email">
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Buscar</button>
+    </div>
+</form>
+
+<table class="table table-sm table-hover bg-white">
+    <thead>
+        <tr>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>CUIT/DNI</th>
+            <th>Teléfono</th>
+            <th>Email</th>
+            <th>Activo</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for cliente in clientes %}
+        <tr>
+            <td>{{ cliente.nombre }}</td>
+            <td>{{ cliente.get_tipo_display }}</td>
+            <td>{{ cliente.cuit_dni|default:"—" }}</td>
+            <td>{{ cliente.telefono|default:"—" }}</td>
+            <td>{{ cliente.email|default:"—" }}</td>
+            <td>{% if cliente.activo %}Sí{% else %}No{% endif %}</td>
+            <td>
+                {% if perms.clients.change_cliente %}
+                <a href="{% url 'clients:editar' cliente.pk %}" class="btn btn-sm btn-outline-primary">Editar</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-muted">No hay clientes cargados todavía.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

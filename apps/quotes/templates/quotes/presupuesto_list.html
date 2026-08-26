@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Presupuestos — ARQCLIMA{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Presupuestos</h1>
+    {% if perms.quotes.add_presupuesto %}
+    <a href="{% url 'quotes:nuevo' %}" class="btn btn-primary btn-sm">+ Nuevo presupuesto</a>
+    {% endif %}
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-auto">
+        <select name="estado" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">Todos los estados</option>
+            {% for valor, etiqueta in estados %}
+            <option value="{{ valor }}" {% if request.GET.estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</form>
+
+<table class="table table-sm table-hover bg-white">
+    <thead>
+        <tr>
+            <th>N°</th>
+            <th>Cliente</th>
+            <th>Fecha</th>
+            <th>Estado</th>
+            <th>Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for presupuesto in presupuestos %}
+        <tr>
+            <td><a href="{% url 'quotes:detalle' presupuesto.pk %}">#{{ presupuesto.numero }}</a></td>
+            <td>{{ presupuesto.cliente.nombre }}</td>
+            <td>{{ presupuesto.fecha|date:"d/m/Y" }}</td>
+            <td><span class="badge bg-secondary">{{ presupuesto.get_estado_display }}</span></td>
+            <td>${{ presupuesto.total_calculado }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">No hay presupuestos cargados todavía.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
