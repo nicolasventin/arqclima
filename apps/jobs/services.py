@@ -1,7 +1,7 @@
 from apps.audit.services import log_action
 from apps.quotes.models import EstadoPresupuesto
 
-from .models import ORDEN_ESTADOS, EstadoTrabajo, Trabajo
+from .models import ORDEN_ESTADOS, EstadoTrabajo, EtapaTrabajo, MaterialTrabajo, Trabajo
 
 
 class TransicionInvalidaError(ValueError):
@@ -100,5 +100,45 @@ def cancelar_trabajo(trabajo, usuario, motivo=""):
         "cancelar_trabajo",
         trabajo,
         detail=motivo or f"Cancelado desde '{estado_anterior}'",
+    )
+    return trabajo
+
+
+def generar_listado_materiales(trabajo, usuario):
+    """
+    Acción explícita y única (no automática al crear el trabajo, mismo
+    criterio que crear_trabajo() en sí) — no es una resincronización:
+    bloquea si el trabajo ya tiene materiales o etapas cargadas. A
+    partir de la carga inicial, el listado se edita a mano.
+
+    Crea una EtapaTrabajo por cada SeccionPresupuesto del presupuesto
+    de origen (en orden), y un MaterialTrabajo por cada ItemPresupuesto
+    con producto de catálogo e incluido=True (los conceptos manuales
+    tipo mano de obra no son "material" y se excluyen).
+    """
+    if trabajo.materiales.exists() or trabajo.etapas.exists():
+        raise ValueError("Este trabajo ya tiene un listado de materiales generado.")
+
+    mapa_etapas = {
+        seccion.pk: EtapaTrabajo.objects.create(
+            trabajo=trabajo, titulo=seccion.titulo, seccion_origen=seccion, orden=seccion.orden
+        )
+        for seccion in trabajo.presupuesto.secciones.all()
+    }
+
+    items = trabajo.presupuesto.items.filter(producto__isnull=False, incluido=True)
+    for item in items:
+        MaterialTrabajo.objects.create(
+            trabajo=trabajo,
+            etapa=mapa_etapas.get(item.seccion_id),
+            producto=item.producto,
+            item_presupuesto_origen=item,
+            cantidad_necesaria=item.cantidad,
+            orden=item.orden,
+        )
+
+    log_action(
+        usuario, "generar_listado_materiales", trabajo,
+        detail=f"{items.count()} material(es) generados desde {trabajo.presupuesto}",
     )
     return trabajo

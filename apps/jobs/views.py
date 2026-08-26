@@ -8,16 +8,31 @@ from apps.audit.services import log_action
 from apps.core.mixins import PermisoRequeridoMixin
 from apps.quotes.models import EstadoPresupuesto, Presupuesto
 
-from .forms import AsignarTecnicoForm, CancelarTrabajoForm, CrearTrabajoForm
-from .models import ORDEN_ESTADOS, EstadoTrabajo, Trabajo
+from .forms import (
+    ActualizarCantidadMaterialForm,
+    AsignarTecnicoForm,
+    CancelarTrabajoForm,
+    CrearTrabajoForm,
+    EtapaTrabajoForm,
+    MaterialCatalogoForm,
+    MaterialManualForm,
+)
+from .models import ORDEN_ESTADOS, EstadoTrabajo, EtapaTrabajo, MaterialTrabajo, Trabajo
 from .permissions import (
     puede_asignar_tecnico,
     puede_cambiar_estado_trabajo,
     puede_cancelar_trabajo,
     puede_crear_trabajo,
+    puede_gestionar_materiales,
     queryset_trabajos_visibles,
 )
-from .services import TransicionInvalidaError, cambiar_estado_trabajo, cancelar_trabajo, crear_trabajo
+from .services import (
+    TransicionInvalidaError,
+    cambiar_estado_trabajo,
+    cancelar_trabajo,
+    crear_trabajo,
+    generar_listado_materiales,
+)
 
 
 class TrabajoListView(PermisoRequeridoMixin, ListView):
@@ -72,6 +87,23 @@ class TrabajoDetailView(PermisoRequeridoMixin, DetailView):
         )
         if context["puede_cancelar"]:
             context["cancelar_trabajo_form"] = CancelarTrabajoForm()
+
+        puede_materiales = puede_gestionar_materiales(self.request.user)
+        context["puede_gestionar_materiales"] = puede_materiales
+        context["listado_generado"] = trabajo.materiales.exists() or trabajo.etapas.exists()
+
+        etapas = trabajo.etapas.prefetch_related("materiales__producto").all()
+        context["etapas"] = [
+            {"etapa": etapa, "materiales": etapa.materiales.all()} for etapa in etapas
+        ]
+        context["materiales_sin_etapa"] = trabajo.materiales.filter(etapa__isnull=True).select_related(
+            "producto"
+        )
+
+        if puede_materiales:
+            context["etapa_form"] = EtapaTrabajoForm()
+            context["material_catalogo_form"] = MaterialCatalogoForm(trabajo=trabajo)
+            context["material_manual_form"] = MaterialManualForm(trabajo=trabajo)
 
         return context
 
@@ -159,3 +191,122 @@ class CancelarTrabajoView(UserPassesTestMixin, View):
         except TransicionInvalidaError as exc:
             messages.error(request, str(exc))
         return redirect("jobs:detalle", pk=pk)
+
+
+class GenerarListadoMaterialesView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
+        return puede_gestionar_materiales(self.request.user)
+
+    def post(self, request, pk):
+        try:
+            generar_listado_materiales(self.trabajo, request.user)
+            messages.success(request, "Listado de materiales generado.")
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        return redirect("jobs:detalle", pk=pk)
+
+
+class AgregarEtapaView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
+        return puede_gestionar_materiales(self.request.user)
+
+    def post(self, request, pk):
+        form = EtapaTrabajoForm(request.POST)
+        if form.is_valid():
+            etapa = form.save(commit=False)
+            etapa.trabajo = self.trabajo
+            etapa.orden = self.trabajo.etapas.count()
+            etapa.save()
+        else:
+            messages.error(request, "No se pudo agregar la etapa.")
+        return redirect("jobs:detalle", pk=pk)
+
+
+class EliminarEtapaView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.etapa = get_object_or_404(EtapaTrabajo, pk=self.kwargs["etapa_pk"])
+        return puede_gestionar_materiales(self.request.user)
+
+    def post(self, request, etapa_pk):
+        trabajo_pk = self.etapa.trabajo_id
+        if self.etapa.materiales.exists():
+            messages.error(
+                request,
+                "No se puede eliminar una etapa que todavía tiene materiales. Movelos o eliminalos primero.",
+            )
+        else:
+            self.etapa.delete()
+        return redirect("jobs:detalle", pk=trabajo_pk)
+
+
+class AgregarMaterialCatalogoView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
+        return puede_gestionar_materiales(self.request.user)
+
+    def post(self, request, pk):
+        form = MaterialCatalogoForm(request.POST, trabajo=self.trabajo)
+        if form.is_valid():
+            material = form.save(commit=False)
+            material.trabajo = self.trabajo
+            material.orden = self.trabajo.materiales.count()
+            material.save()
+        else:
+            messages.error(request, "No se pudo agregar el material.")
+        return redirect("jobs:detalle", pk=pk)
+
+
+class AgregarMaterialManualView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
+        return puede_gestionar_materiales(self.request.user)
+
+    def post(self, request, pk):
+        form = MaterialManualForm(request.POST, trabajo=self.trabajo)
+        if form.is_valid():
+            material = form.save(commit=False)
+            material.trabajo = self.trabajo
+            material.orden = self.trabajo.materiales.count()
+            material.save()
+        else:
+            messages.error(request, "No se pudo agregar el material.")
+        return redirect("jobs:detalle", pk=pk)
+
+
+class ActualizarCantidadMaterialView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.material = get_object_or_404(MaterialTrabajo, pk=self.kwargs["material_pk"])
+        return puede_gestionar_materiales(self.request.user)
+
+    def post(self, request, material_pk):
+        form = ActualizarCantidadMaterialForm(request.POST, instance=self.material)
+        if form.is_valid():
+            form.save()
+        return redirect("jobs:detalle", pk=self.material.trabajo_id)
+
+
+class EliminarMaterialView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.material = get_object_or_404(MaterialTrabajo, pk=self.kwargs["material_pk"])
+        return puede_gestionar_materiales(self.request.user)
+
+    def post(self, request, material_pk):
+        trabajo_pk = self.material.trabajo_id
+        self.material.delete()
+        return redirect("jobs:detalle", pk=trabajo_pk)

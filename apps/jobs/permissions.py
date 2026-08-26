@@ -29,6 +29,17 @@ def puede_cancelar_trabajo(user):
     return user.has_perm("jobs.change_trabajo")
 
 
+def puede_gestionar_materiales(user):
+    """
+    Generar el listado inicial y editar materiales/etapas después es
+    del mismo dominio que preparar el trabajo (Contri) — reusa
+    manage_preparacion en vez de un permiso nuevo, porque son
+    literalmente la misma responsabilidad: Contri "ve trabajos para
+    saber qué preparar" y actúa sobre ESTE listado para hacerlo.
+    """
+    return user.has_perm("jobs.change_trabajo") or user.has_perm("jobs.manage_preparacion")
+
+
 def puede_cambiar_estado_trabajo(user, trabajo, nuevo_estado):
     """
     Gobierna tanto avanzar como retroceder: no distingue dirección,

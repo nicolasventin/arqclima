@@ -64,7 +64,7 @@
 {% endif %}
 
 {% if puede_cancelar %}
-<form method="post" action="{% url 'jobs:cancelar' trabajo.pk %}" class="row g-2 align-items-end" style="max-width: 500px;">
+<form method="post" action="{% url 'jobs:cancelar' trabajo.pk %}" class="row g-2 align-items-end mb-4" style="max-width: 500px;">
     {% csrf_token %}
     <div class="col-auto">
         <label class="form-label">Motivo</label>
@@ -74,5 +74,87 @@
         <button type="submit" class="btn btn-sm btn-outline-danger">Cancelar trabajo</button>
     </div>
 </form>
+{% endif %}
+
+<h2 class="h5 mt-4">Listado de materiales</h2>
+
+{% if not listado_generado %}
+    {% if puede_gestionar_materiales %}
+    <form method="post" action="{% url 'jobs:generar_materiales' trabajo.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-primary">Generar listado desde el presupuesto</button>
+    </form>
+    {% else %}
+    <p class="text-muted">Todavía no se generó el listado de materiales.</p>
+    {% endif %}
+{% else %}
+    {% for grupo in etapas %}
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <strong>{{ grupo.etapa.titulo }}</strong>
+                {% if grupo.etapa.fecha_estimada %}
+                <span class="text-muted small">— desde {{ grupo.etapa.fecha_estimada|date:"d/m/Y" }}</span>
+                {% endif %}
+                {% if grupo.etapa.duracion_estimada_dias %}
+                <span class="text-muted small">({{ grupo.etapa.duracion_estimada_dias }} día{{ grupo.etapa.duracion_estimada_dias|pluralize }})</span>
+                {% endif %}
+            </div>
+            {% if puede_gestionar_materiales %}
+            <form method="post" action="{% url 'jobs:eliminar_etapa' grupo.etapa.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar etapa</button>
+            </form>
+            {% endif %}
+        </div>
+        <div class="card-body p-0">
+            {% include "jobs/_tabla_materiales.html" with materiales=grupo.materiales %}
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if materiales_sin_etapa or not etapas %}
+    <div class="card mb-3">
+        {% if etapas %}<div class="card-header"><strong>Sin etapa</strong></div>{% endif %}
+        <div class="card-body p-0">
+            {% include "jobs/_tabla_materiales.html" with materiales=materiales_sin_etapa %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if puede_gestionar_materiales %}
+    <div class="row g-4 mt-2">
+        <div class="col-md-4">
+            <h3 class="h6">Nueva etapa</h3>
+            <form method="post" action="{% url 'jobs:agregar_etapa' trabajo.pk %}" class="row g-2">
+                {% csrf_token %}
+                <div class="col-12">{{ etapa_form.titulo }}</div>
+                <div class="col-12">{{ etapa_form.fecha_estimada }}</div>
+                <div class="col-12">{{ etapa_form.duracion_estimada_dias }}</div>
+                <div class="col-12"><button type="submit" class="btn btn-sm btn-secondary">Agregar etapa</button></div>
+            </form>
+        </div>
+        <div class="col-md-4">
+            <h3 class="h6">Material de catálogo</h3>
+            <form method="post" action="{% url 'jobs:agregar_material_catalogo' trabajo.pk %}" class="row g-2">
+                {% csrf_token %}
+                <div class="col-12">{{ material_catalogo_form.etapa }}</div>
+                <div class="col-12">{{ material_catalogo_form.producto }}</div>
+                <div class="col-12">{{ material_catalogo_form.cantidad_necesaria }}</div>
+                <div class="col-12"><button type="submit" class="btn btn-sm btn-secondary">Agregar material</button></div>
+            </form>
+        </div>
+        <div class="col-md-4">
+            <h3 class="h6">Material manual</h3>
+            <form method="post" action="{% url 'jobs:agregar_material_manual' trabajo.pk %}" class="row g-2">
+                {% csrf_token %}
+                <div class="col-12">{{ material_manual_form.etapa }}</div>
+                <div class="col-12">{{ material_manual_form.descripcion_manual }}</div>
+                <div class="col-12">{{ material_manual_form.cantidad_necesaria }}</div>
+                <div class="col-12"><button type="submit" class="btn btn-sm btn-secondary">Agregar material</button></div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
 {% endif %}
 {% endblock %}

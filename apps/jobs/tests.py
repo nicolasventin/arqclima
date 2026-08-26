@@ -5,19 +5,27 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.accounts.models import User
+from apps.catalog.models import Marca, Producto
 from apps.clients.models import Cliente
-from apps.quotes.models import EstadoPresupuesto, ItemPresupuesto, Presupuesto
+from apps.quotes.models import EstadoPresupuesto, ItemPresupuesto, Presupuesto, SeccionPresupuesto
 from apps.quotes.services import cambiar_estado, enviar_presupuesto
 
-from .models import EstadoTrabajo, ORDEN_ESTADOS, Trabajo
+from .models import EstadoTrabajo, EtapaTrabajo, MaterialTrabajo, ORDEN_ESTADOS, Trabajo
 from .permissions import (
     puede_asignar_tecnico,
     puede_cambiar_estado_trabajo,
     puede_cancelar_trabajo,
     puede_crear_trabajo,
+    puede_gestionar_materiales,
     queryset_trabajos_visibles,
 )
-from .services import TransicionInvalidaError, cambiar_estado_trabajo, cancelar_trabajo, crear_trabajo
+from .services import (
+    TransicionInvalidaError,
+    cambiar_estado_trabajo,
+    cancelar_trabajo,
+    crear_trabajo,
+    generar_listado_materiales,
+)
 
 
 def _crear_usuario(username, rol):
@@ -413,3 +421,195 @@ class PuedeAsignarTecnicoTests(TestCase):
         self.assertTrue(puede_asignar_tecnico(diego))
         self.assertFalse(puede_asignar_tecnico(rodrigo))
         self.assertFalse(puede_asignar_tecnico(contri))
+
+
+def _presupuesto_con_secciones_y_productos(cliente, usuario):
+    """
+    Presupuesto con 2 secciones y una mezcla de ítems de catálogo y
+    manuales — para probar que generar_listado_materiales() agrupa
+    bien por sección y descarta los conceptos manuales (mano de obra).
+    """
+    marca = Marca.objects.create(nombre=f"Marca Jobs {cliente.pk}")
+    producto_a = Producto.objects.create(marca=marca, codigo="MAT-A", nombre="Caldera")
+    producto_b = Producto.objects.create(marca=marca, codigo="MAT-B", nombre="Termostato")
+
+    presupuesto = Presupuesto.objects.create(cliente=cliente, direccion="Obra con secciones")
+    seccion_1 = SeccionPresupuesto.objects.create(presupuesto=presupuesto, titulo="1era etapa", orden=0)
+    seccion_2 = SeccionPresupuesto.objects.create(presupuesto=presupuesto, titulo="2da etapa", orden=1)
+
+    ItemPresupuesto.objects.create(
+        presupuesto=presupuesto, seccion=seccion_1, producto=producto_a,
+        cantidad=Decimal("2"), precio_unitario=Decimal("1000"), orden=0,
+    )
+    ItemPresupuesto.objects.create(
+        presupuesto=presupuesto, seccion=seccion_2, producto=producto_b,
+        cantidad=Decimal("1"), precio_unitario=Decimal("500"), orden=0,
+    )
+    # sin sección
+    ItemPresupuesto.objects.create(
+        presupuesto=presupuesto, producto=producto_a,
+        cantidad=Decimal("1"), precio_unitario=Decimal("1000"), orden=1,
+    )
+    # manual: no debe generar MaterialTrabajo
+    ItemPresupuesto.objects.create(
+        presupuesto=presupuesto, descripcion_manual="Mano de obra",
+        cantidad=Decimal("1"), precio_unitario=Decimal("5000"), orden=2,
+    )
+    # opcional no incluido: tampoco debe generar MaterialTrabajo
+    ItemPresupuesto.objects.create(
+        presupuesto=presupuesto, producto=producto_b,
+        cantidad=Decimal("3"), precio_unitario=Decimal("500"),
+        opcional=True, incluido=False, orden=3,
+    )
+
+    enviar_presupuesto(presupuesto, usuario)
+    cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, usuario)
+    return presupuesto
+
+
+class GenerarListadoMaterialesTests(TestCase):
+    def setUp(self):
+        self.diego = _crear_usuario("diego_generar_listado", "Administrador")
+        cliente = Cliente.objects.create(nombre="Cliente Generar Listado")
+        self.presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
+        self.trabajo = crear_trabajo(self.presupuesto, self.diego)
+
+    def test_crea_una_etapa_por_seccion_en_orden(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        titulos = list(self.trabajo.etapas.order_by("orden").values_list("titulo", flat=True))
+        self.assertEqual(titulos, ["1era etapa", "2da etapa"])
+
+    def test_asocia_materiales_a_su_etapa_correspondiente(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        etapa_1 = self.trabajo.etapas.get(titulo="1era etapa")
+        material = etapa_1.materiales.get()
+        self.assertEqual(material.producto.codigo, "MAT-A")
+        self.assertEqual(material.cantidad_necesaria, Decimal("2"))
+
+    def test_material_sin_seccion_queda_sin_etapa(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        sin_etapa = self.trabajo.materiales.filter(etapa__isnull=True)
+        self.assertEqual(sin_etapa.count(), 1)
+        self.assertEqual(sin_etapa.get().producto.codigo, "MAT-A")
+
+    def test_excluye_items_manuales_y_opcionales_no_incluidos(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        # 3 ítems de catálogo incluidos en total (2 con sección + 1 sin sección);
+        # el manual y el opcional-no-incluido quedan afuera.
+        self.assertEqual(self.trabajo.materiales.count(), 3)
+        codigos = set(self.trabajo.materiales.values_list("producto__codigo", flat=True))
+        self.assertEqual(codigos, {"MAT-A", "MAT-B"})
+
+    def test_no_se_puede_generar_dos_veces(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        with self.assertRaises(ValueError):
+            generar_listado_materiales(self.trabajo, self.diego)
+
+
+class MaterialTrabajoViewsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.diego = _crear_usuario("diego_vistas_material", "Administrador")
+        cls.rodrigo = _crear_usuario("rodrigo_vistas_material", "Ventas y Presupuestos")
+        cls.contri = _crear_usuario("contri_vistas_material", "Depósito")
+        cls.marca = Marca.objects.create(nombre="Marca Vistas Material")
+        cls.producto = Producto.objects.create(marca=cls.marca, codigo="VM-1", nombre="Caño")
+
+    def setUp(self):
+        cliente = Cliente.objects.create(nombre="Cliente Vistas Material")
+        self.presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
+        self.trabajo = crear_trabajo(self.presupuesto, self.diego)
+
+    def test_contri_puede_generar_el_listado_via_vista(self):
+        self.client.login(username="contri_vistas_material", password="clave12345")
+        response = self.client.post(reverse("jobs:generar_materiales", args=[self.trabajo.pk]))
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertTrue(self.trabajo.materiales.exists())
+
+    def test_rodrigo_no_puede_generar_el_listado(self):
+        self.client.login(username="rodrigo_vistas_material", password="clave12345")
+        response = self.client.post(reverse("jobs:generar_materiales", args=[self.trabajo.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_contri_puede_agregar_material_de_catalogo(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        self.client.login(username="contri_vistas_material", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:agregar_material_catalogo", args=[self.trabajo.pk]),
+            {"etapa": "", "producto": self.producto.pk, "cantidad_necesaria": "4"},
+        )
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertTrue(self.trabajo.materiales.filter(producto=self.producto).exists())
+
+    def test_contri_puede_agregar_material_manual(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        self.client.login(username="contri_vistas_material", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:agregar_material_manual", args=[self.trabajo.pk]),
+            {"etapa": "", "descripcion_manual": "Caño extra sin catálogo", "cantidad_necesaria": "1"},
+        )
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertTrue(
+            self.trabajo.materiales.filter(descripcion_manual="Caño extra sin catálogo").exists()
+        )
+
+    def test_actualizar_cantidad_material(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        material = self.trabajo.materiales.first()
+        self.client.login(username="contri_vistas_material", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:actualizar_cantidad_material", args=[material.pk]),
+            {"cantidad_necesaria": "99"},
+        )
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        material.refresh_from_db()
+        self.assertEqual(material.cantidad_necesaria, Decimal("99.00"))
+
+    def test_eliminar_material(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        material = self.trabajo.materiales.first()
+        self.client.login(username="contri_vistas_material", password="clave12345")
+        response = self.client.post(reverse("jobs:eliminar_material", args=[material.pk]))
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertFalse(MaterialTrabajo.objects.filter(pk=material.pk).exists())
+
+    def test_no_se_puede_eliminar_etapa_con_materiales(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        etapa = self.trabajo.etapas.get(titulo="1era etapa")
+        self.client.login(username="contri_vistas_material", password="clave12345")
+        response = self.client.post(reverse("jobs:eliminar_etapa", args=[etapa.pk]))
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertTrue(EtapaTrabajo.objects.filter(pk=etapa.pk).exists())
+
+    def test_eliminar_etapa_vacia(self):
+        self.client.login(username="contri_vistas_material", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:agregar_etapa", args=[self.trabajo.pk]),
+            {"titulo": "Etapa extra", "fecha_estimada": "", "duracion_estimada_dias": ""},
+        )
+        etapa = self.trabajo.etapas.get(titulo="Etapa extra")
+        response = self.client.post(reverse("jobs:eliminar_etapa", args=[etapa.pk]))
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.assertFalse(EtapaTrabajo.objects.filter(pk=etapa.pk).exists())
+
+    def test_agregar_etapa_con_fecha_y_duracion(self):
+        self.client.login(username="contri_vistas_material", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:agregar_etapa", args=[self.trabajo.pk]),
+            {"titulo": "Etapa rápida", "fecha_estimada": "2026-09-01", "duracion_estimada_dias": "1"},
+        )
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        etapa = self.trabajo.etapas.get(titulo="Etapa rápida")
+        self.assertEqual(etapa.duracion_estimada_dias, 1)
+
+
+class PuedeGestionarMaterialesTests(TestCase):
+    def test_diego_y_contri_si_rodrigo_y_andres_no(self):
+        diego = _crear_usuario("diego_gestionar_materiales", "Administrador")
+        contri = _crear_usuario("contri_gestionar_materiales", "Depósito")
+        rodrigo = _crear_usuario("rodrigo_gestionar_materiales", "Ventas y Presupuestos")
+        andres = _crear_usuario("andres_gestionar_materiales", "Técnico de Campo")
+        self.assertTrue(puede_gestionar_materiales(diego))
+        self.assertTrue(puede_gestionar_materiales(contri))
+        self.assertFalse(puede_gestionar_materiales(rodrigo))
+        self.assertFalse(puede_gestionar_materiales(andres))
