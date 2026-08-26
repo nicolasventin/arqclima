@@ -1,0 +1,32 @@
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Configuración y secretos
+.env
+.env.*
+!.env.example
+credenciales.txt
+
+# Base de datos local
+db.sqlite3
+
+# Archivos estáticos/subidos generados
+staticfiles/
+media/
+
+# Tests / cobertura
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store

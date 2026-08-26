@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}{{ producto }} — ARQCLIMA{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start">
+    <div>
+        <h1 class="h4 mb-0">{{ producto.marca.nombre }} {{ producto.codigo }}</h1>
+        <p class="text-muted mb-2">{{ producto.nombre }}</p>
+    </div>
+    {% if puede_editar %}
+    <a href="{% url 'catalog:producto_editar' producto.pk %}" class="btn btn-outline-primary btn-sm">Editar</a>
+    {% endif %}
+</div>
+
+<dl class="row mt-3">
+    <dt class="col-sm-3">Categoría</dt>
+    <dd class="col-sm-9">{{ producto.categoria|default:"—" }}</dd>
+    <dt class="col-sm-3">Unidad de medida</dt>
+    <dd class="col-sm-9">{{ producto.get_unidad_medida_display }}</dd>
+    <dt class="col-sm-3">Línea de repuestos</dt>
+    <dd class="col-sm-9">{% if producto.es_repuesto %}Sí{% else %}No{% endif %}</dd>
+    <dt class="col-sm-3">Activo</dt>
+    <dd class="col-sm-9">{% if producto.activo %}Sí{% else %}No{% endif %}</dd>
+    {% if producto.descripcion %}
+    <dt class="col-sm-3">Descripción</dt>
+    <dd class="col-sm-9">{{ producto.descripcion }}</dd>
+    {% endif %}
+</dl>
+
+<h2 class="h5 mt-4">Proveedores</h2>
+<table class="table table-sm bg-white">
+    <thead>
+        <tr>
+            <th>Proveedor</th>
+            <th>Código del proveedor</th>
+            <th>Activo</th>
+            {% if puede_editar %}<th></th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for relacion in producto.productoproveedor_set.all %}
+        <tr>
+            <td>{{ relacion.proveedor.nombre_comercial }}</td>
+            <td>{{ relacion.codigo_proveedor|default:"—" }}</td>
+            <td>{% if relacion.activo %}Sí{% else %}No{% endif %}</td>
+            {% if puede_editar %}
+            <td>
+                <form method="post" action="{% url 'catalog:producto_quitar_proveedor' producto.pk relacion.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Quitar</button>
+                </form>
+            </td>
+            {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-muted">Todavía no tiene proveedores cargados.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if puede_editar and proveedor_form %}
+<form method="post" action="{% url 'catalog:producto_agregar_proveedor' producto.pk %}" class="row g-2 align-items-end" style="max-width: 600px;">
+    {% csrf_token %}
+    <div class="col-auto">
+        <label class="form-label">Agregar proveedor</label>
+        {{ proveedor_form.proveedor }}
+    </div>
+    <div class="col-auto">
+        <label class="form-label">Código del proveedor</label>
+        {{ proveedor_form.codigo_proveedor }}
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-secondary">Agregar</button>
+    </div>
+</form>
+{% endif %}
+
+{% if puede_ver_precio %}
+<h2 class="h5 mt-4">Precios</h2>
+<p>Margen aplicado: <strong>{{ margen_actual }}%</strong> <span class="text-muted">(nivel: {{ margen_origen }})</span></p>
+
+<table class="table table-sm bg-white">
+    <thead>
+        <tr>
+            <th>Proveedor</th>
+            <th>Costo actual</th>
+            <th>Fecha</th>
+            <th>Precio de venta</th>
+            {% if puede_registrar_costo %}<th>Cargar costo nuevo</th>{% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for fila in filas_precio %}
+        <tr class="{% if fila.es_mas_conveniente %}table-success{% endif %}">
+            <td>
+                {{ fila.relacion.proveedor.nombre_comercial }}
+                {% if fila.es_mas_conveniente %}<span class="badge bg-success">más conveniente</span>{% endif %}
+            </td>
+            <td>{% if fila.costo %}${{ fila.costo }}{% else %}<span class="text-muted">sin costo cargado</span>{% endif %}</td>
+            <td>{{ fila.fecha|date:"d/m/Y"|default:"—" }}</td>
+            <td>{% if fila.precio_venta %}${{ fila.precio_venta }}{% else %}—{% endif %}</td>
+            {% if puede_registrar_costo %}
+            <td>
+                <form method="post" action="{% url 'pricing:registrar_costo' producto.pk fila.relacion.pk %}" class="d-flex gap-1">
+                    {% csrf_token %}
+                    {{ costo_form.costo }}
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Cargar</button>
+                </form>
+            </td>
+            {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">Todavía no tiene proveedores para cotizar.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if puede_gestionar_margenes %}
+<form method="post" action="{% url 'pricing:actualizar_margen_producto' producto.pk %}" class="row g-2 align-items-end" style="max-width: 400px;">
+    {% csrf_token %}
+    <div class="col-auto">
+        <label class="form-label">Margen propio de este producto (%)</label>
+        {{ margen_form.margen }}
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-secondary">Guardar margen</button>
+    </div>
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

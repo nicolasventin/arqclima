@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva importación — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Importar lista de precios</h1>
+<p class="text-muted">Subí el Excel (.xlsx) que te mandó el proveedor. Antes de tocar nada del catálogo te vamos a mostrar una vista previa para que confirmes.</p>
+
+{% if form.non_field_errors %}
+<div class="alert alert-danger">{{ form.non_field_errors }}</div>
+{% endif %}
+{% if form.archivo.errors %}
+<div class="alert alert-danger">{{ form.archivo.errors|striptags }}</div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" class="row g-3" style="max-width: 500px;">
+    {% csrf_token %}
+    <div class="col-12">
+        <label class="form-label">Proveedor</label>
+        {{ form.proveedor }}
+    </div>
+    <div class="col-12">
+        <label class="form-label">Archivo Excel (.xlsx)</label>
+        {{ form.archivo }}
+        <div class="form-text">
+            Columnas reconocidas: Marca, Código (o SKU/Cod. Fabricante), Nombre (o Descripción),
+            Costo (o Precio). Código de proveedor es opcional.
+        </div>
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Subir y ver vista previa</button>
+    </div>
+</form>
+{% endblock %}

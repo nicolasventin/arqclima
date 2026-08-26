@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Editar producto{% else %}Nuevo producto{% endif %} — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">{% if object %}Editar producto{% else %}Nuevo producto{% endif %}</h1>
+
+{% if form.non_field_errors %}
+<div class="alert alert-danger">{{ form.non_field_errors }}</div>
+{% endif %}
+
+<form method="post" class="row g-3" style="max-width: 700px;">
+    {% csrf_token %}
+    <div class="col-md-6">
+        <label class="form-label">Marca</label>
+        {{ form.marca }}
+        {{ form.marca.errors }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Código oficial de marca</label>
+        {{ form.codigo }}
+        {{ form.codigo.errors }}
+    </div>
+    <div class="col-12">
+        <label class="form-label">Nombre</label>
+        {{ form.nombre }}
+    </div>
+    <div class="col-12">
+        <label class="form-label">Descripción</label>
+        {{ form.descripcion }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Categoría</label>
+        {{ form.categoria }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Unidad de medida</label>
+        {{ form.unidad_medida }}
+    </div>
+    <div class="col-md-6 form-check">
+        {{ form.es_repuesto }}
+        <label class="form-check-label">Es parte de la línea de repuestos</label>
+        {% if form.es_repuesto.help_text %}<div class="form-text">{{ form.es_repuesto.help_text }}</div>{% endif %}
+    </div>
+    <div class="col-md-6 form-check">
+        {{ form.activo }}
+        <label class="form-check-label">Activo</label>
+    </div>
+    <div class="col-12">
+        <label class="form-label">Notas</label>
+        {{ form.notas }}
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+</form>
+{% endblock %}

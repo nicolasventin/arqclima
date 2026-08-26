@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Usuarios y permisos — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-1">Usuarios y permisos</h1>
+<p class="text-muted">
+    Cada usuario tiene un rol (que trae permisos por defecto). Además podés
+    tildarle permisos individuales puntuales por fuera de su rol.
+</p>
+
+<div class="accordion" id="acordeonUsuarios">
+    {% for fila in usuarios_data %}
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#usuario-{{ fila.usuario.id }}">
+                {{ fila.usuario.get_full_name|default:fila.usuario.username }}
+                <span class="badge bg-secondary ms-2">{{ fila.usuario.rol|default:"Sin rol" }}</span>
+            </button>
+        </h2>
+        <div id="usuario-{{ fila.usuario.id }}" class="accordion-collapse collapse" data-bs-parent="#acordeonUsuarios">
+            <div class="accordion-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="user_id" value="{{ fila.usuario.id }}">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Rol</label>
+                        <select name="group_id" class="form-select" style="max-width: 320px;">
+                            <option value="">— Sin rol —</option>
+                            {% for grupo in grupos %}
+                            <option value="{{ grupo.id }}" {% if grupo.id == fila.grupo_actual_id %}selected{% endif %}>
+                                {{ grupo.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <label class="form-label fw-bold">Permisos individuales (overrides)</label>
+                    <p class="text-muted small">
+                        Los marcados como "por rol" ya los tiene por su rol actual; no hace falta tildarlos.
+                    </p>
+                    <div class="row">
+                        {% for permiso in fila.permisos %}
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input
+                                    class="form-check-input"
+                                    type="checkbox"
+                                    name="permissions"
+                                    value="{{ permiso.id }}"
+                                    id="perm-{{ fila.usuario.id }}-{{ permiso.id }}"
+                                    {% if permiso.activo %}checked{% endif %}
+                                    {% if permiso.por_rol %}disabled{% endif %}>
+                                <label class="form-check-label" for="perm-{{ fila.usuario.id }}-{{ permiso.id }}">
+                                    {{ permiso.nombre }}
+                                    {% if permiso.por_rol %}
+                                        <span class="badge bg-light text-dark border">por rol</span>
+                                    {% endif %}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-sm mt-3">Guardar cambios</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

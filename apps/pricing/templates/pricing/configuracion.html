@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración de precios — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Configuración de precios y márgenes</h1>
+
+<h2 class="h5">General</h2>
+<form method="post" action="{% url 'pricing:actualizar_configuracion_general' %}" class="row g-3 mb-4" style="max-width: 650px;">
+    {% csrf_token %}
+    <div class="col-md-6">
+        <label class="form-label">Margen general (%)</label>
+        {{ config_form.margen_general }}
+        <div class="form-text">Se usa cuando un producto no tiene margen propio, ni su marca, ni su categoría.</div>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Margen de mano de obra (%)</label>
+        {{ config_form.margen_mano_obra }}
+        <div class="form-text">No es un producto de catálogo: es el margen por defecto para el concepto manual "Mano de obra" en presupuestos.</div>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Flete (%)</label>
+        {{ config_form.flete_pct }}
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Costo financiero/tarjeta (%)</label>
+        {{ config_form.costo_financiero_pct }}
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Margen mínimo de alerta (%)</label>
+        {{ config_form.margen_minimo_alerta }}
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary btn-sm">Guardar configuración general</button>
+    </div>
+</form>
+
+<h2 class="h5">Márgenes por categoría</h2>
+<p class="text-muted">Este es el nivel que más se usa en la práctica.</p>
+<table class="table table-sm bg-white" style="max-width: 450px;">
+    <thead><tr><th>Categoría</th><th>Margen (%)</th></tr></thead>
+    <tbody>
+        {% for fila in categorias %}
+        <tr>
+            <td class="align-middle">{{ fila.categoria.nombre }}</td>
+            <td>
+                <form method="post" action="{% url 'pricing:actualizar_margen_categoria' fila.categoria.pk %}" class="d-flex gap-1">
+                    {% csrf_token %}
+                    {{ fila.form.margen }}
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Guardar</button>
+                </form>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2" class="text-muted">Todavía no hay categorías cargadas.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h2 class="h5 mt-4">Márgenes por marca</h2>
+<p class="text-muted">Le gana a la categoría cuando ambos están configurados a la vez. Hoy se usa poco: casi todo se carga por categoría.</p>
+<table class="table table-sm bg-white" style="max-width: 450px;">
+    <thead><tr><th>Marca</th><th>Margen (%)</th></tr></thead>
+    <tbody>
+        {% for fila in marcas %}
+        <tr>
+            <td class="align-middle">{{ fila.marca.nombre }}</td>
+            <td>
+                <form method="post" action="{% url 'pricing:actualizar_margen_marca' fila.marca.pk %}" class="d-flex gap-1">
+                    {% csrf_token %}
+                    {{ fila.form.margen }}
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Guardar</button>
+                </form>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2" class="text-muted">Todavía no hay marcas cargadas.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h2 class="h5 mt-4">Margen de un producto puntual</h2>
+<p class="text-muted">Le gana a todo lo demás. Buscá el producto para editarlo acá sin tener que listar todo el catálogo.</p>
+<form method="get" class="row g-2 mb-2">
+    <div class="col-auto">
+        <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Buscar por código o nombre">
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Buscar</button>
+    </div>
+</form>
+
+{% if resultados_producto %}
+<table class="table table-sm bg-white" style="max-width: 550px;">
+    <thead><tr><th>Producto</th><th>Margen propio (%)</th></tr></thead>
+    <tbody>
+        {% for fila in resultados_producto %}
+        <tr>
+            <td class="align-middle">
+                <a href="{% url 'catalog:producto_detalle' fila.producto.pk %}">{{ fila.producto }}</a>
+            </td>
+            <td>
+                <form method="post" action="{% url 'pricing:actualizar_margen_producto' fila.producto.pk %}" class="d-flex gap-1">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'pricing:configuracion' %}?q={{ q }}">
+                    {{ fila.form.margen }}
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Guardar</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% elif q %}
+<p class="text-muted">No se encontraron productos para "{{ q }}".</p>
+{% endif %}
+{% endblock %}

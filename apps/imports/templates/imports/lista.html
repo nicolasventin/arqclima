@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Importaciones — ARQCLIMA{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Importaciones de listas de precios</h1>
+    <a href="{% url 'imports:nueva' %}" class="btn btn-primary btn-sm">+ Nueva importación</a>
+</div>
+
+<table class="table table-sm table-hover bg-white">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Proveedor</th>
+            <th>Cargada por</th>
+            <th>Fecha</th>
+            <th>Estado</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for importacion in importaciones %}
+        <tr>
+            <td><a href="{% url 'imports:detalle' importacion.pk %}">#{{ importacion.pk }}</a></td>
+            <td>{{ importacion.proveedor.nombre_comercial }}</td>
+            <td>{{ importacion.cargado_por|default:"—" }}</td>
+            <td>{{ importacion.cargado_en|date:"d/m/Y H:i" }}</td>
+            <td>
+                {% if importacion.estado == "pendiente" %}
+                <span class="badge bg-warning text-dark">Pendiente de confirmar</span>
+                {% elif importacion.estado == "confirmada" %}
+                <span class="badge bg-success">Confirmada</span>
+                {% else %}
+                <span class="badge bg-secondary">Descartada</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">Todavía no se cargó ninguna importación.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

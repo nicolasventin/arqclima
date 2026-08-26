@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Inicio — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4">Hola, {{ user.get_full_name|default:user.username }}</h1>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Tu rol</h5>
+                <p class="card-text">{{ user_role|default:"Sin rol asignado" }}</p>
+            </div>
+        </div>
+    </div>
+
+    {% if puede_gestionar_permisos %}
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Usuarios y permisos</h5>
+                <p class="card-text">Gestioná el rol y los permisos individuales de cada usuario.</p>
+                <a href="{% url 'accounts:permisos' %}" class="btn btn-sm btn-primary">Administrar</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Próximamente</h5>
+                <p class="card-text text-muted">
+                    Catálogo, presupuestos, stock y trabajos se van a ir sumando acá
+                    a medida que avancemos con las próximas etapas.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

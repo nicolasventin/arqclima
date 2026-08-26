@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Editar proveedor{% else %}Nuevo proveedor{% endif %} — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">{% if object %}Editar proveedor{% else %}Nuevo proveedor{% endif %}</h1>
+
+<form method="post" class="row g-3" style="max-width: 600px;">
+    {% csrf_token %}
+    <div class="col-12">
+        <label class="form-label">Nombre comercial</label>
+        {{ form.nombre_comercial }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Razón social</label>
+        {{ form.razon_social }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">CUIT</label>
+        {{ form.cuit }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Contacto</label>
+        {{ form.contacto_nombre }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Teléfono</label>
+        {{ form.telefono }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Email</label>
+        {{ form.email }}
+    </div>
+    <div class="col-md-6 form-check">
+        {{ form.activo }}
+        <label class="form-check-label">Activo</label>
+    </div>
+    <div class="col-12">
+        <label class="form-label">Notas</label>
+        {{ form.notas }}
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+</form>
+{% endblock %}
