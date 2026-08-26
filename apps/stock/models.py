@@ -1,6 +1,4 @@
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericForeignKey
-from django.contrib.contenttypes.models import ContentType
 from django.db import models
 
 
@@ -36,12 +34,19 @@ class MovimientoStock(models.Model):
     control de acceso distinto por depósito se resuelve con permisos
     (ver apps.stock.permissions), no con tablas separadas.
 
-    `referencia_*` (GenericForeignKey) + `referencia_libre` existen para
-    que un movimiento pueda apuntar a "de dónde salió" sin depender de
-    que exista todavía un modelo Trabajo (Etapa 8): hoy se usa
-    referencia_libre (texto), y cuando exista Trabajo, sus movimientos
-    simplemente completan referencia_content_type/object_id — sin
-    ninguna migración nueva sobre este modelo.
+    `referencia_libre` (texto) es el único vínculo con "de dónde salió"
+    por ahora, a propósito: se evaluó usar un GenericForeignKey
+    (Content Types) para referenciar un futuro Trabajo/OrdenCompra sin
+    migrar nada en la Etapa 8, pero un GFK es content_type_id +
+    object_id sin ningún FOREIGN KEY real — Postgres no puede verificar
+    que el objeto referenciado exista, ni protegerlo de un borrado. Eso
+    contradice el criterio del resto del proyecto (la garantía vive en
+    la base, no en la disciplina del código). Se prefiere que la Etapa
+    8 agregue una FK real y nullable (ej. `trabajo`, `orden_compra`)
+    con una migración normal cuando esos modelos existan — mismo
+    camino que ya se usó con ItemPresupuesto.producto_proveedor en la
+    Etapa 5, que también se agregó con su propia migración dedicada en
+    vez de preverse desde el día 0.
     """
 
     producto = models.ForeignKey(
@@ -71,11 +76,6 @@ class MovimientoStock(models.Model):
         help_text="Solo se completa en una Devolución: la Salida de repuestos que resuelve.",
     )
 
-    referencia_content_type = models.ForeignKey(
-        ContentType, null=True, blank=True, on_delete=models.SET_NULL
-    )
-    referencia_object_id = models.CharField(max_length=255, null=True, blank=True)
-    referencia = GenericForeignKey("referencia_content_type", "referencia_object_id")
     referencia_libre = models.CharField(
         max_length=255,
         blank=True,

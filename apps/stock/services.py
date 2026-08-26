@@ -30,7 +30,6 @@ def registrar_movimiento(
     usuario,
     requiere_devolucion=False,
     salida_relacionada=None,
-    referencia=None,
     referencia_libre="",
     detalle="",
 ):
@@ -57,7 +56,6 @@ def registrar_movimiento(
         cantidad=cantidad,
         requiere_devolucion=requiere_devolucion,
         salida_relacionada=salida_relacionada,
-        referencia=referencia,
         referencia_libre=referencia_libre,
         registrado_por=usuario,
     )
