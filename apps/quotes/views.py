@@ -204,8 +204,22 @@ class RechazarPresupuestoView(_TransicionPresupuestoView):
 
 
 class CancelarPresupuestoView(_TransicionPresupuestoView):
+    """
+    Cancela un Borrador o un Enviado (los únicos casos en que este botón
+    se muestra). Cancelar un Aceptado es una transición distinta a
+    propósito: pasa exclusivamente por RevertirAceptadoView, que exige
+    el permiso quotes.revert_presupuesto_aceptado (solo Administrador).
+    Sin este chequeo, cambiar_estado() aceptaría igual la transición
+    Aceptado→Cancelado (está en TRANSICIONES_VALIDAS) y cualquiera con
+    change_presupuesto —Rodrigo incluido— podría revertir un Aceptado
+    pegándole directo a esta URL, esquivando el permiso especial.
+    """
+
     nuevo_estado = EstadoPresupuesto.CANCELADO
     accion = "cancelar_presupuesto"
+
+    def test_func(self):
+        return super().test_func() and self.presupuesto.estado != EstadoPresupuesto.ACEPTADO
 
 
 class ReabrirPresupuestoView(_TransicionPresupuestoView):

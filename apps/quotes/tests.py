@@ -461,6 +461,35 @@ class RevertirAceptadoPermisosTests(TestCase):
         presupuesto.refresh_from_db()
         self.assertEqual(presupuesto.estado, EstadoPresupuesto.CANCELADO)
 
+    def test_rodrigo_no_puede_esquivar_el_permiso_via_cancelar_generico(self):
+        """
+        Regresión: Aceptado→Cancelado está en TRANSICIONES_VALIDAS (es la
+        misma transición que usa RevertirAceptadoView), así que sin este
+        chequeo de estado en CancelarPresupuestoView, cualquiera con
+        change_presupuesto (Rodrigo incluido) podía cancelar un Aceptado
+        pegándole directo a /cancelar/, sin tener revert_presupuesto_aceptado.
+        """
+        presupuesto = self._presupuesto_aceptado()
+        self.client.login(username="rodrigo_revertir", password="clave12345")
+        response = self.client.post(reverse("quotes:cancelar", args=[presupuesto.pk]))
+        self.assertEqual(response.status_code, 403)
+        presupuesto.refresh_from_db()
+        self.assertEqual(presupuesto.estado, EstadoPresupuesto.ACEPTADO)
+
+    def test_rodrigo_si_puede_cancelar_un_enviado_via_cancelar_generico(self):
+        """El fix de arriba no debe romper el uso normal de /cancelar/."""
+        presupuesto = Presupuesto.objects.create(cliente=self.cliente)
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, descripcion_manual="X", precio_unitario=Decimal("100")
+        )
+        enviar_presupuesto(presupuesto, self.rodrigo)
+
+        self.client.login(username="rodrigo_revertir", password="clave12345")
+        response = self.client.post(reverse("quotes:cancelar", args=[presupuesto.pk]))
+        self.assertRedirects(response, reverse("quotes:detalle", args=[presupuesto.pk]))
+        presupuesto.refresh_from_db()
+        self.assertEqual(presupuesto.estado, EstadoPresupuesto.CANCELADO)
+
 
 class PresupuestoViewsTests(TestCase):
     @classmethod
