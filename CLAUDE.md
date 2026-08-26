@@ -2,7 +2,7 @@
 
 ## Estado de avance del proyecto
 
-**Última actualización: 2026-08-26**, al cierre de la Etapa 6 (rama `feature/etapa-6-tareas`, todavía sin mergear a `main`). Esta sección se actualiza al cerrar cada etapa para que una sesión nueva no tenga que reconstruir el contexto a mano.
+**Última actualización: 2026-08-26**, al cierre de la Etapa 7 (rama `feature/etapa-7-stock`, todavía sin mergear a `main`). Esta sección se actualiza al cerrar cada etapa para que una sesión nueva no tenga que reconstruir el contexto a mano.
 
 ### Etapas cerradas
 
@@ -11,9 +11,12 @@
 - **Etapa 3 (Precios)**: historial de costos inmutable (trigger de Postgres), márgenes configurables por producto/marca/categoría/general, flete, costo financiero, `margen_mano_obra`. `apps.pricing`.
 - **Etapa 4 (Importaciones)**: carga de listas de precios (Excel) con vista previa antes de confirmar. `apps.imports`.
 - **Etapa 5 (Clientes + Presupuestos)**: **cerrada en 4 partes** — ver decisiones abajo. `apps.clients`, `apps.quotes`. Mergeada a `main` en `e2ffc05` (incluye el fix de `revert_presupuesto_aceptado` en `7542e76`).
-- **Etapa 6 (Tareas)**: modelo `Tarea` (regla 14), máquina de estados propia, permisos y alcance de visibilidad por rol, integrada al dashboard de la Etapa 1. `apps.tasks`. Ver decisiones abajo. **105 tests en total en el proyecto, todos verdes desde una base de datos de test creada de cero.**
+- **Etapa 6 (Tareas)**: modelo `Tarea` (regla 14), máquina de estados propia, permisos y alcance de visibilidad por rol, integrada al dashboard de la Etapa 1. `apps.tasks`. Mergeada a `main` en `80f4750`. Ver decisiones abajo.
+- **Etapa 7 (Stock)**: modelo `MovimientoStock` (reglas 11-12), ledger append-only, "pendiente de devolución" derivado del ledger, alertas de stock mínimo. `apps.stock`. Ver decisiones abajo. **134 tests en total en el proyecto, todos verdes desde una base de datos de test creada de cero.**
 
-**Siguiente etapa según el plan original: Etapa 7 (Stock).**
+**Pendiente para la Etapa 8 (Trabajos)**: evaluar si el alcance de Andrés en `apps.stock` (hoy `manage_stock_general`, sin acotar) conviene restringirlo a "solo movimientos de stock relacionados con sus propios trabajos asignados" — ver decisión 30 más abajo. También es el momento de conectar `MovimientoStock.referencia_content_type/object_id` a los movimientos de un Trabajo real.
+
+**Siguiente etapa según el plan original: Etapa 8 (Trabajos).**
 
 ### Decisiones de diseño puntuales tomadas en el camino (no estaban en la versión original de este archivo)
 
@@ -55,6 +58,15 @@ Reglas de negocio 1-15 más abajo siguen siendo la fuente de verdad general; est
 24. **`Tarea.asignado_a` con `on_delete=SET_NULL`** (a diferencia de las FKs "núcleo" de Etapa 5 como `Presupuesto.cliente`, que son `PROTECT`): si se borra el usuario, la tarea queda sin asignar en vez de bloquear el borrado — decisión explícita del usuario, mismo criterio que `creado_por`/`asignado_por` en el resto del proyecto.
 25. **Permisos de Tarea**: Administrador/Ventas y Presupuestos/Service y Repuestos comparten `add_tarea`/`change_tarea` (cualquiera de los tres puede crear y reasignar cualquier tarea, no solo las que creó). Depósito/Técnico de Campo NO tienen esos permisos, pero sí pueden mover el estado de una tarea propia libremente (Pendiente↔En proceso↔Completada) vía un chequeo de fila (`asignado_a == request.user`), sin necesidad de un permiso Django de por medio.
 26. **Alcance de visibilidad de listados de Tarea** (`queryset_tareas_visibles`): Diego ve las de todo el equipo (`view_all_tareas`); Rodrigo/Gabriel ven lo que ellos asignaron + lo que tienen asignado a sí mismos; Contri/Andrés ven solo lo propio.
+
+**Etapa 7 (Stock):**
+
+27. **`MovimientoStock` es un ledger append-only**, mismo criterio que `HistorialCosto` (Etapa 3): el stock actual nunca es un campo que se pisa, es `SUM(cantidad)` de los movimientos de ese producto+depósito. Trigger de Postgres bloquea `UPDATE`/`DELETE`. `cantidad` se guarda CON SIGNO (positivo suma, negativo resta); `tipo` (Entrada/Salida/Ajuste/Devolución) es una etiqueta de categorización, no algo que haya que reinterpretar en cada consulta — un `CheckConstraint` en la base valida que el signo sea coherente con el tipo.
+28. **Un solo modelo con campo `deposito`** (General/Repuestos), no dos modelos paralelos: un mismo `Producto` puede tener stock en los dos depósitos a la vez (no son excluyentes, igual que `es_repuesto`), la separación es sobre qué pool de unidades físicas, no sobre la identidad del producto. La "separación de controles" (regla 12) se resuelve con permisos por depósito, no con tablas separadas.
+29. **"Pendiente de devolución" (regla 11) es un estado DERIVADO del ledger, no un campo mutable**: `requiere_devolucion` se fija al crear la Salida de repuestos (inmutable desde ahí), y `cantidad_pendiente_devolucion()` resta las Devoluciones ya registradas (`salida_relacionada`) — mismo patrón que "stock actual" y que `Tarea.esta_vencida` (Etapa 6): no se introdujo una cuarta forma de modelar estado en el proyecto. **Corrección de una premisa falsa**: no existía ningún código de la Etapa 2 para este mecanismo (se grepeó todo `apps/` y no hay una sola mención a "devolución") — lo que existía era solo la frase en la descripción de rol de Gabriel del CLAUDE.md original, texto de especificación, no código.
+30. **Permisos de Stock**, mismo idioma que `pricing.puede_registrar_costo` (permiso genérico de "pase libre" + permiso custom acotado por rol): Diego con `add_movimientostock` (entrada/salida en ambos depósitos) + `ajustar_stock_general` + `manage_stock_minimo`. Contri con `manage_stock_general` + `ajustar_stock_general`. Gabriel con `manage_stock_repuestos`. Rodrigo solo `view_movimientostock`. **Andrés con `manage_stock_general` (entrada Y salida, sin ajuste) — ampliación real respecto de la matriz de permisos original** (que solo lo listaba para "salida"): la regla de negocio 11 dice que el sobrante que retira "vuelve a stock" (una entrada), así que necesita ambas acciones. Pendiente para la Etapa 8: evaluar si conviene acotar esto a "solo movimientos de sus propios trabajos" en vez de dejarlo general para siempre.
+31. **`stock_minimo_general`/`stock_minimo_repuestos`**: campos nullable directos en `catalog.Producto` (mismo patrón que `margen`, agregado por `pricing` en la Etapa 3 al mismo modelo desde otra app) — no un modelo de configuración separado. Las alertas se calculan al mostrar (mismo criterio que `Tarea.esta_vencida`), sin persistir historial de alertas: la regla de negocio no lo pide, a diferencia de la regla 6 de márgenes que sí pide auditar explícitamente el envío con margen bajo.
+32. **`MovimientoStock.referencia_content_type`/`referencia_object_id`** (`GenericForeignKey`, mismo mecanismo que `AuditLog.objeto`) + `referencia_libre` (texto): permite registrar una salida "genérica" hoy sin que exista el modelo Trabajo, y que la Etapa 8 se conecte completando la referencia genérica sin ninguna migración nueva sobre este modelo — mismo problema ya resuelto entre `ItemPresupuesto.producto_proveedor` y el catálogo en la Etapa 5.
 
 ## Contexto
 
