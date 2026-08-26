@@ -10,6 +10,10 @@ from apps.core.mixins import PermisoRequeridoMixin
 from apps.pricing.forms import MargenProductoForm, RegistrarCostoForm
 from apps.pricing.permissions import puede_gestionar_margenes, puede_registrar_costo, puede_ver_precio
 from apps.pricing.services import calcular_precio_venta, costo_actual, margen_efectivo, proveedor_mas_conveniente
+from apps.stock.forms import StockMinimoForm
+from apps.stock.models import Deposito
+from apps.stock.permissions import puede_configurar_stock_minimo, puede_ver_stock
+from apps.stock.services import stock_actual
 
 from .forms import ProductoForm, ProductoProveedorForm, ProveedorForm
 from .models import Categoria, Marca, Producto, ProductoProveedor, Proveedor
@@ -102,6 +106,16 @@ class ProductoDetailView(PermisoRequeridoMixin, DetailView):
             context["puede_gestionar_margenes"] = puede_gestionar_margenes(self.request.user)
             context["costo_form"] = RegistrarCostoForm()
             context["margen_form"] = MargenProductoForm(instance=self.object)
+
+        if puede_ver_stock(self.request.user):
+            context["stock_general"] = stock_actual(self.object, Deposito.GENERAL)
+            if self.object.es_repuesto:
+                context["stock_repuestos"] = stock_actual(self.object, Deposito.REPUESTOS)
+            context["puede_configurar_stock_minimo"] = puede_configurar_stock_minimo(
+                self.request.user
+            )
+            if context["puede_configurar_stock_minimo"]:
+                context["stock_minimo_form"] = StockMinimoForm(instance=self.object)
 
         return context
 

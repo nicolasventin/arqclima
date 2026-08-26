@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Movimientos de stock — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Movimientos de stock</h1>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-auto">
+        <select name="deposito" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">Todos los depósitos</option>
+            <option value="general" {% if request.GET.deposito == "general" %}selected{% endif %}>Stock general</option>
+            <option value="repuestos" {% if request.GET.deposito == "repuestos" %}selected{% endif %}>Stock de repuestos</option>
+        </select>
+    </div>
+</form>
+
+<table class="table table-sm bg-white">
+    <thead>
+        <tr>
+            <th>Fecha</th>
+            <th>Producto</th>
+            <th>Depósito</th>
+            <th>Tipo</th>
+            <th>Cantidad</th>
+            <th>Referencia</th>
+            <th>Registrado por</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for movimiento in movimientos %}
+        <tr>
+            <td>{{ movimiento.creado_en|date:"d/m/Y H:i" }}</td>
+            <td>{{ movimiento.producto }}</td>
+            <td>{{ movimiento.get_deposito_display }}</td>
+            <td>
+                {{ movimiento.get_tipo_display }}
+                {% if movimiento.requiere_devolucion %}<span class="badge bg-warning text-dark">Pendiente devolución</span>{% endif %}
+            </td>
+            <td>{{ movimiento.cantidad }}</td>
+            <td>{{ movimiento.referencia_libre|default:"—" }}</td>
+            <td>{{ movimiento.registrado_por|default:"Sistema" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-muted">No hay movimientos.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

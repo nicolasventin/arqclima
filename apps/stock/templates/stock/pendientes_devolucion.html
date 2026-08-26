@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Pendientes de devolución — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-3">Repuestos pendientes de devolución</h1>
+
+<table class="table table-sm bg-white">
+    <thead>
+        <tr>
+            <th>Fecha</th>
+            <th>Producto</th>
+            <th>Enviado</th>
+            <th>Pendiente</th>
+            <th>Referencia</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for salida in pendientes %}
+        <tr>
+            <td>{{ salida.creado_en|date:"d/m/Y" }}</td>
+            <td>{{ salida.producto }}</td>
+            <td>{{ salida.enviado }}</td>
+            <td>{{ salida.pendiente }}</td>
+            <td>{{ salida.referencia_libre|default:"—" }}</td>
+            <td>
+                <a href="{% url 'stock:registrar_devolucion' salida.pk %}" class="btn btn-sm btn-outline-primary">Registrar devolución</a>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-muted">No hay repuestos pendientes de devolución.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

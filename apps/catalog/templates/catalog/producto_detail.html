@@ -129,4 +129,33 @@
 </form>
 {% endif %}
 {% endif %}
+
+{% if stock_general is not None %}
+<h2 class="h5 mt-4">Stock</h2>
+<dl class="row">
+    <dt class="col-sm-3">Stock general</dt>
+    <dd class="col-sm-9">{{ stock_general }}</dd>
+    {% if stock_repuestos is not None %}
+    <dt class="col-sm-3">Stock de repuestos</dt>
+    <dd class="col-sm-9">{{ stock_repuestos }}</dd>
+    {% endif %}
+</dl>
+
+{% if puede_configurar_stock_minimo %}
+<form method="post" action="{% url 'stock:actualizar_stock_minimo' producto.pk %}" class="row g-2 align-items-end" style="max-width: 500px;">
+    {% csrf_token %}
+    <div class="col-auto">
+        <label class="form-label">Stock mínimo general</label>
+        {{ stock_minimo_form.stock_minimo_general }}
+    </div>
+    <div class="col-auto">
+        <label class="form-label">Stock mínimo repuestos</label>
+        {{ stock_minimo_form.stock_minimo_repuestos }}
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-secondary">Guardar</button>
+    </div>
+</form>
+{% endif %}
+{% endif %}
 {% endblock %}

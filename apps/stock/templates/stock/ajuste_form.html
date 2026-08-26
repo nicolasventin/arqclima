@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Ajuste de stock — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Ajuste manual de stock (general)</h1>
+
+<form method="post" class="row g-3" style="max-width: 600px;">
+    {% csrf_token %}
+    <div class="col-12">
+        <label class="form-label">Producto</label>
+        {{ form.producto }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Cantidad (con signo)</label>
+        {{ form.cantidad }}
+        {% if form.cantidad.errors %}<div class="text-danger small">{{ form.cantidad.errors }}</div>{% endif %}
+    </div>
+    <div class="col-12">
+        <label class="form-label">Motivo</label>
+        {{ form.referencia_libre }}
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+</form>
+{% endblock %}
