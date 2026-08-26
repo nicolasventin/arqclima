@@ -39,6 +39,11 @@
                         <a class="nav-link" href="{% url 'quotes:lista' %}">Presupuestos</a>
                     </li>
                     {% endif %}
+                    {% if perms.jobs.view_trabajo %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'jobs:lista' %}">Trabajos</a>
+                    </li>
+                    {% endif %}
                     {% if perms.stock.view_movimientostock %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'stock:lista' %}">Stock</a>

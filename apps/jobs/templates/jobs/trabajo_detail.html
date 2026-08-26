@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Trabajo #{{ trabajo.pk }} — ARQCLIMA{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h1 class="h4 mb-0">Trabajo #{{ trabajo.pk }}</h1>
+        <p class="text-muted mb-0">
+            {{ trabajo.presupuesto.cliente.nombre }} — {{ trabajo.direccion|default:"sin dirección" }}
+        </p>
+        <a href="{% url 'quotes:detalle' trabajo.presupuesto.pk %}">Ver presupuesto de origen (#{{ trabajo.presupuesto.numero }})</a>
+    </div>
+    <span class="badge bg-secondary fs-6">{{ trabajo.get_estado_display }}</span>
+</div>
+
+<dl class="row">
+    <dt class="col-sm-3">Técnico asignado</dt>
+    <dd class="col-sm-9">{{ trabajo.tecnico_asignado|default:"Sin asignar" }}</dd>
+    {% if trabajo.observaciones %}
+    <dt class="col-sm-3">Observaciones</dt>
+    <dd class="col-sm-9" style="white-space: pre-line;">{{ trabajo.observaciones }}</dd>
+    {% endif %}
+</dl>
+
+{% if estados_disponibles %}
+<div class="d-flex gap-2">
+    {% for estado in estados_disponibles %}
+    <form method="post" action="{% url 'jobs:cambiar_estado' trabajo.pk %}">
+        {% csrf_token %}
+        <input type="hidden" name="estado" value="{{ estado.valor }}">
+        <button type="submit" class="btn btn-sm btn-primary">Marcar {{ estado.etiqueta }}</button>
+    </form>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

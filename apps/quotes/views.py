@@ -13,6 +13,8 @@ from xhtml2pdf import pisa
 from apps.audit.services import log_action
 from apps.catalog.models import ProductoProveedor
 from apps.core.mixins import PermisoRequeridoMixin
+from apps.jobs.forms import CrearTrabajoForm
+from apps.jobs.permissions import puede_crear_trabajo
 from apps.pricing.models import ConfiguracionGeneral
 from apps.pricing.services import calcular_precio_venta, costo_actual
 
@@ -114,10 +116,16 @@ class PresupuestoDetailView(PermisoRequeridoMixin, DetailView):
                 "es_borrador": es_borrador,
                 "puede_editar_estructura": es_borrador
                 and self.request.user.has_perm("quotes.change_presupuesto"),
-                "puede_revertir": puede_revertir_aceptado(self.request.user)
+                "puede_revertir": puede_revertir_aceptado(self.request.user, presupuesto)
                 and presupuesto.estado == EstadoPresupuesto.ACEPTADO,
                 "seccion_form": SeccionPresupuestoForm(),
                 "margen_minimo_alerta": config.margen_minimo_alerta,
+                "puede_crear_trabajo": (
+                    presupuesto.estado == EstadoPresupuesto.ACEPTADO
+                    and not hasattr(presupuesto, "trabajo")
+                    and puede_crear_trabajo(self.request.user)
+                ),
+                "crear_trabajo_form": CrearTrabajoForm(),
             }
         )
         return context
@@ -232,7 +240,7 @@ class RevertirAceptadoView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.presupuesto = get_object_or_404(Presupuesto, pk=self.kwargs["pk"])
-        return puede_revertir_aceptado(self.request.user)
+        return puede_revertir_aceptado(self.request.user, self.presupuesto)
 
     def post(self, request, pk):
         try:

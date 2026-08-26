@@ -442,8 +442,22 @@ class RevertirAceptadoPermisosTests(TestCase):
         return presupuesto
 
     def test_puede_revertir_aceptado_helper(self):
-        self.assertTrue(puede_revertir_aceptado(self.diego))
-        self.assertFalse(puede_revertir_aceptado(self.rodrigo))
+        presupuesto = self._presupuesto_aceptado()
+        self.assertTrue(puede_revertir_aceptado(self.diego, presupuesto))
+        self.assertFalse(puede_revertir_aceptado(self.rodrigo, presupuesto))
+
+    def test_ni_diego_puede_revertir_si_ya_existe_un_trabajo(self):
+        from apps.jobs.services import crear_trabajo
+
+        presupuesto = self._presupuesto_aceptado()
+        crear_trabajo(presupuesto, self.diego)
+        self.assertFalse(puede_revertir_aceptado(self.diego, presupuesto))
+
+        self.client.login(username="diego_revertir", password="clave12345")
+        response = self.client.post(reverse("quotes:revertir_aceptado", args=[presupuesto.pk]))
+        self.assertEqual(response.status_code, 403)
+        presupuesto.refresh_from_db()
+        self.assertEqual(presupuesto.estado, EstadoPresupuesto.ACEPTADO)
 
     def test_rodrigo_no_puede_revertir_via_vista(self):
         presupuesto = self._presupuesto_aceptado()
