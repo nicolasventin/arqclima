@@ -187,6 +187,20 @@ class ItemPresupuesto(models.Model):
         decimal_places=2,
         help_text="Congelado al crear el ítem: no cambia si después cambian los precios del catálogo.",
     )
+    costo_unitario = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=(
+            "Costo congelado al crear el ítem (mismo criterio que precio_unitario). "
+            "En ítems de catálogo sale del costo vigente del proveedor elegido; en "
+            "conceptos manuales es opcional y editable (para 'Mano de obra' se puede "
+            "sugerir a partir de pricing.ConfiguracionGeneral.margen_mano_obra, ver "
+            "apps.quotes.services.sugerir_costo_mano_obra). Sin costo cargado, el "
+            "ítem queda fuera del chequeo de margen bajo."
+        ),
+    )
     descuento_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     tipo_iva = models.CharField(max_length=20, choices=TipoIVA.choices, default=TipoIVA.INCLUIDO)
     opcional = models.BooleanField(
