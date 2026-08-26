@@ -29,6 +29,16 @@
                         <a class="nav-link" href="{% url 'catalog:proveedor_lista' %}">Proveedores</a>
                     </li>
                     {% endif %}
+                    {% if perms.clients.view_cliente %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'clients:lista' %}">Clientes</a>
+                    </li>
+                    {% endif %}
+                    {% if perms.quotes.view_presupuesto %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'quotes:lista' %}">Presupuestos</a>
+                    </li>
+                    {% endif %}
                     {% if perms.pricing.manage_margenes %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'pricing:configuracion' %}">Configuración de precios</a>

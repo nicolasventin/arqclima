@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    body { font-family: Helvetica, sans-serif; font-size: 11px; color: #222; }
+    h1 { font-size: 18px; margin-bottom: 0; }
+    .muted { color: #666; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
+    th { background-color: #eee; }
+    .text-end { text-align: right; }
+    .totales td { border: none; padding: 2px 6px; }
+    .totales .total-final { font-weight: bold; border-top: 1px solid #222; }
+    .seccion-titulo { margin-top: 14px; font-size: 13px; font-weight: bold; }
+    .bloque { margin-top: 16px; }
+</style>
+</head>
+<body>
+    <h1>Presupuesto #{{ presupuesto.numero }}</h1>
+    <p class="muted">Fecha: {{ presupuesto.fecha|date:"d/m/Y" }}
+        {% if presupuesto.fecha_vencimiento %} — Válido hasta: {{ presupuesto.fecha_vencimiento|date:"d/m/Y" }}{% endif %}
+    </p>
+
+    <p>
+        <strong>Cliente:</strong> {{ presupuesto.cliente.nombre }}<br>
+        {% if presupuesto.direccion %}<strong>Dirección:</strong> {{ presupuesto.direccion }}<br>{% endif %}
+    </p>
+
+    {% for seccion in secciones %}
+    <div class="seccion-titulo">{{ seccion.titulo }}</div>
+    <table>
+        <thead>
+            <tr><th>Ítem</th><th>Cant.</th><th>P. unitario</th><th>Desc. %</th><th>IVA</th></tr>
+        </thead>
+        <tbody>
+            {% for item in seccion.items.all %}
+            {% if item.incluido %}
+            <tr>
+                <td>{{ item.producto|default:item.descripcion_manual }}</td>
+                <td>{{ item.cantidad }}</td>
+                <td>${{ item.precio_unitario }}</td>
+                <td>{{ item.descuento_pct }}%</td>
+                <td>{{ item.get_tipo_iva_display }}</td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endfor %}
+
+    {% if items_sin_seccion %}
+    <table>
+        <thead>
+            <tr><th>Ítem</th><th>Cant.</th><th>P. unitario</th><th>Desc. %</th><th>IVA</th></tr>
+        </thead>
+        <tbody>
+            {% for item in items_sin_seccion %}
+            {% if item.incluido %}
+            <tr>
+                <td>{{ item.producto|default:item.descripcion_manual }}</td>
+                <td>{{ item.cantidad }}</td>
+                <td>${{ item.precio_unitario }}</td>
+                <td>{{ item.descuento_pct }}%</td>
+                <td>{{ item.get_tipo_iva_display }}</td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <table class="totales" style="width: 300px; margin-left: auto;">
+        <tr><td>Subtotal</td><td class="text-end">${{ totales.subtotal_general }}</td></tr>
+        <tr><td>Descuento general</td><td class="text-end">${{ totales.descuento_general_valor }}</td></tr>
+        <tr><td>Cantidad de unidades</td><td class="text-end">×{{ totales.cantidad_unidades }}</td></tr>
+        <tr class="total-final"><td>Total</td><td class="text-end">${{ totales.total_final }}</td></tr>
+    </table>
+
+    {% if presupuesto.condiciones %}
+    <div class="bloque">
+        <strong>Condiciones</strong>
+        <p>{{ presupuesto.condiciones|linebreaksbr }}</p>
+    </div>
+    {% endif %}
+
+    {% if presupuesto.notas_generales %}
+    <div class="bloque">
+        <strong>Notas</strong>
+        <p>{{ presupuesto.notas_generales|linebreaksbr }}</p>
+    </div>
+    {% endif %}
+</body>
+</html>

@@ -1,5 +1,50 @@
 # ARQCLIMA — Sistema interno de gestión
 
+## Estado de avance del proyecto
+
+**Última actualización: 2026-08-26**, al cierre de la Etapa 5 (rama `feature/etapa-5-clientes-presupuestos`, a punto de mergearse a `main`). Esta sección se actualiza al cerrar cada etapa para que una sesión nueva no tenga que reconstruir el contexto a mano.
+
+### Etapas cerradas
+
+- **Etapa 1 (Base)**: login, usuarios (Diego/Rodrigo/Gabriel/Contri/Andrés) con rol + overrides individuales, guard de permisos, pantalla de administración de permisos, auditoría genérica, dashboard base. `apps.accounts`, `apps.audit`, `apps.dashboard`.
+- **Etapa 2 (Catálogo)**: productos (marca+código), marcas, categorías, proveedores, línea de repuestos de Gabriel. `apps.catalog`.
+- **Etapa 3 (Precios)**: historial de costos inmutable (trigger de Postgres), márgenes configurables por producto/marca/categoría/general, flete, costo financiero, `margen_mano_obra`. `apps.pricing`.
+- **Etapa 4 (Importaciones)**: carga de listas de precios (Excel) con vista previa antes de confirmar. `apps.imports`.
+- **Etapa 5 (Clientes + Presupuestos)**: **cerrada en 4 partes** — ver decisiones abajo. `apps.clients`, `apps.quotes`. 40 tests nuevos (81 en total en el proyecto, todos verdes desde una base de datos de test creada de cero).
+
+**Siguiente etapa según el plan original: Etapa 6 (Tareas).**
+
+### Decisiones de diseño puntuales tomadas en el camino (no estaban en la versión original de este archivo)
+
+Reglas de negocio 1-15 más abajo siguen siendo la fuente de verdad general; esto son decisiones concretas de implementación que las completan, tomadas sesión a sesión:
+
+1. **La dirección de obra vive en `Presupuesto`, no en `Cliente`**: un mismo cliente puede pedir presupuestos para distintas direcciones.
+2. **`PlantillaCondiciones` es un modelo separado** con `predeterminada` (se precarga en presupuestos nuevos) y `activa` (retirar una plantilla vieja sin borrarla). Un `UniqueConstraint` condicional (`fields=["predeterminada"], condition=Q(predeterminada=True)`) garantiza en la base — no en validación de aplicación — que solo pueda haber una predeterminada a la vez.
+3. **`ItemPresupuesto.presupuesto` es obligatorio; `.seccion` es opcional** (no fuerza una sección invisible en presupuestos simples).
+4. **`ItemPresupuesto.opcional` e `.incluido` son booleanos independientes**, con un `CheckConstraint` que prohíbe `opcional=False AND incluido=False` (un ítem no opcional no puede quedar excluido del total).
+5. **`Presupuesto.numero` sale de una secuencia de Postgres** (`quotes_presupuesto_numero_seq`, vía `db_default` + `nextval`), nunca de `max()+1` — evita choques con creaciones concurrentes.
+6. **`iva_pct` se agregó a `pricing.ConfiguracionGeneral`** (junto a flete/financiero) para poder calcular el IVA de ítems con `tipo_iva='+ IVA'`.
+7. **`ItemPresupuesto.costo_unitario`** (opcional): costo congelado del ítem. Sin él, el ítem queda fuera del chequeo de margen bajo. Para el concepto manual "Mano de obra", `sugerir_costo_mano_obra()` lo estima a partir de `ConfiguracionGeneral.margen_mano_obra` (Etapa 3) — que hasta la Parte 2 de esta etapa no se usaba en ningún lado.
+8. **Cálculo de totales** (`calcular_totales`): el descuento general porcentual se aplica ANTES de multiplicar por `cantidad_unidades`; el de monto fijo se resta UNA sola vez sobre el total ya multiplicado (si se restara antes, un descuento fijo de $100.000 con `cantidad_unidades=3` terminaría restando $300.000).
+9. **`margen_item()`** calcula markup sobre costo (mismo criterio que `pricing.services.calcular_precio_venta`, no margen bruto sobre precio), evaluado ítem por ítem, no como un número agregado del presupuesto.
+10. **`enviar_presupuesto()`**: un margen bajo NO bloquea el envío (regla 6) pero se audita, en CADA transición a Enviado, incluidos reenvíos tras editar un borrador ya enviado.
+11. **Máquina de estados formal** (`TRANSICIONES_VALIDAS` + `cambiar_estado()` en `apps/quotes/services.py`) es el único punto de entrada para mover el estado de un presupuesto:
+    - `Borrador → {Enviado, Cancelado}`
+    - `Enviado → {Aceptado, Rechazado, Vencido, Cancelado, Borrador}`
+    - `Rechazado → {Borrador}`
+    - `Vencido → {Borrador}`
+    - `Aceptado → {Cancelado}`
+    - `Cancelado → {}` (terminal, sin salidas)
+12. **`ItemPresupuesto.producto_proveedor`** (nuevo): registra qué proveedor puntual se usó para fijar precio/costo, para que "duplicar y recalcular" pueda refrescar el costo desde ESE proveedor sin auto-elegir uno nuevo (regla de negocio 2).
+13. **Trigger de Postgres** bloquea INSERT/UPDATE/DELETE en `SeccionPresupuesto`/`ItemPresupuesto` si el presupuesto dueño no está en Borrador — hay que reabrirlo primero (transición auditada). Mismo criterio que el trigger de `HistorialCosto` en `pricing`: la garantía vive en la base. Efecto secundario detectado: un presupuesto `Cancelado` (terminal) con ítems no se puede borrar ni en cascada, solo queda cancelado para siempre.
+14. **Permiso custom `quotes.revert_presupuesto_aceptado`, solo para Administrador**: revertir un Aceptado (→Cancelado, la única salida de Aceptado en el grafo — no hay `Aceptado→Borrador`) es una decisión de negocio (puerta de entrada a que nazca un Trabajo en Etapa 8), no un trámite de rutina de Rodrigo.
+    - **Bug encontrado y corregido al revisar antes de mergear**: como `Aceptado→Cancelado` está en `TRANSICIONES_VALIDAS`, esa misma transición también era alcanzable desde `CancelarPresupuestoView` (el botón genérico "Cancelar", gateado solo por `change_presupuesto`, que Rodrigo también tiene) sin pasar por `revert_presupuesto_aceptado` — Rodrigo podía revertir un Aceptado pegándole directo a `/presupuestos/<pk>/cancelar/`, esquivando el permiso pensado para Diego. Fix: `CancelarPresupuestoView.test_func()` ahora exige además `self.presupuesto.estado != EstadoPresupuesto.ACEPTADO` (tests de regresión en `PresupuestoViewsTests`/`RevertirAceptadoPermisosTests`). Lección: cuando dos vistas distintas pueden llegar al mismo par (origen, destino) del grafo, cada una necesita su propio chequeo de permiso — `cambiar_estado()` valida el grafo, pero no "quién puede disparar cuál transición desde qué vista".
+15. **Management command `vencer_presupuestos`**: pasa Enviado→Vencido según `fecha_vencimiento`. No hay scheduler (Celery/etc.) en la infraestructura todavía, se corre por cron del SO o a mano; es idempotente.
+16. **`duplicar_presupuesto()`**: nace siempre en Borrador; ítems de catálogo recalculan precio/costo desde el MISMO `producto_proveedor` del original (si no tiene costo cargado, se mantienen los valores congelados para revisar a mano); ítems manuales recalculan el costo con `sugerir_costo_mano_obra()` usando el `margen_mano_obra` ACTUAL; la plantilla de condiciones es la misma del original pero su texto se refresca.
+17. **Alta de ítems de catálogo en la UI**: se elige directamente la combinación producto+proveedor en un solo `<select>` (sin cascada de dropdowns ni JavaScript — el proyecto no usa ningún framework de frontend), para no violar la regla de "nunca auto-elegir proveedor". El precio/costo sugerido se trae vía un GET con `?producto_proveedor=<id>` y queda editable antes de guardar.
+18. **`xhtml2pdf`** elegido para exportar presupuestos a PDF (puro Python, sin dependencias de sistema como pango/cairo) en vez de WeasyPrint (mejor fidelidad CSS pero requiere librerías nativas) o ReportLab (más control pero sin templates HTML).
+19. **Apps separadas por concepto**, mismo criterio que el resto del proyecto: `apps/clients` (Cliente) y `apps/quotes` (Presupuesto/Sección/Ítem/PlantillaCondiciones) — no una única `apps/sales`.
+
 ## Contexto
 
 Estoy desarrollando un sistema interno de gestión para ARQCLIMA, una empresa de climatización (venta e instalación de calefacción, piso radiante, calderas, service y repuestos). NO es una web pública — es una herramienta interna para el equipo.

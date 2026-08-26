@@ -66,6 +66,12 @@ class ConfiguracionGeneral(models.Model):
     margen_general = models.DecimalField(max_digits=5, decimal_places=2, default=30)
     flete_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     costo_financiero_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    iva_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=21,
+        help_text="Alícuota de IVA (%) para ítems de presupuesto con tipo de IVA '+ IVA'.",
+    )
     margen_minimo_alerta = models.DecimalField(
         max_digits=5,
         decimal_places=2,

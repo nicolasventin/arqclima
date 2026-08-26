@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Agregar ítem de catálogo — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Agregar ítem de catálogo al presupuesto #{{ presupuesto.numero }}</h1>
+
+<form method="post" class="row g-3" style="max-width: 700px;">
+    {% csrf_token %}
+    <div class="col-12">
+        <label class="form-label">Producto / Proveedor</label>
+        {{ form.producto_proveedor }}
+        <div class="form-text">
+            Elegí la combinación producto+proveedor que se va a usar. Si cambiás la selección,
+            usá "Recalcular precio sugerido" para traer el costo/precio vigente de ESE proveedor.
+        </div>
+    </div>
+    <div class="col-12">
+        <button type="submit" name="recalcular" class="btn btn-sm btn-outline-secondary">
+            Recalcular precio sugerido
+        </button>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Sección (opcional)</label>
+        {{ form.seccion }}
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Cantidad</label>
+        {{ form.cantidad }}
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Descuento (%)</label>
+        {{ form.descuento_pct }}
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Precio unitario</label>
+        {{ form.precio_unitario }}
+        <div class="form-text">Sugerido automáticamente al elegir proveedor; editable.</div>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Costo unitario</label>
+        {{ form.costo_unitario }}
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">IVA</label>
+        {{ form.tipo_iva }}
+    </div>
+    <div class="col-md-4 form-check mt-4">
+        {{ form.opcional }}
+        <label class="form-check-label">Opcional (mejora recomendada)</label>
+    </div>
+    <div class="col-md-4 form-check mt-4">
+        {{ form.incluido }}
+        <label class="form-check-label">Incluido en el total</label>
+    </div>
+    {% if form.non_field_errors %}
+    <div class="col-12 text-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Agregar ítem</button>
+        <a href="{% url 'quotes:detalle' presupuesto.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+</form>
+{% endblock %}
