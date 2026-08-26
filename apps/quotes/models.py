@@ -24,6 +24,13 @@ class PlantillaCondiciones(models.Model):
 
     class Meta:
         ordering = ["nombre"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["predeterminada"],
+                condition=models.Q(predeterminada=True),
+                name="una_sola_plantilla_predeterminada",
+            ),
+        ]
         verbose_name = "Plantilla de condiciones"
         verbose_name_plural = "Plantillas de condiciones"
 
