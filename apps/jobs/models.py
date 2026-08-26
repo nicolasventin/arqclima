@@ -8,14 +8,19 @@ class EstadoTrabajo(models.TextChoices):
     LISTO = "listo", "Listo"
     EN_EJECUCION = "en_ejecucion", "En ejecución"
     TERMINADO = "terminado", "Terminado"
+    CANCELADO = "cancelado", "Cancelado"
 
 
 # Orden real de avance (regla de negocio 10). El estado de un Trabajo
-# SOLO avanza, nunca retrocede, pero puede saltear etapas (ej. Pendiente
-# → Listo directo si ya había stock disponible) — a diferencia de
-# Presupuesto/Tarea, acá no hace falta un grafo de pares explícitos:
-# alcanza con comparar la posición en esta lista (ver
-# apps.jobs.services.cambiar_estado_trabajo).
+# avanza o retrocede dentro de esta secuencia (ver
+# apps.jobs.services.cambiar_estado_trabajo) comparando posición en la
+# lista, sin necesitar un grafo de pares explícito.
+#
+# CANCELADO queda deliberadamente AFUERA de esta secuencia: no es "más
+# adelante" ni "más atrás" que ningún estado, es una salida terminal
+# aparte alcanzable desde cualquier estado no resuelto (mismo criterio
+# que Cancelado en Presupuesto) — se gestiona con su propia función,
+# apps.jobs.services.cancelar_trabajo(), no con cambiar_estado_trabajo().
 ORDEN_ESTADOS = [
     EstadoTrabajo.PENDIENTE,
     EstadoTrabajo.PREPARANDO_MATERIALES,

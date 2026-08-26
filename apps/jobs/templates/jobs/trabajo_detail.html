@@ -11,7 +11,9 @@
         </p>
         <a href="{% url 'quotes:detalle' trabajo.presupuesto.pk %}">Ver presupuesto de origen (#{{ trabajo.presupuesto.numero }})</a>
     </div>
-    <span class="badge bg-secondary fs-6">{{ trabajo.get_estado_display }}</span>
+    <span class="badge {% if trabajo.estado == 'cancelado' %}bg-danger{% else %}bg-secondary{% endif %} fs-6">
+        {{ trabajo.get_estado_display }}
+    </span>
 </div>
 
 <dl class="row">
@@ -22,6 +24,19 @@
     <dd class="col-sm-9" style="white-space: pre-line;">{{ trabajo.observaciones }}</dd>
     {% endif %}
 </dl>
+
+{% if puede_asignar_tecnico %}
+<form method="post" action="{% url 'jobs:asignar_tecnico' trabajo.pk %}" class="row g-2 align-items-end mb-3" style="max-width: 500px;">
+    {% csrf_token %}
+    <div class="col-auto">
+        <label class="form-label">Reasignar técnico</label>
+        {{ asignar_tecnico_form.tecnico_asignado }}
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-secondary">Guardar</button>
+    </div>
+</form>
+{% endif %}
 
 {% if estados_para_avanzar %}
 <div class="d-flex gap-2 mb-2">
@@ -36,7 +51,7 @@
 {% endif %}
 
 {% if estados_para_retroceder %}
-<div class="d-flex gap-2 align-items-center">
+<div class="d-flex gap-2 align-items-center mb-3">
     <span class="text-muted small">Corregir estado (retroceder):</span>
     {% for estado in estados_para_retroceder %}
     <form method="post" action="{% url 'jobs:cambiar_estado' trabajo.pk %}">
@@ -46,5 +61,18 @@
     </form>
     {% endfor %}
 </div>
+{% endif %}
+
+{% if puede_cancelar %}
+<form method="post" action="{% url 'jobs:cancelar' trabajo.pk %}" class="row g-2 align-items-end" style="max-width: 500px;">
+    {% csrf_token %}
+    <div class="col-auto">
+        <label class="form-label">Motivo</label>
+        {{ cancelar_trabajo_form.motivo }}
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-outline-danger">Cancelar trabajo</button>
+    </div>
+</form>
 {% endif %}
 {% endblock %}

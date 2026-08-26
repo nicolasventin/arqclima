@@ -13,4 +13,6 @@ urlpatterns = [
         name="crear",
     ),
     path("<int:pk>/estado/", views.CambiarEstadoTrabajoView.as_view(), name="cambiar_estado"),
+    path("<int:pk>/tecnico/", views.AsignarTecnicoView.as_view(), name="asignar_tecnico"),
+    path("<int:pk>/cancelar/", views.CancelarTrabajoView.as_view(), name="cancelar"),
 ]

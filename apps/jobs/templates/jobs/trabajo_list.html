@@ -20,7 +20,11 @@
             <td><a href="{% url 'jobs:detalle' trabajo.pk %}">#{{ trabajo.pk }}</a></td>
             <td>{{ trabajo.presupuesto.cliente.nombre }}</td>
             <td>{{ trabajo.tecnico_asignado|default:"Sin asignar" }}</td>
-            <td><span class="badge bg-secondary">{{ trabajo.get_estado_display }}</span></td>
+            <td>
+                <span class="badge {% if trabajo.estado == 'cancelado' %}bg-danger{% else %}bg-secondary{% endif %}">
+                    {{ trabajo.get_estado_display }}
+                </span>
+            </td>
         </tr>
         {% empty %}
         <tr><td colspan="4" class="text-muted">No hay trabajos todavía.</td></tr>

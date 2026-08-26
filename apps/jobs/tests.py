@@ -10,8 +10,14 @@ from apps.quotes.models import EstadoPresupuesto, ItemPresupuesto, Presupuesto
 from apps.quotes.services import cambiar_estado, enviar_presupuesto
 
 from .models import EstadoTrabajo, ORDEN_ESTADOS, Trabajo
-from .permissions import puede_cambiar_estado_trabajo, puede_crear_trabajo, queryset_trabajos_visibles
-from .services import TransicionInvalidaError, cambiar_estado_trabajo, crear_trabajo
+from .permissions import (
+    puede_asignar_tecnico,
+    puede_cambiar_estado_trabajo,
+    puede_cancelar_trabajo,
+    puede_crear_trabajo,
+    queryset_trabajos_visibles,
+)
+from .services import TransicionInvalidaError, cambiar_estado_trabajo, cancelar_trabajo, crear_trabajo
 
 
 def _crear_usuario(username, rol):
@@ -230,7 +236,12 @@ class TrabajoViewsTests(TestCase):
         cls.contri = _crear_usuario("contri_vistas_trabajo", "Depósito")
         cls.andres = _crear_usuario("andres_vistas_trabajo", "Técnico de Campo")
 
-    def test_rodrigo_puede_crear_trabajo_desde_presupuesto_aceptado(self):
+    def test_rodrigo_puede_crear_trabajo_pero_no_asignar_tecnico(self):
+        """
+        Asignar técnico es exclusivo de Diego (coordinación de obra) —
+        aunque Rodrigo pueda crear el trabajo, un intento de mandar
+        tecnico_asignado en el POST se ignora silenciosamente.
+        """
         cliente = Cliente.objects.create(nombre="Cliente Vista Crear")
         presupuesto = _presupuesto_aceptado(cliente, self.rodrigo)
 
@@ -240,7 +251,45 @@ class TrabajoViewsTests(TestCase):
         )
         trabajo = Trabajo.objects.get(presupuesto=presupuesto)
         self.assertRedirects(response, reverse("jobs:detalle", args=[trabajo.pk]))
+        self.assertIsNone(trabajo.tecnico_asignado)
+
+    def test_diego_puede_asignar_tecnico_al_crear(self):
+        cliente = Cliente.objects.create(nombre="Cliente Vista Crear Diego")
+        presupuesto = _presupuesto_aceptado(cliente, self.diego)
+
+        self.client.login(username="diego_vistas_trabajo", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:crear", args=[presupuesto.pk]), {"tecnico_asignado": self.andres.pk}
+        )
+        trabajo = Trabajo.objects.get(presupuesto=presupuesto)
+        self.assertRedirects(response, reverse("jobs:detalle", args=[trabajo.pk]))
         self.assertEqual(trabajo.tecnico_asignado, self.andres)
+
+    def test_diego_puede_reasignar_tecnico_despues_de_creado(self):
+        cliente = Cliente.objects.create(nombre="Cliente Reasignar")
+        presupuesto = _presupuesto_aceptado(cliente, self.diego)
+        trabajo = crear_trabajo(presupuesto, self.diego)
+
+        self.client.login(username="diego_vistas_trabajo", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:asignar_tecnico", args=[trabajo.pk]), {"tecnico_asignado": self.andres.pk}
+        )
+        self.assertRedirects(response, reverse("jobs:detalle", args=[trabajo.pk]))
+        trabajo.refresh_from_db()
+        self.assertEqual(trabajo.tecnico_asignado, self.andres)
+
+    def test_rodrigo_no_puede_reasignar_tecnico(self):
+        cliente = Cliente.objects.create(nombre="Cliente Reasignar Sin Permiso")
+        presupuesto = _presupuesto_aceptado(cliente, self.diego)
+        trabajo = crear_trabajo(presupuesto, self.diego)
+
+        self.client.login(username="rodrigo_vistas_trabajo", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:asignar_tecnico", args=[trabajo.pk]), {"tecnico_asignado": self.andres.pk}
+        )
+        self.assertEqual(response.status_code, 403)
+        trabajo.refresh_from_db()
+        self.assertIsNone(trabajo.tecnico_asignado)
 
     def test_no_se_puede_crear_trabajo_dos_veces_via_vista(self):
         cliente = Cliente.objects.create(nombre="Cliente Vista Duplicado")
@@ -299,3 +348,68 @@ class TrabajoViewsTests(TestCase):
         self.assertRedirects(response, reverse("jobs:detalle", args=[trabajo.pk]))
         trabajo.refresh_from_db()
         self.assertEqual(trabajo.estado, EstadoTrabajo.PREPARANDO_MATERIALES)
+
+
+class CancelarTrabajoTests(TestCase):
+    def setUp(self):
+        self.diego = _crear_usuario("diego_cancelar_trabajo", "Administrador")
+        self.rodrigo = _crear_usuario("rodrigo_cancelar_trabajo", "Ventas y Presupuestos")
+        cliente = Cliente.objects.create(nombre="Cliente Cancelar Trabajo")
+        presupuesto = _presupuesto_aceptado(cliente, self.diego)
+        self.trabajo = crear_trabajo(presupuesto, self.diego)
+
+    def test_cancela_desde_pendiente(self):
+        cancelar_trabajo(self.trabajo, self.diego, motivo="El cliente se bajó")
+        self.trabajo.refresh_from_db()
+        self.assertEqual(self.trabajo.estado, EstadoTrabajo.CANCELADO)
+
+    def test_cancela_desde_en_ejecucion(self):
+        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.EN_EJECUCION, self.diego)
+        cancelar_trabajo(self.trabajo, self.diego)
+        self.trabajo.refresh_from_db()
+        self.assertEqual(self.trabajo.estado, EstadoTrabajo.CANCELADO)
+
+    def test_no_se_puede_cancelar_un_terminado(self):
+        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.TERMINADO, self.diego)
+        with self.assertRaises(TransicionInvalidaError):
+            cancelar_trabajo(self.trabajo, self.diego)
+
+    def test_no_se_puede_cancelar_dos_veces(self):
+        cancelar_trabajo(self.trabajo, self.diego)
+        with self.assertRaises(TransicionInvalidaError):
+            cancelar_trabajo(self.trabajo, self.diego)
+
+    def test_un_cancelado_no_participa_de_avanzar_ni_retroceder(self):
+        cancelar_trabajo(self.trabajo, self.diego)
+        with self.assertRaises(TransicionInvalidaError):
+            cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.PENDIENTE, self.diego)
+
+    def test_solo_diego_puede_cancelar(self):
+        self.assertTrue(puede_cancelar_trabajo(self.diego))
+        self.assertFalse(puede_cancelar_trabajo(self.rodrigo))
+
+    def test_cancelar_via_vista(self):
+        self.client.login(username="diego_cancelar_trabajo", password="clave12345")
+        response = self.client.post(
+            reverse("jobs:cancelar", args=[self.trabajo.pk]), {"motivo": "Obra abandonada"}
+        )
+        self.assertRedirects(response, reverse("jobs:detalle", args=[self.trabajo.pk]))
+        self.trabajo.refresh_from_db()
+        self.assertEqual(self.trabajo.estado, EstadoTrabajo.CANCELADO)
+
+    def test_rodrigo_no_puede_cancelar_via_vista(self):
+        self.client.login(username="rodrigo_cancelar_trabajo", password="clave12345")
+        response = self.client.post(reverse("jobs:cancelar", args=[self.trabajo.pk]), {})
+        self.assertEqual(response.status_code, 403)
+        self.trabajo.refresh_from_db()
+        self.assertNotEqual(self.trabajo.estado, EstadoTrabajo.CANCELADO)
+
+
+class PuedeAsignarTecnicoTests(TestCase):
+    def test_solo_diego(self):
+        diego = _crear_usuario("diego_puede_asignar", "Administrador")
+        rodrigo = _crear_usuario("rodrigo_puede_asignar", "Ventas y Presupuestos")
+        contri = _crear_usuario("contri_puede_asignar", "Depósito")
+        self.assertTrue(puede_asignar_tecnico(diego))
+        self.assertFalse(puede_asignar_tecnico(rodrigo))
+        self.assertFalse(puede_asignar_tecnico(contri))

@@ -9,6 +9,26 @@ def puede_crear_trabajo(user):
     return user.has_perm("jobs.add_trabajo")
 
 
+def puede_asignar_tecnico(user):
+    """
+    Asignar/reasignar el técnico de un trabajo (coordinación de obra)
+    es EXCLUSIVO de Diego según la matriz de roles original — a
+    diferencia de crear el trabajo, que Rodrigo también puede hacer.
+    Un trabajo creado por Rodrigo nace sin técnico asignado; Diego lo
+    asigna después.
+    """
+    return user.has_perm("jobs.change_trabajo")
+
+
+def puede_cancelar_trabajo(user):
+    """
+    Cancelar un trabajo en curso es una decisión de negocio
+    significativa (mismo peso que revert_presupuesto_aceptado en
+    quotes) — exclusiva de Diego.
+    """
+    return user.has_perm("jobs.change_trabajo")
+
+
 def puede_cambiar_estado_trabajo(user, trabajo, nuevo_estado):
     """
     Gobierna tanto avanzar como retroceder: no distingue dirección,

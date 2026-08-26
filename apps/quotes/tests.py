@@ -459,6 +459,30 @@ class RevertirAceptadoPermisosTests(TestCase):
         presupuesto.refresh_from_db()
         self.assertEqual(presupuesto.estado, EstadoPresupuesto.ACEPTADO)
 
+    def test_diego_si_puede_revertir_si_el_trabajo_ya_esta_cancelado(self):
+        """
+        Si la obra se cayó y el Trabajo ya está Cancelado, no hay razón
+        para seguir bloqueando la reversión del presupuesto que le dio
+        origen — al contrario, tiene sentido poder deshacer también la
+        aceptación.
+        """
+        from apps.jobs.models import EstadoTrabajo
+        from apps.jobs.services import cancelar_trabajo, crear_trabajo
+
+        presupuesto = self._presupuesto_aceptado()
+        trabajo = crear_trabajo(presupuesto, self.diego)
+        cancelar_trabajo(trabajo, self.diego, motivo="El cliente se bajó")
+
+        self.assertTrue(puede_revertir_aceptado(self.diego, presupuesto))
+
+        self.client.login(username="diego_revertir", password="clave12345")
+        response = self.client.post(reverse("quotes:revertir_aceptado", args=[presupuesto.pk]))
+        self.assertRedirects(response, reverse("quotes:detalle", args=[presupuesto.pk]))
+        presupuesto.refresh_from_db()
+        self.assertEqual(presupuesto.estado, EstadoPresupuesto.CANCELADO)
+        trabajo.refresh_from_db()
+        self.assertEqual(trabajo.estado, EstadoTrabajo.CANCELADO)
+
     def test_rodrigo_no_puede_revertir_via_vista(self):
         presupuesto = self._presupuesto_aceptado()
         self.client.login(username="rodrigo_revertir", password="clave12345")

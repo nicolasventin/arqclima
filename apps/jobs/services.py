@@ -1,7 +1,7 @@
 from apps.audit.services import log_action
 from apps.quotes.models import EstadoPresupuesto
 
-from .models import ORDEN_ESTADOS, Trabajo
+from .models import ORDEN_ESTADOS, EstadoTrabajo, Trabajo
 
 
 class TransicionInvalidaError(ValueError):
@@ -53,6 +53,12 @@ def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
     """
     try:
         idx_actual = ORDEN_ESTADOS.index(trabajo.estado)
+    except ValueError:
+        raise TransicionInvalidaError(
+            f"El trabajo está '{trabajo.estado}': no forma parte de la secuencia de avance "
+            "(un Cancelado no se reabre)."
+        )
+    try:
         idx_nuevo = ORDEN_ESTADOS.index(nuevo_estado)
     except ValueError:
         raise TransicionInvalidaError(f"Estado desconocido: '{nuevo_estado}'.")
@@ -70,5 +76,29 @@ def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
         "cambiar_estado_trabajo",
         trabajo,
         detail=detalle or f"{direccion}: {estado_anterior} → {nuevo_estado}",
+    )
+    return trabajo
+
+
+def cancelar_trabajo(trabajo, usuario, motivo=""):
+    """
+    Cancelado es una salida terminal APARTE de ORDEN_ESTADOS (no
+    "avanza" ni "retrocede" — ver el comentario en models.py). Se
+    permite desde cualquier estado no resuelto: un trabajo Terminado
+    ya está resuelto, y uno ya Cancelado no se cancela de nuevo. No
+    hay reapertura: si el trabajo cancelado necesita retomarse, es una
+    decisión nueva de negocio, no una transición de estado.
+    """
+    if trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        raise TransicionInvalidaError(f"No se puede cancelar un trabajo en estado '{trabajo.estado}'.")
+
+    estado_anterior = trabajo.estado
+    trabajo.estado = EstadoTrabajo.CANCELADO
+    trabajo.save(update_fields=["estado"])
+    log_action(
+        usuario,
+        "cancelar_trabajo",
+        trabajo,
+        detail=motivo or f"Cancelado desde '{estado_anterior}'",
     )
     return trabajo
