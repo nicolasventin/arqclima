@@ -211,6 +211,21 @@ class RecibirLineaTests(TestCase):
         with self.assertRaises(ValueError):
             recibir_linea(self.linea, Decimal("0"), Decimal("50"), self.diego)
 
+    def test_servicio_rechaza_recibir_mas_de_lo_pendiente(self):
+        # La garantía tiene que vivir en el servicio, no solo en la vista
+        # (RecibirLineaView también valida esto, pero llamar a
+        # recibir_linea() directo -sin pasar por esa vista- no puede
+        # sortear el límite).
+        with self.assertRaises(ValueError):
+            recibir_linea(self.linea, Decimal("11"), Decimal("50"), self.diego)
+        self.assertEqual(cantidad_recibida(self.linea), Decimal("0"))
+
+    def test_servicio_rechaza_recibir_mas_de_lo_pendiente_tras_recepcion_parcial(self):
+        recibir_linea(self.linea, Decimal("6"), Decimal("50"), self.diego)
+        with self.assertRaises(ValueError):
+            recibir_linea(self.linea, Decimal("5"), Decimal("50"), self.diego)
+        self.assertEqual(cantidad_recibida(self.linea), Decimal("6"))
+
     def test_recepcion_completa_actualiza_stock_y_costo(self):
         recibir_linea(self.linea, Decimal("10"), Decimal("55"), self.diego)
 

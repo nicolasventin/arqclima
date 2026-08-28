@@ -68,6 +68,9 @@ def recibir_linea(linea, cantidad, costo_real, usuario):
         raise ValueError("La cantidad recibida tiene que ser mayor a cero.")
     if linea.orden.estado not in (EstadoOrdenCompra.APROBADA, EstadoOrdenCompra.ENVIADA):
         raise ValueError("Solo se puede recibir mercadería de una orden Aprobada o Enviada.")
+    pendiente = cantidad_pendiente_recepcion(linea)
+    if cantidad > pendiente:
+        raise ValueError(f"No puede superar lo pendiente ({pendiente}).")
 
     registrar_costo(linea.producto_proveedor, costo_real, usuario, origen="orden_compra")
     return registrar_movimiento(
