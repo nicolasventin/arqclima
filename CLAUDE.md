@@ -2,7 +2,7 @@
 
 ## Estado de avance del proyecto
 
-**Última actualización: 2026-08-28**, al cierre de la Etapa 8 (rama `feature/etapa-8-trabajos`, todavía sin mergear a `main`). Esta sección se actualiza al cerrar cada etapa para que una sesión nueva no tenga que reconstruir el contexto a mano.
+**Última actualización: 2026-08-28**, al cierre de la Etapa 8, ya mergeada a `main`. Esta sección se actualiza al cerrar cada etapa para que una sesión nueva no tenga que reconstruir el contexto a mano.
 
 ### Etapas cerradas
 
@@ -13,7 +13,7 @@
 - **Etapa 5 (Clientes + Presupuestos)**: **cerrada en 4 partes** — ver decisiones abajo. `apps.clients`, `apps.quotes`. Mergeada a `main` en `e2ffc05` (incluye el fix de `revert_presupuesto_aceptado` en `7542e76`).
 - **Etapa 6 (Tareas)**: modelo `Tarea` (regla 14), máquina de estados propia, permisos y alcance de visibilidad por rol, integrada al dashboard de la Etapa 1. `apps.tasks`. Mergeada a `main` en `80f4750`. Ver decisiones abajo.
 - **Etapa 7 (Stock)**: modelo `MovimientoStock` (reglas 11-12), ledger append-only, "pendiente de devolución" derivado del ledger, alertas de stock mínimo. `apps.stock`. Ver decisiones abajo.
-- **Etapa 8 (Trabajos)**: **cerrada en 4 partes** — ver decisiones abajo. `apps.jobs` (Trabajo/EtapaTrabajo/MaterialTrabajo) + `apps.purchasing` (OrdenDeCompra/LineaOrdenCompra, regla de negocio 7). Cierra las dos notas pendientes que había dejado la Etapa 7: `MovimientoStock` ganó FKs reales `trabajo`/`material_trabajo`/`orden_compra`/`linea_orden_compra` (decisiones 35 y 48; nunca se usó `GenericForeignKey`), y el alcance de Andrés en stock general quedó **parcialmente** resuelto, no cerrado del todo — ver decisión 42bis, es la única nota que pasa a la Etapa 9. **264 tests en total en el proyecto, todos verdes desde una base de datos de test creada de cero.**
+- **Etapa 8 (Trabajos)**: **cerrada en 4 partes** — ver decisiones abajo. `apps.jobs` (Trabajo/EtapaTrabajo/MaterialTrabajo) + `apps.purchasing` (OrdenDeCompra/LineaOrdenCompra, regla de negocio 7). Cierra las dos notas pendientes que había dejado la Etapa 7: `MovimientoStock` ganó FKs reales `trabajo`/`material_trabajo`/`orden_compra`/`linea_orden_compra` (decisiones 35 y 48; nunca se usó `GenericForeignKey`), y el alcance de Andrés en stock general quedó **parcialmente** resuelto, no cerrado del todo — ver decisión 42bis, es la única nota que pasa a la Etapa 9. Mergeada a `main` en `a0308ae`. **264 tests en total en el proyecto, todos verdes desde una base de datos de test creada de cero.**
 
 **Siguiente etapa según el plan original: Etapa 9 (Reportes y automatizaciones) — la última del plan original.**
 
