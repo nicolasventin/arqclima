@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import Group
@@ -17,30 +18,41 @@ from apps.jobs.services import (
     registrar_sobrante,
 )
 from apps.pricing.services import registrar_costo
+from apps.purchasing.models import OrdenDeCompra
 from apps.quotes.models import EstadoPresupuesto, ItemPresupuesto, Presupuesto, TipoDescuento
 from apps.quotes.services import cambiar_estado, enviar_presupuesto
 from apps.stock.models import Deposito, TipoMovimiento
 from apps.stock.services import registrar_movimiento
+from apps.tasks.models import EstadoTarea, Tarea
 
 from .permissions import (
     puede_ver_montos_confidenciales,
+    puede_ver_reporte_clientes,
     puede_ver_reporte_comercial,
+    puede_ver_reporte_empleados,
     puede_ver_reporte_rentabilidad,
     puede_ver_reporte_stock,
 )
 from .services import (
+    actividad_administrativa_por_empleado,
+    clientes_con_mas_trabajos,
     diferencia_enviado_utilizado,
     ganancia_presupuesto,
     ganancia_trabajo,
+    historial_presupuestos_cliente,
     material_mas_utilizado,
     metricas_comerciales,
+    metricas_empleados,
     metricas_rentabilidad,
     metricas_stock,
     montos_comerciales,
     montos_rentabilidad,
     montos_stock,
+    presupuestos_pendientes_por_cliente,
     presupuestos_realizados_en,
     stock_valorizado,
+    trabajos_activos_por_empleado,
+    tareas_pendientes_y_vencidas_por_empleado,
     trabajos_terminados_en,
 )
 
@@ -199,6 +211,18 @@ class PermisosReportesTests(TestCase):
         self.assertTrue(puede_ver_reporte_stock(self.gabriel))
         self.assertTrue(puede_ver_reporte_stock(self.contri))
         self.assertFalse(puede_ver_reporte_stock(self.rodrigo))
+
+    def test_diego_y_rodrigo_ven_el_reporte_de_clientes(self):
+        self.assertTrue(puede_ver_reporte_clientes(self.diego))
+        self.assertTrue(puede_ver_reporte_clientes(self.rodrigo))
+        self.assertFalse(puede_ver_reporte_clientes(self.gabriel))
+        self.assertFalse(puede_ver_reporte_clientes(self.contri))
+
+    def test_solo_diego_ve_el_reporte_de_empleados(self):
+        self.assertTrue(puede_ver_reporte_empleados(self.diego))
+        self.assertFalse(puede_ver_reporte_empleados(self.rodrigo))
+        self.assertFalse(puede_ver_reporte_empleados(self.gabriel))
+        self.assertFalse(puede_ver_reporte_empleados(self.contri))
 
 
 class ReporteComercialViewTests(TestCase):
@@ -704,3 +728,307 @@ class ReporteStockViewTests(TestCase):
             response = self.client.get(reverse("reports:stock"))
             self.assertEqual(response.status_code, 200)
             self.assertNotIn("montos", response.context)
+
+
+class ClientesConMasTrabajosTests(TestCase):
+    def setUp(self):
+        self.diego = _crear_usuario("diego_clientes_mas_trabajos", "Administrador")
+
+    def _trabajo_para_cliente(self, cliente):
+        presupuesto = Presupuesto.objects.create(cliente=cliente)
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, descripcion_manual="X", precio_unitario=Decimal("100"), orden=0
+        )
+        enviar_presupuesto(presupuesto, self.diego)
+        cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, self.diego)
+        return crear_trabajo(presupuesto, self.diego)
+
+    def test_ordena_por_cantidad_de_trabajos_descendente(self):
+        cliente_a = Cliente.objects.create(nombre="Cliente Muchos Trabajos")
+        cliente_b = Cliente.objects.create(nombre="Cliente Un Trabajo")
+        self._trabajo_para_cliente(cliente_a)
+        self._trabajo_para_cliente(cliente_a)
+        self._trabajo_para_cliente(cliente_b)
+
+        resultado = clientes_con_mas_trabajos()
+        fila_a = next(f for f in resultado if f["cliente_id"] == cliente_a.pk)
+        fila_b = next(f for f in resultado if f["cliente_id"] == cliente_b.pk)
+        self.assertEqual(fila_a["cantidad_trabajos"], 2)
+        self.assertEqual(fila_b["cantidad_trabajos"], 1)
+        self.assertLess(resultado.index(fila_a), resultado.index(fila_b))
+
+
+class PresupuestosPendientesPorClienteTests(TestCase):
+    def setUp(self):
+        self.rodrigo = _crear_usuario("rodrigo_pendientes_cliente", "Ventas y Presupuestos")
+
+    def test_solo_cuenta_enviados_sin_resolver(self):
+        cliente = Cliente.objects.create(nombre="Cliente Pendientes")
+
+        enviado = Presupuesto.objects.create(cliente=cliente)
+        ItemPresupuesto.objects.create(
+            presupuesto=enviado, descripcion_manual="X", precio_unitario=Decimal("100"), orden=0
+        )
+        enviar_presupuesto(enviado, self.rodrigo)
+
+        aceptado = Presupuesto.objects.create(cliente=cliente)
+        ItemPresupuesto.objects.create(
+            presupuesto=aceptado, descripcion_manual="X", precio_unitario=Decimal("100"), orden=0
+        )
+        enviar_presupuesto(aceptado, self.rodrigo)
+        cambiar_estado(aceptado, EstadoPresupuesto.ACEPTADO, self.rodrigo)
+
+        resultado = presupuestos_pendientes_por_cliente()
+        fila = next(f for f in resultado if f["cliente_id"] == cliente.pk)
+        self.assertEqual(fila["cantidad_pendientes"], 1)
+
+
+class HistorialPresupuestosClienteTests(TestCase):
+    def test_incluye_todos_los_presupuestos_con_total_individual(self):
+        cliente = Cliente.objects.create(nombre="Cliente Historial")
+        presupuesto = Presupuesto.objects.create(cliente=cliente)
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, descripcion_manual="X",
+            cantidad=Decimal("2"), precio_unitario=Decimal("500"), orden=0,
+        )
+
+        resultado = historial_presupuestos_cliente(cliente)
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado[0]["presupuesto"], presupuesto)
+        self.assertEqual(resultado[0]["total"], Decimal("1000.00"))
+
+
+class ReporteClientesViewTests(TestCase):
+    def setUp(self):
+        self.rodrigo = _crear_usuario("rodrigo_clientes_view", "Ventas y Presupuestos")
+        self.gabriel = _crear_usuario("gabriel_clientes_view", "Service y Repuestos")
+
+    def test_gabriel_no_puede_ver(self):
+        self.client.login(username="gabriel_clientes_view", password="clave12345")
+        response = self.client.get(reverse("reports:clientes"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_rodrigo_puede_ver(self):
+        self.client.login(username="rodrigo_clientes_view", password="clave12345")
+        response = self.client.get(reverse("reports:clientes"))
+        self.assertEqual(response.status_code, 200)
+
+
+class HistorialClienteViewTests(TestCase):
+    def setUp(self):
+        self.rodrigo = _crear_usuario("rodrigo_historial_view", "Ventas y Presupuestos")
+        self.gabriel = _crear_usuario("gabriel_historial_view", "Service y Repuestos")
+        self.cliente = Cliente.objects.create(nombre="Cliente Historial View")
+
+    def test_gabriel_no_puede_ver(self):
+        self.client.login(username="gabriel_historial_view", password="clave12345")
+        response = self.client.get(reverse("reports:historial_cliente", args=[self.cliente.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_rodrigo_ve_el_monto_individual_sin_gating(self):
+        presupuesto = Presupuesto.objects.create(cliente=self.cliente)
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, descripcion_manual="X", precio_unitario=Decimal("100"), orden=0
+        )
+        self.client.login(username="rodrigo_historial_view", password="clave12345")
+        response = self.client.get(reverse("reports:historial_cliente", args=[self.cliente.pk]))
+        self.assertEqual(response.status_code, 200)
+        # Sin gating de montos: el total individual llega al contexto sin restricción
+        # (no depende de puede_ver_montos_confidenciales). Se compara contra el
+        # contexto, no contra el HTML renderizado, para no depender del formato
+        # numérico localizado (Django renderiza Decimal como "100,00" en es-AR).
+        self.assertEqual(response.context["historial"][0]["total"], Decimal("100.00"))
+
+    def test_404_si_el_cliente_no_existe(self):
+        self.client.login(username="rodrigo_historial_view", password="clave12345")
+        response = self.client.get(reverse("reports:historial_cliente", args=[999999]))
+        self.assertEqual(response.status_code, 404)
+
+
+class TareasPendientesYVencidasPorEmpleadoTests(TestCase):
+    def test_cuenta_pendientes_y_vencidas_excluye_completadas_y_administrador(self):
+        contri = _crear_usuario("contri_tareas_empleado", "Depósito")
+        diego = _crear_usuario("diego_tareas_empleado", "Administrador")
+        ayer = timezone.localdate() - timedelta(days=1)
+        manana = timezone.localdate() + timedelta(days=1)
+
+        Tarea.objects.create(
+            titulo="Vencida", asignado_a=contri, fecha_limite=ayer, estado=EstadoTarea.PENDIENTE
+        )
+        Tarea.objects.create(
+            titulo="No vencida", asignado_a=contri, fecha_limite=manana, estado=EstadoTarea.EN_PROCESO
+        )
+        Tarea.objects.create(
+            titulo="Completada", asignado_a=contri, fecha_limite=ayer, estado=EstadoTarea.COMPLETADA
+        )
+        Tarea.objects.create(
+            titulo="De Diego", asignado_a=diego, fecha_limite=ayer, estado=EstadoTarea.PENDIENTE
+        )
+
+        resultado = tareas_pendientes_y_vencidas_por_empleado()
+        self.assertEqual(resultado[contri], {"pendientes": 2, "vencidas": 1})
+        self.assertNotIn(diego, resultado)
+
+
+class TrabajosActivosPorEmpleadoTests(TestCase):
+    def setUp(self):
+        self.diego = _crear_usuario("diego_trabajos_activos_emp", "Administrador")
+        self.andres = _crear_usuario("andres_trabajos_activos_emp", "Técnico de Campo")
+        self.cliente = Cliente.objects.create(nombre="Cliente Trabajos Activos Emp")
+
+    def _trabajo(self, tecnico=None):
+        presupuesto = Presupuesto.objects.create(cliente=self.cliente)
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, descripcion_manual="X", precio_unitario=Decimal("100"), orden=0
+        )
+        enviar_presupuesto(presupuesto, self.diego)
+        cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, self.diego)
+        return crear_trabajo(presupuesto, self.diego, tecnico_asignado=tecnico)
+
+    def test_cuenta_solo_trabajos_no_resueltos(self):
+        self._trabajo(tecnico=self.andres)
+        terminado = self._trabajo(tecnico=self.andres)
+        cambiar_estado_trabajo(terminado, EstadoTrabajo.TERMINADO, self.diego)
+
+        resultado = trabajos_activos_por_empleado()
+        self.assertEqual(resultado[self.andres], 1)
+
+    def test_administrador_no_aparece_aunque_tenga_trabajo_asignado(self):
+        self._trabajo(tecnico=self.diego)
+        resultado = trabajos_activos_por_empleado()
+        self.assertNotIn(self.diego, resultado)
+
+
+class ActividadAdministrativaPorEmpleadoTests(TestCase):
+    def setUp(self):
+        self.hoy = timezone.localdate()
+
+    def test_rodrigo_presupuestos_creados_y_enviados(self):
+        rodrigo = _crear_usuario("rodrigo_actividad_emp", "Ventas y Presupuestos")
+        cliente = Cliente.objects.create(nombre="Cliente Actividad Rodrigo")
+        presupuesto = Presupuesto.objects.create(cliente=cliente, creado_por=rodrigo)
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, descripcion_manual="X", precio_unitario=Decimal("100"), orden=0
+        )
+        enviar_presupuesto(presupuesto, rodrigo)
+
+        resultado = actividad_administrativa_por_empleado(self.hoy.year, self.hoy.month)
+        self.assertEqual(resultado[rodrigo]["presupuestos_creados"], 1)
+        self.assertEqual(resultado[rodrigo]["presupuestos_enviados"], 1)
+
+    def test_gabriel_distingue_servicio_de_venta_por_requiere_devolucion(self):
+        gabriel = _crear_usuario("gabriel_actividad_emp", "Service y Repuestos")
+        marca = Marca.objects.create(nombre="Marca Actividad Gabriel")
+        repuesto = Producto.objects.create(
+            marca=marca, codigo="AG1", nombre="Repuesto AG1", es_repuesto=True
+        )
+        proveedor = Proveedor.objects.create(nombre_comercial="Proveedor AG")
+
+        registrar_movimiento(
+            producto=repuesto, deposito=Deposito.REPUESTOS, tipo=TipoMovimiento.SALIDA,
+            cantidad=Decimal("-1"), usuario=gabriel, requiere_devolucion=True,
+        )
+        registrar_movimiento(
+            producto=repuesto, deposito=Deposito.REPUESTOS, tipo=TipoMovimiento.SALIDA,
+            cantidad=Decimal("-2"), usuario=gabriel, requiere_devolucion=False,
+        )
+        OrdenDeCompra.objects.create(
+            proveedor=proveedor, deposito_destino=Deposito.REPUESTOS, creado_por=gabriel
+        )
+
+        resultado = actividad_administrativa_por_empleado(self.hoy.year, self.hoy.month)
+        self.assertEqual(resultado[gabriel]["servicios_registrados"], 1)
+        self.assertEqual(resultado[gabriel]["repuestos_vendidos"], 1)
+        self.assertEqual(resultado[gabriel]["ordenes_compra_creadas"], 1)
+
+    def test_contri_movimientos_stock_sin_ajustes(self):
+        contri = _crear_usuario("contri_actividad_emp", "Depósito")
+        marca = Marca.objects.create(nombre="Marca Actividad Contri")
+        producto = Producto.objects.create(marca=marca, codigo="AC1", nombre="Producto AC1")
+
+        registrar_movimiento(
+            producto=producto, deposito=Deposito.GENERAL, tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("5"), usuario=contri,
+        )
+        registrar_movimiento(
+            producto=producto, deposito=Deposito.GENERAL, tipo=TipoMovimiento.SALIDA,
+            cantidad=Decimal("-2"), usuario=contri,
+        )
+        registrar_movimiento(
+            producto=producto, deposito=Deposito.GENERAL, tipo=TipoMovimiento.AJUSTE,
+            cantidad=Decimal("1"), usuario=contri,
+        )
+
+        resultado = actividad_administrativa_por_empleado(self.hoy.year, self.hoy.month)
+        self.assertEqual(resultado[contri]["movimientos_stock_registrados"], 2)
+
+    def test_andres_trabajos_con_cambio_de_estado_y_movimientos_propios(self):
+        diego = _crear_usuario("diego_actividad_emp_andres", "Administrador")
+        andres = _crear_usuario("andres_actividad_emp", "Técnico de Campo")
+        cliente = Cliente.objects.create(nombre="Cliente Actividad Andrés")
+        marca = Marca.objects.create(nombre="Marca Actividad Andrés")
+        producto, pp = _crear_producto_con_costo(marca, "AA1", Decimal("100"), diego)
+
+        presupuesto = Presupuesto.objects.create(cliente=cliente)
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, producto=producto, producto_proveedor=pp,
+            cantidad=Decimal("1"), precio_unitario=Decimal("200"), costo_unitario=Decimal("100"), orden=0,
+        )
+        enviar_presupuesto(presupuesto, diego)
+        cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, diego)
+        trabajo = crear_trabajo(presupuesto, diego, tecnico_asignado=andres)
+        generar_listado_materiales(trabajo, diego)
+        cambiar_estado_trabajo(trabajo, EstadoTrabajo.EN_EJECUCION, andres)
+        enviar_materiales_pendientes(trabajo, andres)
+
+        resultado = actividad_administrativa_por_empleado(self.hoy.year, self.hoy.month)
+        self.assertEqual(resultado[andres]["trabajos_con_cambio_estado"], 1)
+        self.assertEqual(resultado[andres]["movimientos_stock_trabajos_propios"], 1)
+
+    def test_diego_no_aparece(self):
+        diego = _crear_usuario("diego_actividad_emp_solo", "Administrador")
+        resultado = actividad_administrativa_por_empleado(self.hoy.year, self.hoy.month)
+        self.assertNotIn(diego, resultado)
+
+
+class MetricasEmpleadosTests(TestCase):
+    def test_combina_las_tres_piezas_por_usuario(self):
+        rodrigo = _crear_usuario("rodrigo_metricas_emp", "Ventas y Presupuestos")
+        cliente = Cliente.objects.create(nombre="Cliente Metricas Emp")
+        ayer = timezone.localdate() - timedelta(days=1)
+        Tarea.objects.create(
+            titulo="Vencida", asignado_a=rodrigo, fecha_limite=ayer, estado=EstadoTarea.PENDIENTE
+        )
+        presupuesto = Presupuesto.objects.create(cliente=cliente, creado_por=rodrigo)
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, descripcion_manual="X", precio_unitario=Decimal("100"), orden=0
+        )
+
+        hoy = timezone.localdate()
+        filas = metricas_empleados(hoy.year, hoy.month)
+        fila_rodrigo = next(f for f in filas if f["usuario"] == rodrigo)
+        self.assertEqual(fila_rodrigo["tareas_pendientes"], 1)
+        self.assertEqual(fila_rodrigo["tareas_vencidas"], 1)
+        self.assertEqual(fila_rodrigo["actividad"]["presupuestos_creados"], 1)
+
+    def test_diego_nunca_aparece(self):
+        diego = _crear_usuario("diego_metricas_emp_solo", "Administrador")
+        hoy = timezone.localdate()
+        filas = metricas_empleados(hoy.year, hoy.month)
+        self.assertFalse(any(fila["usuario"] == diego for fila in filas))
+
+
+class ReporteEmpleadosViewTests(TestCase):
+    def setUp(self):
+        self.diego = _crear_usuario("diego_empleados_view", "Administrador")
+        self.rodrigo = _crear_usuario("rodrigo_empleados_view", "Ventas y Presupuestos")
+
+    def test_rodrigo_no_puede_ver(self):
+        self.client.login(username="rodrigo_empleados_view", password="clave12345")
+        response = self.client.get(reverse("reports:empleados"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_diego_puede_ver(self):
+        self.client.login(username="diego_empleados_view", password="clave12345")
+        response = self.client.get(reverse("reports:empleados"))
+        self.assertEqual(response.status_code, 200)

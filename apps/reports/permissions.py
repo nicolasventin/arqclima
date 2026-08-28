@@ -19,3 +19,11 @@ def puede_ver_reporte_rentabilidad(user):
 
 def puede_ver_reporte_stock(user):
     return user.has_perm("reports.view_reporte_stock")
+
+
+def puede_ver_reporte_clientes(user):
+    return user.has_perm("reports.view_reporte_clientes")
+
+
+def puede_ver_reporte_empleados(user):
+    return user.has_perm("reports.view_reporte_empleados")

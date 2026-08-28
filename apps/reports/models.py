@@ -26,4 +26,6 @@ class Reportes(models.Model):
             ),
             ("view_reporte_rentabilidad", "Puede ver el reporte de rentabilidad"),
             ("view_reporte_stock", "Puede ver el reporte de stock"),
+            ("view_reporte_clientes", "Puede ver el reporte de clientes"),
+            ("view_reporte_empleados", "Puede ver el reporte de empleados"),
         ]

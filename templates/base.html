@@ -69,6 +69,16 @@
                         <a class="nav-link" href="{% url 'reports:stock' %}">Reporte de stock</a>
                     </li>
                     {% endif %}
+                    {% if perms.reports.view_reporte_clientes %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'reports:clientes' %}">Reporte de clientes</a>
+                    </li>
+                    {% endif %}
+                    {% if perms.reports.view_reporte_empleados %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'reports:empleados' %}">Reporte de empleados</a>
+                    </li>
+                    {% endif %}
                     {% if perms.tasks.view_tarea %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'tasks:mis_tareas' %}">Mis tareas</a>

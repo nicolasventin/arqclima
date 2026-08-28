@@ -2,17 +2,21 @@ from collections import defaultdict
 from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Sum
+from django.db.models import Count, Sum
 
+from apps.accounts import roles
+from apps.accounts.models import User
 from apps.audit.models import AuditLog
 from apps.catalog.models import Producto
 from apps.jobs.models import EstadoTrabajo, MaterialTrabajo, Trabajo
 from apps.jobs.services import cantidad_enviada, cantidad_usada_neta
 from apps.pricing.services import ultimo_costo_producto
+from apps.purchasing.models import OrdenDeCompra
 from apps.quotes.models import EstadoPresupuesto, ItemPresupuesto, Presupuesto, TipoDescuento
 from apps.quotes.services import calcular_totales, margen_item
 from apps.stock.models import Deposito, MovimientoStock, TipoMovimiento
 from apps.stock.services import productos_con_stock_bajo, stock_actual
+from apps.tasks.models import EstadoTarea, Tarea
 
 ACCIONES_ENVIO = ["enviar_presupuesto", "enviar_presupuesto_margen_bajo"]
 
@@ -415,3 +419,222 @@ def montos_stock():
     parámetro de período: es una foto actual, no actividad del mes.
     """
     return stock_valorizado()
+
+
+# --- Parte 4: Clientes ---
+#
+# A diferencia de Comercial/Rentabilidad/Stock, este reporte no lleva
+# navegador de mes/año: sus tres métricas son de estado actual ("cuántos
+# trabajos tiene HOY este cliente", "qué está pendiente HOY") o histórico
+# completo (todo el historial de un cliente), no actividad de un mes
+# puntual — forzar un período acá no correspondería a ningún filtro real.
+#
+# Ninguna de las tres necesita reports.view_montos_confidenciales: el
+# total individual de un presupuesto NO es un monto agregado (la
+# restricción de Diego es sobre sumas across-presupuestos, ver
+# montos_comerciales/montos_rentabilidad/montos_stock) — es el mismo dato
+# que Rodrigo ya ve sin restricción en PresupuestoListView todos los
+# días.
+
+
+def clientes_con_mas_trabajos(limite=10):
+    """Ranking por cantidad de Trabajo (no de Presupuesto) por cliente, foto actual."""
+    filas = (
+        Trabajo.objects.values("presupuesto__cliente__id", "presupuesto__cliente__nombre")
+        .annotate(cantidad_trabajos=Count("id"))
+        .order_by("-cantidad_trabajos")[:limite]
+    )
+    return [
+        {
+            "cliente_id": fila["presupuesto__cliente__id"],
+            "cliente_nombre": fila["presupuesto__cliente__nombre"],
+            "cantidad_trabajos": fila["cantidad_trabajos"],
+        }
+        for fila in filas
+    ]
+
+
+def presupuestos_pendientes_por_cliente():
+    """
+    Por cliente, cuántos Presupuesto están HOY en Enviado sin resolver —
+    a diferencia de presupuestos_realizados_en() (Parte 2), que filtra
+    por el MES en que se envió, acá interesa el estado actual: qué sigue
+    pendiente de respuesta ahora mismo, sin importar cuándo se mandó.
+    """
+    filas = (
+        Presupuesto.objects.filter(estado=EstadoPresupuesto.ENVIADO)
+        .values("cliente__id", "cliente__nombre")
+        .annotate(cantidad_pendientes=Count("id"))
+        .order_by("-cantidad_pendientes")
+    )
+    return [
+        {
+            "cliente_id": fila["cliente__id"],
+            "cliente_nombre": fila["cliente__nombre"],
+            "cantidad_pendientes": fila["cantidad_pendientes"],
+        }
+        for fila in filas
+    ]
+
+
+def historial_presupuestos_cliente(cliente):
+    """
+    Todos los Presupuesto del cliente, con su total individual — SIN
+    gating de view_montos_confidenciales (ver nota de módulo arriba):
+    es el mismo monto que Rodrigo ya ve sin restricción en el listado
+    general de presupuestos.
+    """
+    return [
+        {"presupuesto": presupuesto, "total": calcular_totales(presupuesto)["total_final"]}
+        for presupuesto in cliente.presupuestos.all()
+    ]
+
+
+# --- Parte 4: Empleados ---
+#
+# Conteos agregados simples por persona — nunca detalle temporal fino
+# (timestamps, secuencia de acciones): regla explícita de Diego para que
+# esto no se convierta en una herramienta de vigilancia. Diego mismo no
+# aparece en ningún bloque: es quien mira el reporte, no a quien se le
+# cuenta actividad acá — se excluye por rol (Administrador), no por
+# usuario puntual, para que la regla siga siendo válida si el día de
+# mañana hay más de un Administrador.
+#
+# Dos bloques de foto actual (tareas/trabajos) y uno de actividad del
+# período (mismo patrón mixto que Stock, Parte 3 — ver metricas_stock).
+
+
+def tareas_pendientes_y_vencidas_por_empleado():
+    """Foto actual: por usuario (no Administrador) con alguna tarea no completada, pendientes y vencidas."""
+    resultado = {}
+    tareas = (
+        Tarea.objects.filter(asignado_a__isnull=False)
+        .exclude(asignado_a__groups__name=roles.ADMINISTRADOR)
+        .exclude(estado=EstadoTarea.COMPLETADA)
+        .select_related("asignado_a")
+    )
+    for tarea in tareas:
+        fila = resultado.setdefault(tarea.asignado_a, {"pendientes": 0, "vencidas": 0})
+        fila["pendientes"] += 1
+        if tarea.esta_vencida:
+            fila["vencidas"] += 1
+    return resultado
+
+
+def trabajos_activos_por_empleado():
+    """Foto actual: Trabajo no resuelto (fuera de Terminado/Cancelado) por técnico asignado."""
+    filas = (
+        Trabajo.objects.filter(tecnico_asignado__isnull=False)
+        .exclude(tecnico_asignado__groups__name=roles.ADMINISTRADOR)
+        .exclude(estado__in=[EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO])
+        .values("tecnico_asignado")
+        .annotate(cantidad=Count("id"))
+    )
+    usuarios_por_id = User.objects.in_bulk([fila["tecnico_asignado"] for fila in filas])
+    return {usuarios_por_id[fila["tecnico_asignado"]]: fila["cantidad"] for fila in filas}
+
+
+def actividad_administrativa_por_empleado(anio, mes):
+    """
+    Conteo agregado por rol, acotado al período (mes/año) — a diferencia
+    de tareas_pendientes_y_vencidas_por_empleado()/trabajos_activos_por_empleado()
+    (foto actual), esto sí es actividad de un mes puntual.
+
+    Para Gabriel: "servicios registrados" vs. "repuestos vendidos" usa
+    MovimientoStock.requiere_devolucion como PROXY, no un dato explícito.
+    Es una aproximación razonable (un service típicamente implica
+    material que puede volver; una venta de mostrador no) pero Gabriel
+    nunca carga un campo "tipo de operación" — el sistema lo infiere del
+    flag de devolución. Si el número no le cierra a Diego o a Gabriel,
+    este es el primer lugar para mirar (ver también el disclaimer en la
+    plantilla del reporte).
+    """
+    resultado = {}
+
+    for usuario in User.objects.filter(groups__name=roles.VENTAS_Y_PRESUPUESTOS).distinct():
+        resultado[usuario] = {
+            "presupuestos_creados": Presupuesto.objects.filter(
+                creado_por=usuario, fecha__year=anio, fecha__month=mes
+            ).count(),
+            "presupuestos_enviados": AuditLog.objects.filter(
+                usuario=usuario, accion__in=ACCIONES_ENVIO, creado_en__year=anio, creado_en__month=mes
+            ).count(),
+        }
+
+    for usuario in User.objects.filter(groups__name=roles.SERVICE_Y_REPUESTOS).distinct():
+        movimientos_repuestos = MovimientoStock.objects.filter(
+            registrado_por=usuario,
+            deposito=Deposito.REPUESTOS,
+            tipo=TipoMovimiento.SALIDA,
+            creado_en__year=anio,
+            creado_en__month=mes,
+        )
+        resultado[usuario] = {
+            "servicios_registrados": movimientos_repuestos.filter(requiere_devolucion=True).count(),
+            "repuestos_vendidos": movimientos_repuestos.filter(requiere_devolucion=False).count(),
+            "ordenes_compra_creadas": OrdenDeCompra.objects.filter(
+                creado_por=usuario,
+                deposito_destino=Deposito.REPUESTOS,
+                creado_en__year=anio,
+                creado_en__month=mes,
+            ).count(),
+        }
+
+    for usuario in User.objects.filter(groups__name=roles.DEPOSITO).distinct():
+        resultado[usuario] = {
+            "movimientos_stock_registrados": MovimientoStock.objects.filter(
+                registrado_por=usuario,
+                tipo__in=[TipoMovimiento.ENTRADA, TipoMovimiento.SALIDA],
+                creado_en__year=anio,
+                creado_en__month=mes,
+            ).count(),
+        }
+
+    content_type_trabajo = ContentType.objects.get_for_model(Trabajo)
+    for usuario in User.objects.filter(groups__name=roles.TECNICO_DE_CAMPO).distinct():
+        trabajo_ids = (
+            AuditLog.objects.filter(
+                usuario=usuario,
+                accion__in=["cambiar_estado_trabajo", "trabajo_marcado_listo_con_pendientes"],
+                content_type=content_type_trabajo,
+                creado_en__year=anio,
+                creado_en__month=mes,
+            )
+            .values_list("object_id", flat=True)
+            .distinct()
+        )
+        resultado[usuario] = {
+            "trabajos_con_cambio_estado": len(set(trabajo_ids)),
+            "movimientos_stock_trabajos_propios": MovimientoStock.objects.filter(
+                registrado_por=usuario,
+                trabajo__isnull=False,
+                creado_en__year=anio,
+                creado_en__month=mes,
+            ).count(),
+        }
+
+    return resultado
+
+
+def metricas_empleados(anio, mes):
+    """
+    Combina las tres piezas del reporte de Empleados en una fila por
+    usuario. Sin montos ($) en ningún lado, así que alcanza con
+    reports.view_reporte_empleados — no depende de
+    view_montos_confidenciales.
+    """
+    tareas = tareas_pendientes_y_vencidas_por_empleado()
+    trabajos = trabajos_activos_por_empleado()
+    actividad = actividad_administrativa_por_empleado(anio, mes)
+
+    usuarios = sorted(set(tareas) | set(trabajos) | set(actividad), key=lambda u: u.username)
+    return [
+        {
+            "usuario": usuario,
+            "tareas_pendientes": tareas.get(usuario, {}).get("pendientes", 0),
+            "tareas_vencidas": tareas.get(usuario, {}).get("vencidas", 0),
+            "trabajos_activos": trabajos.get(usuario, 0),
+            "actividad": actividad.get(usuario, {}),
+        }
+        for usuario in usuarios
+    ]
