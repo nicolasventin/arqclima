@@ -12,13 +12,7 @@ from apps.core.mixins import PermisoRequeridoMixin
 from .forms import AjusteForm, DevolucionForm, EntradaSalidaForm, SalidaRepuestosForm, StockMinimoForm
 from .models import Deposito, MovimientoStock, TipoMovimiento
 from .permissions import puede_ajustar_stock, puede_configurar_stock_minimo, puede_registrar_entrada_salida
-from .services import (
-    bajo_minimo,
-    cantidad_pendiente_devolucion,
-    registrar_movimiento,
-    salidas_repuestos_pendientes,
-    stock_actual,
-)
+from .services import cantidad_pendiente_devolucion, registrar_movimiento, salidas_repuestos_pendientes, stock_actual
 
 
 class StockListView(PermisoRequeridoMixin, ListView):
@@ -47,10 +41,15 @@ class StockListView(PermisoRequeridoMixin, ListView):
                 {
                     "producto": producto,
                     "stock_general": general,
-                    "alerta_general": bajo_minimo(producto, Deposito.GENERAL, general),
+                    "alerta_general": (
+                        producto.stock_minimo_general is not None and general < producto.stock_minimo_general
+                    ),
                     "stock_repuestos": repuestos,
                     "alerta_repuestos": (
-                        producto.es_repuesto and bajo_minimo(producto, Deposito.REPUESTOS, repuestos)
+                        producto.es_repuesto
+                        and producto.stock_minimo_repuestos is not None
+                        and repuestos is not None
+                        and repuestos < producto.stock_minimo_repuestos
                     ),
                 }
             )

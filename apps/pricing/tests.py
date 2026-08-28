@@ -265,8 +265,6 @@ class ConfiguracionPreciosViewTests(TestCase):
             "flete_pct": "5.00",
             "costo_financiero_pct": "8.00",
             "margen_minimo_alerta": "15.00",
-            "dias_seguimiento_presupuesto_enviado": "3",
-            "dias_aviso_presupuesto_por_vencer": "3",
         })
 
         self.assertRedirects(response, reverse("pricing:configuracion"))

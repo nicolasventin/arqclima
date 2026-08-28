@@ -3,7 +3,6 @@ from decimal import Decimal
 from django.db.models import Sum
 
 from apps.audit.services import log_action
-from apps.catalog.models import Producto
 
 from .models import Deposito, MovimientoStock, TipoMovimiento
 
@@ -20,36 +19,6 @@ def stock_actual(producto, deposito):
         total=Sum("cantidad")
     )["total"]
     return total or Decimal("0")
-
-
-def bajo_minimo(producto, deposito, cantidad_actual):
-    """
-    Único criterio de "stock bajo" del proyecto — antes vivía duplicado
-    inline en StockListView. Lo reusan la alerta visual de la pantalla
-    de stock y generar_tareas_stock_minimo (Etapa 9).
-    """
-    minimo = (
-        producto.stock_minimo_general if deposito == Deposito.GENERAL else producto.stock_minimo_repuestos
-    )
-    return minimo is not None and cantidad_actual < minimo
-
-
-def productos_con_stock_bajo():
-    """
-    Todos los (producto, deposito, cantidad_actual) actualmente por
-    debajo de su umbral configurado. Solo evalúa repuestos para
-    productos con es_repuesto=True, igual que la pantalla de stock.
-    """
-    resultado = []
-    for producto in Producto.objects.filter(activo=True):
-        general = stock_actual(producto, Deposito.GENERAL)
-        if bajo_minimo(producto, Deposito.GENERAL, general):
-            resultado.append((producto, Deposito.GENERAL, general))
-        if producto.es_repuesto:
-            repuestos = stock_actual(producto, Deposito.REPUESTOS)
-            if bajo_minimo(producto, Deposito.REPUESTOS, repuestos):
-                resultado.append((producto, Deposito.REPUESTOS, repuestos))
-    return resultado
 
 
 def registrar_movimiento(

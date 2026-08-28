@@ -5,7 +5,6 @@ from apps.catalog.models import Categoria, Marca, Producto
 from .models import ConfiguracionGeneral
 
 MARGEN_WIDGET = forms.NumberInput(attrs={"class": "form-control form-control-sm", "step": "0.01"})
-DIAS_WIDGET = forms.NumberInput(attrs={"class": "form-control form-control-sm", "step": "1", "min": "1"})
 
 
 class RegistrarCostoForm(forms.Form):
@@ -42,7 +41,6 @@ class ConfiguracionGeneralForm(forms.ModelForm):
         fields = [
             "margen_general", "margen_mano_obra",
             "flete_pct", "costo_financiero_pct", "margen_minimo_alerta",
-            "dias_seguimiento_presupuesto_enviado", "dias_aviso_presupuesto_por_vencer",
         ]
         widgets = {
             "margen_general": MARGEN_WIDGET,
@@ -50,6 +48,4 @@ class ConfiguracionGeneralForm(forms.ModelForm):
             "flete_pct": MARGEN_WIDGET,
             "costo_financiero_pct": MARGEN_WIDGET,
             "margen_minimo_alerta": MARGEN_WIDGET,
-            "dias_seguimiento_presupuesto_enviado": DIAS_WIDGET,
-            "dias_aviso_presupuesto_por_vencer": DIAS_WIDGET,
         }

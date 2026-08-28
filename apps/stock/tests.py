@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 from django.contrib.auth.models import Group, Permission
-from django.core.management import call_command
 from django.db import IntegrityError, connection, transaction
 from django.db.utils import DatabaseError
 from django.test import TestCase
@@ -9,18 +8,10 @@ from django.urls import reverse
 
 from apps.accounts.models import User
 from apps.catalog.models import Marca, Producto
-from apps.tasks.models import EstadoTarea, Tarea, TipoAutomatizacion
 
 from .models import Deposito, MovimientoStock, TipoMovimiento
 from .permissions import puede_ajustar_stock, puede_configurar_stock_minimo, puede_registrar_entrada_salida
-from .services import (
-    bajo_minimo,
-    cantidad_pendiente_devolucion,
-    productos_con_stock_bajo,
-    registrar_movimiento,
-    salidas_repuestos_pendientes,
-    stock_actual,
-)
+from .services import cantidad_pendiente_devolucion, registrar_movimiento, salidas_repuestos_pendientes, stock_actual
 
 
 def _crear_usuario(username, rol):
@@ -348,103 +339,3 @@ class StockViewsTests(TestCase):
         self.assertRedirects(response, reverse("catalog:producto_detalle", args=[producto.pk]))
         producto.refresh_from_db()
         self.assertEqual(producto.stock_minimo_general, Decimal("5.00"))
-
-
-class BajoMinimoYProductosConStockBajoTests(TestCase):
-    def setUp(self):
-        self.diego = _crear_usuario("diego_bajo_minimo", "Administrador")
-
-    def test_bajo_minimo_sin_umbral_configurado_es_falso(self):
-        producto = _producto("BM1")
-        self.assertFalse(bajo_minimo(producto, Deposito.GENERAL, Decimal("0")))
-
-    def test_bajo_minimo_por_debajo_del_umbral(self):
-        producto = _producto("BM2")
-        producto.stock_minimo_general = Decimal("10")
-        producto.save()
-        self.assertTrue(bajo_minimo(producto, Deposito.GENERAL, Decimal("5")))
-        self.assertFalse(bajo_minimo(producto, Deposito.GENERAL, Decimal("10")))
-
-    def test_productos_con_stock_bajo_incluye_general_y_repuestos(self):
-        general = _producto("BM3")
-        general.stock_minimo_general = Decimal("10")
-        general.save()
-
-        repuesto = _producto("BM4", es_repuesto=True)
-        repuesto.stock_minimo_repuestos = Decimal("5")
-        repuesto.save()
-        registrar_movimiento(
-            producto=repuesto, deposito=Deposito.REPUESTOS, tipo=TipoMovimiento.ENTRADA,
-            cantidad=Decimal("2"), usuario=self.diego,
-        )
-
-        resultado = productos_con_stock_bajo()
-        productos_en_alerta = {(p, d) for p, d, _ in resultado}
-        self.assertIn((general, Deposito.GENERAL), productos_en_alerta)
-        self.assertIn((repuesto, Deposito.REPUESTOS), productos_en_alerta)
-
-    def test_productos_con_stock_bajo_ignora_repuestos_de_producto_no_repuesto(self):
-        # Un producto con es_repuesto=False nunca entra por Deposito.REPUESTOS,
-        # aunque tuviera (por error) un stock_minimo_repuestos cargado.
-        producto = _producto("BM5", es_repuesto=False)
-        producto.stock_minimo_repuestos = Decimal("100")
-        producto.save()
-        resultado = productos_con_stock_bajo()
-        self.assertNotIn(producto, [p for p, _, _ in resultado])
-
-
-class GenerarTareasStockMinimoCommandTests(TestCase):
-    def setUp(self):
-        self.diego = _crear_usuario("diego_cmd_stock_minimo", "Administrador")
-        self.gabriel = _crear_usuario("gabriel_cmd_stock_minimo", "Service y Repuestos")
-
-    def test_genera_tarea_asignada_a_diego_para_stock_general(self):
-        producto = _producto("CSM1")
-        producto.stock_minimo_general = Decimal("10")
-        producto.save()
-
-        call_command("generar_tareas_stock_minimo")
-
-        tarea = Tarea.objects.get(producto=producto, deposito=Deposito.GENERAL)
-        self.assertEqual(tarea.generada_por, TipoAutomatizacion.STOCK_MINIMO)
-        self.assertEqual(tarea.asignado_a, self.diego)
-        self.assertIsNone(tarea.asignado_por)
-
-    def test_genera_tarea_asignada_a_gabriel_para_stock_repuestos(self):
-        producto = _producto("CSM2", es_repuesto=True)
-        producto.stock_minimo_repuestos = Decimal("10")
-        producto.save()
-
-        call_command("generar_tareas_stock_minimo")
-
-        tarea = Tarea.objects.get(producto=producto, deposito=Deposito.REPUESTOS)
-        self.assertEqual(tarea.asignado_a, self.gabriel)
-
-    def test_es_idempotente_mientras_la_tarea_no_se_completa(self):
-        producto = _producto("CSM3")
-        producto.stock_minimo_general = Decimal("10")
-        producto.save()
-
-        call_command("generar_tareas_stock_minimo")
-        call_command("generar_tareas_stock_minimo")
-
-        self.assertEqual(Tarea.objects.filter(producto=producto).count(), 1)
-
-    def test_genera_una_tarea_nueva_si_la_anterior_ya_se_completo(self):
-        producto = _producto("CSM4")
-        producto.stock_minimo_general = Decimal("10")
-        producto.save()
-
-        call_command("generar_tareas_stock_minimo")
-        primera = Tarea.objects.get(producto=producto)
-        primera.estado = EstadoTarea.COMPLETADA
-        primera.save()
-
-        call_command("generar_tareas_stock_minimo")
-
-        self.assertEqual(Tarea.objects.filter(producto=producto).count(), 2)
-
-    def test_no_genera_nada_si_no_hay_productos_en_alerta(self):
-        _producto("CSM5")  # sin stock_minimo configurado
-        call_command("generar_tareas_stock_minimo")
-        self.assertEqual(Tarea.objects.count(), 0)
