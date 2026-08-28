@@ -569,12 +569,29 @@ class AvisarPresupuestosPorVencerCommandTests(TestCase):
         call_command("avisar_presupuestos_por_vencer")
         self.assertEqual(Tarea.objects.count(), 0)
 
-    def test_es_idempotente_una_sola_vez_por_presupuesto(self):
+    def test_es_idempotente_sin_reenvio(self):
         hoy = timezone.localdate()
         self._presupuesto_enviado(hoy + timezone.timedelta(days=1))
         call_command("avisar_presupuestos_por_vencer")
         call_command("avisar_presupuestos_por_vencer")
         self.assertEqual(Tarea.objects.count(), 1)
+
+    def test_reenvio_con_nueva_fecha_reabre_el_aviso(self):
+        # Reabrir, cambiar fecha_vencimiento y reenviar es parte normal
+        # del ciclo de vida de Presupuesto (Etapa 5) — un reenvío tiene
+        # que volver a habilitar el aviso, mismo criterio que seguimiento.
+        hoy = timezone.localdate()
+        presupuesto = self._presupuesto_enviado(hoy + timezone.timedelta(days=1))
+        call_command("avisar_presupuestos_por_vencer")
+        self.assertEqual(Tarea.objects.filter(presupuesto=presupuesto).count(), 1)
+
+        cambiar_estado(presupuesto, EstadoPresupuesto.BORRADOR, self.rodrigo)
+        presupuesto.fecha_vencimiento = hoy + timezone.timedelta(days=2)
+        presupuesto.save()
+        enviar_presupuesto(presupuesto, self.rodrigo)
+
+        call_command("avisar_presupuestos_por_vencer")
+        self.assertEqual(Tarea.objects.filter(presupuesto=presupuesto).count(), 2)
 
     def test_respeta_configuracion_general(self):
         config = ConfiguracionGeneral.obtener()

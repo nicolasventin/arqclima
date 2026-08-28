@@ -48,9 +48,11 @@ def crear_tarea_automatica(tipo, titulo, descripcion, asignado_a, presupuesto=No
     la Etapa 9 (regla de negocio 17) cree una Tarea. Deliberadamente NO
     decide acá si corresponde crearla o no: el criterio de idempotencia
     es distinto para cada una de las 3 reglas (posterior al último
-    envío para seguimiento, una sola vez por presupuesto para el aviso
-    de vencimiento, mientras no se resuelva para stock mínimo) — vive
-    en el management command de cada regla, mismo criterio que
+    envío tanto para seguimiento como para el aviso de vencimiento —
+    un reenvío reabre la ventana en los dos casos, porque reabrir y
+    reenviar un presupuesto es parte normal de su ciclo de vida desde
+    la Etapa 5 —, mientras no se resuelva para stock mínimo) — vive en
+    el management command de cada regla, mismo criterio que
     vencer_presupuestos (la condición de "a quién le toca" vive en el
     comando, no en un service genérico que la esconda).
 
