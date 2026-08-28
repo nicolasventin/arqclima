@@ -68,6 +68,27 @@
 </div>
 {% endif %}
 
+{% if presupuesto.trabajo %}
+<div class="mb-4">
+    <a href="{% url 'jobs:detalle' presupuesto.trabajo.pk %}" class="btn btn-sm btn-outline-primary">
+        Ver trabajo #{{ presupuesto.trabajo.pk }} ({{ presupuesto.trabajo.get_estado_display }})
+    </a>
+</div>
+{% elif puede_crear_trabajo %}
+<div class="mb-4">
+    <form method="post" action="{% url 'jobs:crear' presupuesto.pk %}" class="row g-2 align-items-end" style="max-width: 500px;">
+        {% csrf_token %}
+        <div class="col-auto">
+            <label class="form-label">{{ crear_trabajo_form.tecnico_asignado.label }}</label>
+            {{ crear_trabajo_form.tecnico_asignado }}
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-sm btn-primary">Crear trabajo</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
 <h2 class="h5">Ítems</h2>
 
 {% for grupo in secciones %}

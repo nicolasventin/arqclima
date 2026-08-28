@@ -13,6 +13,8 @@ urlpatterns = [
     path("presupuestos/", include("apps.quotes.urls")),
     path("tareas/", include("apps.tasks.urls")),
     path("stock/", include("apps.stock.urls")),
+    path("trabajos/", include("apps.jobs.urls")),
+    path("compras/", include("apps.purchasing.urls")),
     path("", include("apps.dashboard.urls")),
 ]
 

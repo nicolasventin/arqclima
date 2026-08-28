@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Orden #{{ orden.numero }} — ARQCLIMA{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h1 class="h4 mb-0">Orden de compra #{{ orden.numero }}</h1>
+        <p class="text-muted mb-0">{{ orden.proveedor }} — {{ orden.get_deposito_destino_display }}</p>
+    </div>
+    <span class="badge {% if orden.estado == 'cancelada' or orden.estado == 'rechazada' %}bg-danger{% elif orden.estado == 'enviada' %}bg-success{% else %}bg-secondary{% endif %} fs-6">
+        {{ orden.get_estado_display }}
+    </span>
+</div>
+
+{% if orden.notas %}
+<p style="white-space: pre-line;">{{ orden.notas }}</p>
+{% endif %}
+
+<div class="d-flex gap-2 mb-3">
+    {% if puede_enviar_a_aprobacion %}
+    <form method="post" action="{% url 'purchasing:enviar_a_aprobacion' orden.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-primary">Enviar a aprobación</button>
+    </form>
+    {% endif %}
+    {% if puede_aprobar %}
+    <form method="post" action="{% url 'purchasing:aprobar' orden.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-success">Aprobar</button>
+    </form>
+    <form method="post" action="{% url 'purchasing:rechazar' orden.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-danger">Rechazar</button>
+    </form>
+    {% endif %}
+    {% if puede_reabrir %}
+    <form method="post" action="{% url 'purchasing:reabrir' orden.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Reabrir a Borrador</button>
+    </form>
+    {% endif %}
+    {% if puede_marcar_enviada %}
+    <form method="post" action="{% url 'purchasing:marcar_enviada' orden.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-primary">Marcar enviada al proveedor</button>
+    </form>
+    {% endif %}
+    {% if puede_cancelar %}
+    <form method="post" action="{% url 'purchasing:cancelar' orden.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-danger">Cancelar orden</button>
+    </form>
+    {% endif %}
+</div>
+
+<h2 class="h5 mt-4">Líneas</h2>
+
+<table class="table table-sm table-hover bg-white">
+    <thead>
+        <tr>
+            <th>Producto</th>
+            <th>Cantidad</th>
+            <th>Costo esperado</th>
+            <th>Recibido</th>
+            <th>Pendiente</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for fila in filas %}
+        <tr>
+            <td>{{ fila.linea.producto_proveedor }}</td>
+            <td>{{ fila.linea.cantidad }}</td>
+            <td>${{ fila.linea.costo_esperado }}</td>
+            <td>{{ fila.recibido }}</td>
+            <td>{{ fila.pendiente }}</td>
+            <td>
+                {% if fila.puede_recibir %}
+                <a href="{% url 'purchasing:recibir_linea' fila.linea.pk %}" class="btn btn-sm btn-outline-primary">Recibir</a>
+                {% endif %}
+                {% if puede_editar_lineas %}
+                <form method="post" action="{% url 'purchasing:eliminar_linea' fila.linea.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-muted">No hay líneas cargadas todavía.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if puede_editar_lineas %}
+<a href="{% url 'purchasing:agregar_linea' orden.pk %}" class="btn btn-sm btn-secondary">Agregar línea</a>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Órdenes de compra — ARQCLIMA{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Órdenes de compra</h1>
+    {% if perms.purchasing.add_ordendecompra %}
+    <a href="{% url 'purchasing:nueva' %}" class="btn btn-sm btn-primary">Nueva orden</a>
+    {% endif %}
+</div>
+
+<form method="get" class="row g-2 align-items-end mb-3" style="max-width: 400px;">
+    <div class="col-auto">
+        <label class="form-label small">Estado</label>
+        <select name="estado" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">Todos</option>
+            {% for valor, etiqueta in estados %}
+            <option value="{{ valor }}" {% if request.GET.estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</form>
+
+<table class="table table-sm table-hover bg-white">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Proveedor</th>
+            <th>Destino</th>
+            <th>Estado</th>
+            <th>Creada</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for orden in ordenes %}
+        <tr>
+            <td><a href="{% url 'purchasing:detalle' orden.pk %}">#{{ orden.numero }}</a></td>
+            <td>{{ orden.proveedor }}</td>
+            <td>{{ orden.get_deposito_destino_display }}</td>
+            <td>
+                <span class="badge {% if orden.estado == 'cancelada' or orden.estado == 'rechazada' %}bg-danger{% elif orden.estado == 'enviada' %}bg-success{% else %}bg-secondary{% endif %}">
+                    {{ orden.get_estado_display }}
+                </span>
+            </td>
+            <td>{{ orden.creado_en|date:"d/m/Y" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">No hay órdenes de compra todavía.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

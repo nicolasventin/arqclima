@@ -34,19 +34,15 @@ class MovimientoStock(models.Model):
     control de acceso distinto por depósito se resuelve con permisos
     (ver apps.stock.permissions), no con tablas separadas.
 
-    `referencia_libre` (texto) es el único vínculo con "de dónde salió"
-    por ahora, a propósito: se evaluó usar un GenericForeignKey
-    (Content Types) para referenciar un futuro Trabajo/OrdenCompra sin
-    migrar nada en la Etapa 8, pero un GFK es content_type_id +
-    object_id sin ningún FOREIGN KEY real — Postgres no puede verificar
-    que el objeto referenciado exista, ni protegerlo de un borrado. Eso
-    contradice el criterio del resto del proyecto (la garantía vive en
-    la base, no en la disciplina del código). Se prefiere que la Etapa
-    8 agregue una FK real y nullable (ej. `trabajo`, `orden_compra`)
-    con una migración normal cuando esos modelos existan — mismo
-    camino que ya se usó con ItemPresupuesto.producto_proveedor en la
-    Etapa 5, que también se agregó con su propia migración dedicada en
-    vez de preverse desde el día 0.
+    `referencia_libre` (texto) sigue existiendo para el caso genérico
+    sin objeto vinculado (compras, ajustes). `trabajo`/`material_trabajo`
+    (Etapa 8, Parte 3) son las FKs reales y nullable que reemplazan la
+    necesidad de referencia_libre para la conexión con Trabajo — se
+    había evaluado un GenericForeignKey (Content Types) en la Etapa 7,
+    pero un GFK es content_type_id + object_id sin ningún FOREIGN KEY
+    real que Postgres pueda verificar; se prefirió esta FK real con su
+    propia migración cuando el modelo Trabajo existiera, mismo camino
+    que ItemPresupuesto.producto_proveedor en la Etapa 5.
     """
 
     producto = models.ForeignKey(
@@ -80,6 +76,40 @@ class MovimientoStock(models.Model):
         max_length=255,
         blank=True,
         help_text="Descripción libre del origen/destino cuando todavía no hay un objeto vinculado.",
+    )
+    trabajo = models.ForeignKey(
+        "jobs.Trabajo",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="movimientos_stock",
+    )
+    material_trabajo = models.ForeignKey(
+        "jobs.MaterialTrabajo",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="movimientos_stock",
+        help_text=(
+            "Línea puntual del listado de materiales que originó este movimiento. "
+            "SET_NULL (no PROTECT): si la línea se borra después, el movimiento ya "
+            "hecho no se pierde, solo pierde el puntero fino a esa línea."
+        ),
+    )
+    orden_compra = models.ForeignKey(
+        "purchasing.OrdenDeCompra",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="movimientos_stock",
+    )
+    linea_orden_compra = models.ForeignKey(
+        "purchasing.LineaOrdenCompra",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="movimientos_stock",
+        help_text="Línea puntual de la orden que originó esta recepción (mismo criterio que material_trabajo).",
     )
 
     registrado_por = models.ForeignKey(

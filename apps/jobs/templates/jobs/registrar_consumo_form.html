@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Registrar consumo — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Registrar consumo real</h1>
+
+<p>
+    <strong>{{ material.producto|default:material.descripcion_manual }}</strong> —
+    enviado (neto): <strong>{{ neto }}</strong>
+</p>
+
+<form method="post" class="row g-3" style="max-width: 400px;">
+    {% csrf_token %}
+    <div class="col-12">
+        <label class="form-label">Cantidad realmente utilizada</label>
+        {{ form.cantidad_usada }}
+        {% if form.cantidad_usada.errors %}<div class="text-danger small">{{ form.cantidad_usada.errors }}</div>{% endif %}
+        <div class="form-text">
+            Se precarga con lo enviado (se asume que se usó todo). Si sobró material,
+            bajá el número — el sobrante vuelve a stock automáticamente.
+        </div>
+    </div>
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+    </div>
+</form>
+{% endblock %}
