@@ -517,6 +517,40 @@ class GenerarListadoMaterialesTests(TestCase):
             generar_listado_materiales(self.trabajo, self.diego)
 
 
+class GenerarListadoMaterialesCantidadUnidadesTests(TestCase):
+    """
+    Regresión: generar_listado_materiales() multiplicaba cantidad_necesaria
+    por item.cantidad sin tener en cuenta Presupuesto.cantidad_unidades, así
+    que un presupuesto de "3 casas" generaba el listado de materiales para
+    UNA sola. Detectado al diseñar el reporte de rentabilidad de la Etapa 9
+    (Ganancia por trabajo comparaba cantidad_usada_neta() contra un
+    total_final que sí está a escala completa), pero el bug es de la Etapa 8.
+    """
+
+    def setUp(self):
+        self.diego = _crear_usuario("diego_cant_unidades", "Administrador")
+        cliente = Cliente.objects.create(nombre="Cliente 3 casas")
+        marca = Marca.objects.create(nombre="Marca Cant Unidades")
+        producto = Producto.objects.create(marca=marca, codigo="TERM-CU", nombre="Termostato")
+
+        presupuesto = Presupuesto.objects.create(
+            cliente=cliente, direccion="3 casas", cantidad_unidades=3
+        )
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, producto=producto,
+            cantidad=Decimal("2"), precio_unitario=Decimal("1000"), orden=0,
+        )
+        enviar_presupuesto(presupuesto, self.diego)
+        cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, self.diego)
+        self.trabajo = crear_trabajo(presupuesto, self.diego)
+
+    def test_cantidad_necesaria_multiplica_por_cantidad_unidades(self):
+        generar_listado_materiales(self.trabajo, self.diego)
+        material = self.trabajo.materiales.get()
+        # 2 termostatos por casa * 3 casas = 6, no 2.
+        self.assertEqual(material.cantidad_necesaria, Decimal("6"))
+
+
 class MaterialTrabajoConstraintTests(TestCase):
     """
     A diferencia de ItemPresupuesto (sin CheckConstraint, confiando en

@@ -137,6 +137,15 @@ def generar_listado_materiales(trabajo, usuario):
     de origen (en orden), y un MaterialTrabajo por cada ItemPresupuesto
     con producto de catálogo e incluido=True (los conceptos manuales
     tipo mano de obra no son "material" y se excluyen).
+
+    ItemPresupuesto.cantidad es la cantidad para UNA unidad (regla de
+    negocio 9: "cantidad de unidades" multiplica a nivel de todo el
+    presupuesto, no ítem por ítem — mismo criterio que calcular_totales()
+    en quotes/services.py). Un presupuesto de "3 casas" con 2 termostatos
+    por casa necesita 6 termostatos en total para preparar la obra, no 2
+    — por eso acá SÍ hay que multiplicar por cantidad_unidades, a
+    diferencia de ItemPresupuesto donde el campo se deja sin tocar y el
+    factor se aplica solo una vez al calcular el total en dinero.
     """
     if trabajo.materiales.exists() or trabajo.etapas.exists():
         raise ValueError("Este trabajo ya tiene un listado de materiales generado.")
@@ -148,6 +157,7 @@ def generar_listado_materiales(trabajo, usuario):
         for seccion in trabajo.presupuesto.secciones.all()
     }
 
+    cantidad_unidades = trabajo.presupuesto.cantidad_unidades
     items = trabajo.presupuesto.items.filter(producto__isnull=False, incluido=True)
     for item in items:
         MaterialTrabajo.objects.create(
@@ -155,7 +165,7 @@ def generar_listado_materiales(trabajo, usuario):
             etapa=mapa_etapas.get(item.seccion_id),
             producto=item.producto,
             item_presupuesto_origen=item,
-            cantidad_necesaria=item.cantidad,
+            cantidad_necesaria=item.cantidad * cantidad_unidades,
             orden=item.orden,
         )
 

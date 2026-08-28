@@ -12,7 +12,7 @@ from apps.catalog.models import Categoria, Marca, Producto, ProductoProveedor, P
 
 from .management.commands.seed_margenes import MARGEN_MANO_OBRA, MARGENES_POR_CATEGORIA
 from .models import ConfiguracionGeneral, HistorialCosto
-from .services import calcular_precio_venta, margen_efectivo, registrar_costo
+from .services import calcular_precio_venta, margen_efectivo, registrar_costo, ultimo_costo_producto
 
 
 class MargenEfectivoTests(TestCase):
@@ -78,6 +78,31 @@ class CalcularPrecioVentaTests(TestCase):
         # 100 * (1 + (5 + 8 + 30) / 100) = 100 * 1.43 = 143.00
         self.assertEqual(precio, Decimal("143.00"))
         self.assertEqual(origen, "general")
+
+
+class UltimoCostoProductoTests(TestCase):
+    """A diferencia de costo_actual(producto_proveedor), agrega entre TODOS los proveedores del producto."""
+
+    def setUp(self):
+        self.marca = Marca.objects.create(nombre="Marca Ultimo Costo")
+        self.producto = Producto.objects.create(marca=self.marca, codigo="U1", nombre="Producto")
+        self.usuario = User.objects.create_user(username="user_ultimo_costo", password="clave12345")
+
+    def test_none_sin_ningun_costo_cargado(self):
+        self.assertIsNone(ultimo_costo_producto(self.producto))
+
+    def test_devuelve_el_mas_reciente_entre_varios_proveedores(self):
+        proveedor_a = Proveedor.objects.create(nombre_comercial="Proveedor A")
+        proveedor_b = Proveedor.objects.create(nombre_comercial="Proveedor B")
+        pp_a = ProductoProveedor.objects.create(producto=self.producto, proveedor=proveedor_a)
+        pp_b = ProductoProveedor.objects.create(producto=self.producto, proveedor=proveedor_b)
+
+        registrar_costo(pp_a, Decimal("100.00"), self.usuario)
+        mas_reciente = registrar_costo(pp_b, Decimal("150.00"), self.usuario)
+
+        historial = ultimo_costo_producto(self.producto)
+        self.assertEqual(historial, mas_reciente)
+        self.assertEqual(historial.costo, Decimal("150.00"))
 
 
 class HistorialCostoInmutableTests(TestCase):
@@ -265,6 +290,8 @@ class ConfiguracionPreciosViewTests(TestCase):
             "flete_pct": "5.00",
             "costo_financiero_pct": "8.00",
             "margen_minimo_alerta": "15.00",
+            "dias_seguimiento_presupuesto_enviado": "3",
+            "dias_aviso_presupuesto_por_vencer": "3",
         })
 
         self.assertRedirects(response, reverse("pricing:configuracion"))

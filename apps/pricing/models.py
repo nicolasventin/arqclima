@@ -88,6 +88,20 @@ class ConfiguracionGeneral(models.Model):
             "acá y no en la jerarquía Producto/Marca/Categoría."
         ),
     )
+    dias_seguimiento_presupuesto_enviado = models.PositiveIntegerField(
+        default=3,
+        help_text=(
+            "Días sin respuesta desde que se envió un presupuesto para que "
+            "el sistema genere una tarea de seguimiento automática (Etapa 9)."
+        ),
+    )
+    dias_aviso_presupuesto_por_vencer = models.PositiveIntegerField(
+        default=3,
+        help_text=(
+            "Días de anticipación a fecha_vencimiento para avisarle al "
+            "vendedor que un presupuesto Enviado está por vencer (Etapa 9)."
+        ),
+    )
 
     class Meta:
         verbose_name = "Configuración general de precios"

@@ -2,7 +2,7 @@ from django.utils import timezone
 
 from apps.audit.services import log_action
 
-from .models import EstadoTarea
+from .models import EstadoTarea, Tarea
 
 
 class TransicionInvalidaError(ValueError):
@@ -39,4 +39,37 @@ def cambiar_estado_tarea(tarea, nuevo_estado, usuario):
     log_action(
         usuario, "cambiar_estado_tarea", tarea, detail=f"{estado_actual} → {nuevo_estado}"
     )
+    return tarea
+
+
+def crear_tarea_automatica(tipo, titulo, descripcion, asignado_a, presupuesto=None, producto=None, deposito=""):
+    """
+    Único punto de entrada para que una de las 3 reglas automáticas de
+    la Etapa 9 (regla de negocio 17) cree una Tarea. Deliberadamente NO
+    decide acá si corresponde crearla o no: el criterio de idempotencia
+    es distinto para cada una de las 3 reglas (posterior al último
+    envío tanto para seguimiento como para el aviso de vencimiento —
+    un reenvío reabre la ventana en los dos casos, porque reabrir y
+    reenviar un presupuesto es parte normal de su ciclo de vida desde
+    la Etapa 5 —, mientras no se resuelva para stock mínimo) — vive en
+    el management command de cada regla, mismo criterio que
+    vencer_presupuestos (la condición de "a quién le toca" vive en el
+    comando, no en un service genérico que la esconda).
+
+    asignado_por queda en None a propósito: no la asignó una persona.
+    log_action(usuario=None, ...) reusa la convención que AuditLog ya
+    tenía desde la Etapa 1 (su __str__ ya decía `usuario or "Sistema"`,
+    nunca se había usado hasta ahora).
+    """
+    tarea = Tarea.objects.create(
+        titulo=titulo,
+        descripcion=descripcion,
+        asignado_a=asignado_a,
+        asignado_por=None,
+        generada_por=tipo,
+        presupuesto=presupuesto,
+        producto=producto,
+        deposito=deposito,
+    )
+    log_action(None, "generar_tarea_automatica", tarea, detail=f"{tipo}: {titulo}")
     return tarea

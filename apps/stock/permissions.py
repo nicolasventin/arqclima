@@ -13,15 +13,18 @@ def puede_registrar_entrada_salida(user, deposito):
     salida comparten el mismo permiso por depósito — quien controla un
     depósito controla ambos movimientos.
 
-    Andrés (Técnico de Campo) tiene manage_stock_general de forma
-    GENERAL, no acotada a sus propios trabajos — es una ampliación real
-    respecto de la matriz de permisos original (que solo lo listaba
-    para "salida"), decidida a propósito porque la regla de negocio 11
-    dice que el sobrante que retira "vuelve a stock" (una entrada), así
-    que necesita las dos acciones. Cuando exista el modelo Trabajo
-    (Etapa 8), evaluar si conviene acotar esto a "solo movimientos
-    relacionados con sus propios trabajos asignados" en vez de dejarlo
-    general para siempre.
+    Andrés (Técnico de Campo) NO tiene manage_stock_general (decisión
+    42bis, cerrada en la Etapa 9 — hasta entonces lo tenía de forma
+    general, sin acotar a sus propios trabajos, porque el modelo
+    Trabajo todavía no existía). Su necesidad real — enviar material a
+    su trabajo y devolver el sobrante que "vuelve a stock" (regla de
+    negocio 11) — está cubierta por apps.jobs.services.enviar_material()/
+    registrar_sobrante(), gateadas por jobs.manage_ejecucion_propia +
+    un chequeo de fila (material.trabajo.tecnico_asignado_id == user.id):
+    ya acotan cada movimiento a SU trabajo, algo que esta función no
+    podría expresar (no recibe ningún Trabajo como parámetro). La
+    pantalla cruda de stock (esta función) quedó reservada para quien
+    de verdad controla un depósito completo (Diego/Contri/Gabriel).
     """
     if user.has_perm("stock.add_movimientostock"):
         return True

@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth.models import Group, Permission
+from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.db import IntegrityError, connection, transaction
 from django.db.utils import DatabaseError
@@ -9,10 +10,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.audit.models import AuditLog
 from apps.catalog.models import Marca, Producto, ProductoProveedor, Proveedor
 from apps.clients.models import Cliente
 from apps.pricing.models import ConfiguracionGeneral
 from apps.pricing.services import registrar_costo
+from apps.tasks.models import Tarea, TipoAutomatizacion
 
 from .models import (
     EstadoPresupuesto,
@@ -444,6 +447,161 @@ class VencerPresupuestosCommandTests(TestCase):
 
         vencido.refresh_from_db()
         self.assertEqual(vencido.estado, EstadoPresupuesto.VENCIDO)
+
+
+class GenerarSeguimientoPresupuestosCommandTests(TestCase):
+    """
+    No hay un campo fecha_envio en Presupuesto: la referencia es el
+    AuditLog de enviar_presupuesto(), por eso estos tests lo backdatean
+    directo con .update() (auto_now_add no se puede setear al crear).
+    """
+
+    def setUp(self):
+        self.cliente = Cliente.objects.create(nombre="Cliente Seguimiento")
+        self.rodrigo = User.objects.create_user(username="rodrigo_seguimiento", password="clave12345")
+
+    def _presupuesto_enviado_hace(self, dias):
+        presupuesto = Presupuesto.objects.create(cliente=self.cliente, creado_por=self.rodrigo)
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, descripcion_manual="X", precio_unitario=Decimal("100")
+        )
+        enviar_presupuesto(presupuesto, self.rodrigo)
+        self._backdatear_ultimo_envio(presupuesto, dias)
+        return presupuesto
+
+    def _backdatear_ultimo_envio(self, presupuesto, dias):
+        content_type = ContentType.objects.get_for_model(Presupuesto)
+        ultimo = (
+            AuditLog.objects.filter(
+                content_type=content_type, object_id=str(presupuesto.pk), accion="enviar_presupuesto",
+            )
+            .order_by("-creado_en")
+            .first()
+        )
+        AuditLog.objects.filter(pk=ultimo.pk).update(
+            creado_en=timezone.now() - timezone.timedelta(days=dias)
+        )
+
+    def test_genera_tarea_tras_el_umbral_configurado(self):
+        presupuesto = self._presupuesto_enviado_hace(3)
+        call_command("generar_seguimiento_presupuestos")
+        tarea = Tarea.objects.get(presupuesto=presupuesto)
+        self.assertEqual(tarea.generada_por, TipoAutomatizacion.SEGUIMIENTO_PRESUPUESTO)
+        self.assertEqual(tarea.asignado_a, self.rodrigo)
+        self.assertIsNone(tarea.asignado_por)
+
+    def test_no_genera_antes_del_umbral(self):
+        self._presupuesto_enviado_hace(2)
+        call_command("generar_seguimiento_presupuestos")
+        self.assertEqual(Tarea.objects.count(), 0)
+
+    def test_es_idempotente(self):
+        self._presupuesto_enviado_hace(3)
+        call_command("generar_seguimiento_presupuestos")
+        call_command("generar_seguimiento_presupuestos")
+        self.assertEqual(Tarea.objects.count(), 1)
+
+    def test_reenvio_reabre_la_ventana(self):
+        presupuesto = self._presupuesto_enviado_hace(3)
+        call_command("generar_seguimiento_presupuestos")
+        self.assertEqual(Tarea.objects.count(), 1)
+        # La primera tarea se creó en tiempo real ("ahora"): para que la
+        # cronología sea consistente, la corremos hacia atrás también a
+        # ella, como si hubiese pasado hace 6 días (antes del reenvío).
+        Tarea.objects.filter(presupuesto=presupuesto).update(
+            creado_en=timezone.now() - timezone.timedelta(days=6)
+        )
+
+        cambiar_estado(presupuesto, EstadoPresupuesto.BORRADOR, self.rodrigo)
+        enviar_presupuesto(presupuesto, self.rodrigo)
+        self._backdatear_ultimo_envio(presupuesto, 3)
+
+        call_command("generar_seguimiento_presupuestos")
+        self.assertEqual(Tarea.objects.filter(presupuesto=presupuesto).count(), 2)
+
+    def test_respeta_configuracion_general(self):
+        config = ConfiguracionGeneral.obtener()
+        config.dias_seguimiento_presupuesto_enviado = 5
+        config.save()
+
+        self._presupuesto_enviado_hace(3)
+        call_command("generar_seguimiento_presupuestos")
+        self.assertEqual(Tarea.objects.count(), 0)
+
+    def test_no_genera_para_presupuesto_sin_enviar(self):
+        Presupuesto.objects.create(cliente=self.cliente, creado_por=self.rodrigo)
+        call_command("generar_seguimiento_presupuestos")
+        self.assertEqual(Tarea.objects.count(), 0)
+
+
+class AvisarPresupuestosPorVencerCommandTests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create(nombre="Cliente Por Vencer")
+        self.rodrigo = User.objects.create_user(username="rodrigo_porvencer", password="clave12345")
+
+    def _presupuesto_enviado(self, fecha_vencimiento):
+        presupuesto = Presupuesto.objects.create(
+            cliente=self.cliente, creado_por=self.rodrigo, fecha_vencimiento=fecha_vencimiento,
+        )
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto, descripcion_manual="X", precio_unitario=Decimal("100")
+        )
+        enviar_presupuesto(presupuesto, self.rodrigo)
+        return presupuesto
+
+    def test_avisa_dentro_del_umbral(self):
+        hoy = timezone.localdate()
+        presupuesto = self._presupuesto_enviado(hoy + timezone.timedelta(days=2))
+        call_command("avisar_presupuestos_por_vencer")
+        tarea = Tarea.objects.get(presupuesto=presupuesto)
+        self.assertEqual(tarea.generada_por, TipoAutomatizacion.PRESUPUESTO_POR_VENCER)
+        self.assertEqual(tarea.asignado_a, self.rodrigo)
+
+    def test_no_avisa_fuera_del_umbral(self):
+        hoy = timezone.localdate()
+        self._presupuesto_enviado(hoy + timezone.timedelta(days=10))
+        call_command("avisar_presupuestos_por_vencer")
+        self.assertEqual(Tarea.objects.count(), 0)
+
+    def test_no_avisa_de_uno_ya_vencido(self):
+        hoy = timezone.localdate()
+        self._presupuesto_enviado(hoy - timezone.timedelta(days=1))
+        call_command("avisar_presupuestos_por_vencer")
+        self.assertEqual(Tarea.objects.count(), 0)
+
+    def test_es_idempotente_sin_reenvio(self):
+        hoy = timezone.localdate()
+        self._presupuesto_enviado(hoy + timezone.timedelta(days=1))
+        call_command("avisar_presupuestos_por_vencer")
+        call_command("avisar_presupuestos_por_vencer")
+        self.assertEqual(Tarea.objects.count(), 1)
+
+    def test_reenvio_con_nueva_fecha_reabre_el_aviso(self):
+        # Reabrir, cambiar fecha_vencimiento y reenviar es parte normal
+        # del ciclo de vida de Presupuesto (Etapa 5) — un reenvío tiene
+        # que volver a habilitar el aviso, mismo criterio que seguimiento.
+        hoy = timezone.localdate()
+        presupuesto = self._presupuesto_enviado(hoy + timezone.timedelta(days=1))
+        call_command("avisar_presupuestos_por_vencer")
+        self.assertEqual(Tarea.objects.filter(presupuesto=presupuesto).count(), 1)
+
+        cambiar_estado(presupuesto, EstadoPresupuesto.BORRADOR, self.rodrigo)
+        presupuesto.fecha_vencimiento = hoy + timezone.timedelta(days=2)
+        presupuesto.save()
+        enviar_presupuesto(presupuesto, self.rodrigo)
+
+        call_command("avisar_presupuestos_por_vencer")
+        self.assertEqual(Tarea.objects.filter(presupuesto=presupuesto).count(), 2)
+
+    def test_respeta_configuracion_general(self):
+        config = ConfiguracionGeneral.obtener()
+        config.dias_aviso_presupuesto_por_vencer = 1
+        config.save()
+
+        hoy = timezone.localdate()
+        self._presupuesto_enviado(hoy + timezone.timedelta(days=2))
+        call_command("avisar_presupuestos_por_vencer")
+        self.assertEqual(Tarea.objects.count(), 0)
 
 
 class RevertirAceptadoPermisosTests(TestCase):
