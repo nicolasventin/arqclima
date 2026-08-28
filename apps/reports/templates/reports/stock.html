@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte de stock — ARQCLIMA{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Reporte de stock</h1>
+    <div class="d-flex align-items-center gap-2">
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}">◀</a>
+        <span class="fw-semibold">{{ mes }}/{{ anio }}</span>
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}">▶</a>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    "Poco stock" y "Stock valorizado" son una foto del estado <strong>actual</strong> — no cambian al navegar
+    de mes. "Material más utilizado" y "Diferencia enviado/usado" sí reflejan la actividad del período
+    seleccionado con el navegador de arriba.
+</div>
+
+<h2 class="h5">Productos con poco stock <span class="text-muted fw-normal">(estado actual)</span></h2>
+{% if metricas.productos_stock_bajo %}
+<table class="table table-sm bg-white" style="max-width: 600px;">
+    <thead><tr><th>Producto</th><th>Depósito</th><th>Cantidad actual</th></tr></thead>
+    <tbody>
+        {% for producto, deposito, cantidad in metricas.productos_stock_bajo %}
+        <tr>
+            <td>{{ producto }}</td>
+            <td>{{ deposito.label }}</td>
+            <td>{{ cantidad }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">Ningún producto por debajo de su stock mínimo.</p>
+{% endif %}
+
+<h2 class="h5 mt-4">Material más utilizado <span class="text-muted fw-normal">(actividad del período)</span></h2>
+{% if metricas.material_mas_utilizado %}
+<table class="table table-sm bg-white" style="max-width: 600px;">
+    <thead><tr><th>Producto</th><th>Cantidad salida</th></tr></thead>
+    <tbody>
+        {% for fila in metricas.material_mas_utilizado %}
+        <tr>
+            <td>{{ fila.marca_nombre }} {{ fila.producto_codigo }} — {{ fila.producto_nombre }}</td>
+            <td>{{ fila.cantidad }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">Sin salidas de stock en el período.</p>
+{% endif %}
+
+<h2 class="h5 mt-4">Diferencia enviado/usado <span class="text-muted fw-normal">(actividad del período)</span></h2>
+{% if metricas.diferencia_enviado_utilizado %}
+<table class="table table-sm bg-white" style="max-width: 750px;">
+    <thead><tr><th>Trabajo</th><th>Material</th><th>Enviado</th><th>Usado</th><th>Diferencia</th></tr></thead>
+    <tbody>
+        {% for fila in metricas.diferencia_enviado_utilizado %}
+        <tr>
+            <td>{{ fila.material.trabajo }}</td>
+            <td>{{ fila.material }}</td>
+            <td>{{ fila.enviado }}</td>
+            <td>{{ fila.usado }}</td>
+            <td>{{ fila.diferencia }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">Sin diferencias entre enviado y usado en materiales con actividad en el período.</p>
+{% endif %}
+
+{% if montos %}
+<h2 class="h5 mt-4">Stock valorizado <span class="badge bg-warning text-dark">Confidencial — solo Administrador</span> <span class="text-muted fw-normal">(estado actual)</span></h2>
+{% if montos.detalle %}
+<table class="table table-sm bg-white" style="max-width: 700px;">
+    <thead><tr><th>Producto</th><th>Depósito</th><th>Cantidad</th><th>Costo unitario</th><th>Valor</th></tr></thead>
+    <tbody>
+        {% for fila in montos.detalle %}
+        <tr>
+            <td>{{ fila.producto }}</td>
+            <td>{{ fila.deposito.label }}</td>
+            <td>{{ fila.cantidad }}</td>
+            <td>${{ fila.costo_unitario }}</td>
+            <td>${{ fila.valor }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="fw-semibold">
+            <td colspan="4">Total</td>
+            <td>${{ montos.total }}</td>
+        </tr>
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">Sin stock valorizable (sin costo cargado o sin stock).</p>
+{% endif %}
+{% endif %}
+{% endblock %}

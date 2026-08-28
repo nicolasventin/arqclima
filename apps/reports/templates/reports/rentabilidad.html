@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte de rentabilidad — ARQCLIMA{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Reporte de rentabilidad</h1>
+    <div class="d-flex align-items-center gap-2">
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}">◀</a>
+        <span class="fw-semibold">{{ mes }}/{{ anio }}</span>
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}">▶</a>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    "Ganancia por trabajo" solo incluye trabajos <strong>Terminados</strong> cuyo presupuesto de origen fue
+    enviado en este período. El ingreso es el total pactado con el cliente (fijo, no se reescala por el
+    material realmente usado); el costo sí refleja el consumo real cuando hay un listado de materiales
+    generado — mano de obra y conceptos sin material vinculado usan el costo cotizado.
+</div>
+
+<h2 class="h5">Margen</h2>
+<table class="table table-sm bg-white" style="max-width: 500px;">
+    <tbody>
+        <tr>
+            <th>Margen promedio de ítems del período</th>
+            <td>{% if metricas.margen_promedio is not None %}{{ metricas.margen_promedio|floatformat:1 }}%{% else %}—{% endif %}</td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 class="h5 mt-4">Productos con mejor margen</h2>
+{% if metricas.productos_mejor_margen %}
+<table class="table table-sm bg-white" style="max-width: 600px;">
+    <thead><tr><th>Producto</th><th>Margen promedio</th></tr></thead>
+    <tbody>
+        {% for fila in metricas.productos_mejor_margen %}
+        <tr>
+            <td>{{ fila.producto }}</td>
+            <td>{{ fila.margen_promedio|floatformat:1 }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">Sin ítems de catálogo con costo cargado en el período.</p>
+{% endif %}
+
+{% if montos %}
+<h2 class="h5 mt-4">Ganancia por presupuesto <span class="badge bg-warning text-dark">Confidencial — solo Administrador</span></h2>
+{% if montos.ganancia_presupuestos %}
+<table class="table table-sm bg-white" style="max-width: 600px;">
+    <thead><tr><th>Presupuesto</th><th>Ganancia</th></tr></thead>
+    <tbody>
+        {% for fila in montos.ganancia_presupuestos %}
+        <tr>
+            <td>{{ fila.presupuesto }}</td>
+            <td>${{ fila.ganancia }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="fw-semibold">
+            <td>Total</td>
+            <td>${{ montos.ganancia_total_presupuestos }}</td>
+        </tr>
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">Sin presupuestos realizados en el período.</p>
+{% endif %}
+
+<h2 class="h5 mt-4">Ganancia por trabajo <span class="badge bg-warning text-dark">Confidencial — solo Administrador</span></h2>
+{% if montos.ganancia_trabajos %}
+<table class="table table-sm bg-white" style="max-width: 750px;">
+    <thead><tr><th>Trabajo</th><th>Ingreso</th><th>Costo</th><th>Ganancia</th><th></th></tr></thead>
+    <tbody>
+        {% for fila in montos.ganancia_trabajos %}
+        <tr>
+            <td>{{ fila.trabajo }}</td>
+            <td>${{ fila.ingreso }}</td>
+            <td>${{ fila.costo }}</td>
+            <td>${{ fila.ganancia }}</td>
+            <td>
+                {% if fila.tiene_costos_incompletos %}
+                <span class="badge bg-secondary" title="Hay ítems sin costo cargado — este número es parcial">Costos incompletos</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        <tr class="fw-semibold">
+            <td>Total</td>
+            <td colspan="2"></td>
+            <td>${{ montos.ganancia_total_trabajos }}</td>
+            <td></td>
+        </tr>
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">Sin trabajos Terminados de presupuestos realizados en el período.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

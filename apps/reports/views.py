@@ -4,12 +4,22 @@ from django.views.generic import TemplateView
 from apps.core.mixins import PermisoRequeridoMixin
 
 from .permissions import puede_ver_montos_confidenciales
-from .services import metricas_comerciales, montos_comerciales
+from .services import (
+    metricas_comerciales,
+    metricas_rentabilidad,
+    metricas_stock,
+    montos_comerciales,
+    montos_rentabilidad,
+    montos_stock,
+)
 
 
-class ReporteComercialView(PermisoRequeridoMixin, TemplateView):
-    template_name = "reports/comercial.html"
-    permission_required = "reports.view_reporte_comercial"
+class _ReporteMensualView(PermisoRequeridoMixin, TemplateView):
+    """
+    Base común de navegación mes/año — usada por Comercial, Rentabilidad
+    y Stock (Stock la usa también para su bloque de actividad del
+    período, aunque parte de su contenido sea foto actual sin filtro).
+    """
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -19,7 +29,6 @@ class ReporteComercialView(PermisoRequeridoMixin, TemplateView):
 
         context["anio"] = anio
         context["mes"] = mes
-        context["metricas"] = metricas_comerciales(anio, mes)
 
         if mes == 1:
             context["anio_anterior"], context["mes_anterior"] = anio - 1, 12
@@ -30,7 +39,46 @@ class ReporteComercialView(PermisoRequeridoMixin, TemplateView):
         else:
             context["anio_siguiente"], context["mes_siguiente"] = anio, mes + 1
 
+        return context
+
+
+class ReporteComercialView(_ReporteMensualView):
+    template_name = "reports/comercial.html"
+    permission_required = "reports.view_reporte_comercial"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["metricas"] = metricas_comerciales(context["anio"], context["mes"])
+
         if puede_ver_montos_confidenciales(self.request.user):
-            context["montos"] = montos_comerciales(anio, mes)
+            context["montos"] = montos_comerciales(context["anio"], context["mes"])
+
+        return context
+
+
+class ReporteRentabilidadView(_ReporteMensualView):
+    template_name = "reports/rentabilidad.html"
+    permission_required = "reports.view_reporte_rentabilidad"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["metricas"] = metricas_rentabilidad(context["anio"], context["mes"])
+
+        if puede_ver_montos_confidenciales(self.request.user):
+            context["montos"] = montos_rentabilidad(context["anio"], context["mes"])
+
+        return context
+
+
+class ReporteStockView(_ReporteMensualView):
+    template_name = "reports/stock.html"
+    permission_required = "reports.view_reporte_stock"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["metricas"] = metricas_stock(context["anio"], context["mes"])
+
+        if puede_ver_montos_confidenciales(self.request.user):
+            context["montos"] = montos_stock()
 
         return context

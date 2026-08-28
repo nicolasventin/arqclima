@@ -56,7 +56,17 @@
                     {% endif %}
                     {% if perms.reports.view_reporte_comercial %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'reports:comercial' %}">Reportes</a>
+                        <a class="nav-link" href="{% url 'reports:comercial' %}">Reporte comercial</a>
+                    </li>
+                    {% endif %}
+                    {% if perms.reports.view_reporte_rentabilidad %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'reports:rentabilidad' %}">Rentabilidad</a>
+                    </li>
+                    {% endif %}
+                    {% if perms.reports.view_reporte_stock %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'reports:stock' %}">Reporte de stock</a>
                     </li>
                     {% endif %}
                     {% if perms.tasks.view_tarea %}

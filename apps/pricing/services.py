@@ -24,6 +24,20 @@ def costo_actual(producto_proveedor):
     return producto_proveedor.historial_costos.order_by("-vigente_desde").first()
 
 
+def ultimo_costo_producto(producto):
+    """
+    A diferencia de costo_actual(producto_proveedor) (una relación puntual
+    producto+proveedor), este helper busca el HistorialCosto más reciente
+    entre TODOS los proveedores del producto — para "cuánto vale el stock"
+    (Etapa 9, Parte 3: stock valorizado), donde no importa de qué
+    proveedor puntual salió cada costo, solo el dato más reciente
+    disponible. Devuelve None si el producto nunca tuvo un costo cargado.
+    """
+    return HistorialCosto.objects.filter(
+        producto_proveedor__producto=producto
+    ).order_by("-vigente_desde").first()
+
+
 def proveedor_mas_conveniente(producto):
     """
     Entre los proveedores activos de un producto, el de menor costo actual.

@@ -24,4 +24,6 @@ class Reportes(models.Model):
                 "view_montos_confidenciales",
                 "Puede ver montos agregados de facturación/ingresos en los reportes",
             ),
+            ("view_reporte_rentabilidad", "Puede ver el reporte de rentabilidad"),
+            ("view_reporte_stock", "Puede ver el reporte de stock"),
         ]
