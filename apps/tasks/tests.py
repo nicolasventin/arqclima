@@ -1,15 +1,26 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import Group
+from django.db import transaction
+from django.db.utils import DatabaseError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.catalog.models import Marca, Producto
+from apps.clients.models import Cliente
+from apps.quotes.models import Presupuesto
+from apps.stock.models import Deposito
 
-from .models import EstadoTarea, PrioridadTarea, Tarea
+from .models import EstadoTarea, PrioridadTarea, Tarea, TipoAutomatizacion
 from .permissions import puede_actualizar_estado, puede_gestionar_tareas, queryset_tareas_visibles
-from .services import TRANSICIONES_VALIDAS, TransicionInvalidaError, cambiar_estado_tarea
+from .services import (
+    TRANSICIONES_VALIDAS,
+    TransicionInvalidaError,
+    cambiar_estado_tarea,
+    crear_tarea_automatica,
+)
 
 
 def _crear_usuario(username, rol):
@@ -209,3 +220,97 @@ class DashboardMisTareasWidgetTests(TestCase):
         self.client.login(username="contri_dashboard", password="clave12345")
         response = self.client.get(reverse("dashboard:home"))
         self.assertContains(response, "Mi tarea del dashboard")
+
+
+class TareaGeneradaPorConstraintTests(TestCase):
+    """
+    CheckConstraint tarea_generada_por_coherente_con_campos (Etapa 9):
+    generada_por vacío exige presupuesto y producto en null; los dos
+    tipos de automatización de Presupuesto exigen presupuesto seteado
+    y producto en null; stock_minimo exige lo inverso.
+    """
+
+    def setUp(self):
+        self.diego = _crear_usuario("diego_tarea_constraint", "Administrador")
+        self.cliente = Cliente.objects.create(nombre="Cliente Constraint Tarea")
+        self.presupuesto = Presupuesto.objects.create(cliente=self.cliente)
+        marca = Marca.objects.create(nombre="Marca Constraint Tarea")
+        self.producto = Producto.objects.create(marca=marca, codigo="CT-1", nombre="Producto CT")
+
+    def test_manual_no_puede_tener_presupuesto(self):
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                Tarea.objects.create(titulo="X", asignado_a=self.diego, presupuesto=self.presupuesto)
+
+    def test_manual_no_puede_tener_producto(self):
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                Tarea.objects.create(titulo="X", asignado_a=self.diego, producto=self.producto)
+
+    def test_seguimiento_exige_presupuesto(self):
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                Tarea.objects.create(
+                    titulo="X", asignado_a=self.diego,
+                    generada_por=TipoAutomatizacion.SEGUIMIENTO_PRESUPUESTO,
+                )
+
+    def test_stock_minimo_con_presupuesto_en_vez_de_producto_falla(self):
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                Tarea.objects.create(
+                    titulo="X", asignado_a=self.diego,
+                    generada_por=TipoAutomatizacion.STOCK_MINIMO,
+                    presupuesto=self.presupuesto,
+                )
+
+    def test_stock_minimo_con_presupuesto_y_producto_a_la_vez_falla(self):
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                Tarea.objects.create(
+                    titulo="X", asignado_a=self.diego,
+                    generada_por=TipoAutomatizacion.SEGUIMIENTO_PRESUPUESTO,
+                    presupuesto=self.presupuesto,
+                    producto=self.producto,
+                )
+
+    def test_combinaciones_validas_no_fallan(self):
+        Tarea.objects.create(titulo="Manual", asignado_a=self.diego)
+        Tarea.objects.create(
+            titulo="Seguimiento", asignado_a=self.diego,
+            generada_por=TipoAutomatizacion.SEGUIMIENTO_PRESUPUESTO, presupuesto=self.presupuesto,
+        )
+        Tarea.objects.create(
+            titulo="Por vencer", asignado_a=self.diego,
+            generada_por=TipoAutomatizacion.PRESUPUESTO_POR_VENCER, presupuesto=self.presupuesto,
+        )
+        Tarea.objects.create(
+            titulo="Stock", asignado_a=self.diego,
+            generada_por=TipoAutomatizacion.STOCK_MINIMO, producto=self.producto, deposito=Deposito.GENERAL,
+        )
+        self.assertEqual(Tarea.objects.count(), 4)
+
+
+class CrearTareaAutomaticaTests(TestCase):
+    def setUp(self):
+        self.diego = _crear_usuario("diego_crear_tarea_auto", "Administrador")
+        self.cliente = Cliente.objects.create(nombre="Cliente Crear Tarea Auto")
+        self.presupuesto = Presupuesto.objects.create(cliente=self.cliente)
+
+    def test_crea_con_asignado_por_null_y_audita(self):
+        from apps.audit.models import AuditLog
+
+        tarea = crear_tarea_automatica(
+            TipoAutomatizacion.SEGUIMIENTO_PRESUPUESTO,
+            titulo="Seguimiento",
+            descripcion="Detalle",
+            asignado_a=self.diego,
+            presupuesto=self.presupuesto,
+        )
+        self.assertIsNone(tarea.asignado_por)
+        self.assertEqual(tarea.generada_por, TipoAutomatizacion.SEGUIMIENTO_PRESUPUESTO)
+        self.assertEqual(tarea.estado, EstadoTarea.PENDIENTE)
+
+        log = AuditLog.objects.filter(accion="generar_tarea_automatica").order_by("-creado_en").first()
+        self.assertIsNone(log.usuario)
+        self.assertIn("Seguimiento", log.detalle)

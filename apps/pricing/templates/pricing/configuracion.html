@@ -30,6 +30,16 @@
         <label class="form-label">Margen mínimo de alerta (%)</label>
         {{ config_form.margen_minimo_alerta }}
     </div>
+    <div class="col-md-6">
+        <label class="form-label">Días de seguimiento tras enviar un presupuesto</label>
+        {{ config_form.dias_seguimiento_presupuesto_enviado }}
+        <div class="form-text">A los cuántos días sin respuesta se genera la tarea automática de seguimiento.</div>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label">Días de aviso antes de vencer</label>
+        {{ config_form.dias_aviso_presupuesto_por_vencer }}
+        <div class="form-text">Con cuánta anticipación se avisa al vendedor que un presupuesto enviado está por vencer.</div>
+    </div>
     <div class="col-12">
         <button type="submit" class="btn btn-primary btn-sm">Guardar configuración general</button>
     </div>
