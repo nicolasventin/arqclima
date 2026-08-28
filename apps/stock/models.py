@@ -96,6 +96,21 @@ class MovimientoStock(models.Model):
             "hecho no se pierde, solo pierde el puntero fino a esa línea."
         ),
     )
+    orden_compra = models.ForeignKey(
+        "purchasing.OrdenDeCompra",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="movimientos_stock",
+    )
+    linea_orden_compra = models.ForeignKey(
+        "purchasing.LineaOrdenCompra",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="movimientos_stock",
+        help_text="Línea puntual de la orden que originó esta recepción (mismo criterio que material_trabajo).",
+    )
 
     registrado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="movimientos_stock"

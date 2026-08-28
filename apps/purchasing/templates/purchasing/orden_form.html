@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva orden de compra — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Nueva orden de compra</h1>
+
+<form method="post" style="max-width: 500px;">
+    {% csrf_token %}
+    <div class="mb-3">
+        <label class="form-label">Proveedor</label>
+        {{ form.proveedor }}
+        {{ form.proveedor.errors }}
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Depósito destino</label>
+        {{ form.deposito_destino }}
+        {{ form.deposito_destino.errors }}
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Notas</label>
+        {{ form.notas }}
+        {{ form.notas.errors }}
+    </div>
+    <button type="submit" class="btn btn-primary">Crear orden</button>
+</form>
+{% endblock %}

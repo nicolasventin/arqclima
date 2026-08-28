@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Agregar línea — Orden #{{ orden.numero }} — ARQCLIMA{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Agregar línea — Orden #{{ orden.numero }} ({{ orden.proveedor }})</h1>
+
+<form method="post" style="max-width: 500px;">
+    {% csrf_token %}
+    <div class="mb-3">
+        <label class="form-label">Producto del proveedor</label>
+        {{ form.producto_proveedor }}
+        {{ form.producto_proveedor.errors }}
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Cantidad</label>
+        {{ form.cantidad }}
+        {{ form.cantidad.errors }}
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Costo esperado</label>
+        {{ form.costo_esperado }}
+        {{ form.costo_esperado.errors }}
+        <div class="form-text">Se sugiere el último costo registrado para este producto y proveedor — es editable.</div>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="submit" name="recalcular" class="btn btn-outline-secondary btn-sm">Recalcular costo sugerido</button>
+        <button type="submit" class="btn btn-primary btn-sm">Agregar línea</button>
+    </div>
+</form>
+{% endblock %}

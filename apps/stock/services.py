@@ -33,6 +33,8 @@ def registrar_movimiento(
     referencia_libre="",
     trabajo=None,
     material_trabajo=None,
+    orden_compra=None,
+    linea_orden_compra=None,
     detalle="",
 ):
     """
@@ -40,9 +42,10 @@ def registrar_movimiento(
     inserta directo con .create() fuera de acá, para que la validación
     de signo/tipo y la auditoría sean parejas en todos los flujos.
 
-    `trabajo`/`material_trabajo` (Etapa 8): se pasan en el mismo INSERT
-    porque MovimientoStock es append-only — un UPDATE posterior para
-    completarlos violaría el propio trigger de inmutabilidad.
+    `trabajo`/`material_trabajo`/`orden_compra`/`linea_orden_compra`
+    (Etapa 8): se pasan en el mismo INSERT porque MovimientoStock es
+    append-only — un UPDATE posterior para completarlos violaría el
+    propio trigger de inmutabilidad.
     """
     signo_esperado = SIGNO_ESPERADO.get(tipo)
     if signo_esperado is not None and cantidad * signo_esperado <= 0:
@@ -65,6 +68,8 @@ def registrar_movimiento(
         referencia_libre=referencia_libre,
         trabajo=trabajo,
         material_trabajo=material_trabajo,
+        orden_compra=orden_compra,
+        linea_orden_compra=linea_orden_compra,
         registrado_por=usuario,
     )
     log_action(
