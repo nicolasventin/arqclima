@@ -54,6 +54,11 @@
                         <a class="nav-link" href="{% url 'stock:lista' %}">Stock</a>
                     </li>
                     {% endif %}
+                    {% if perms.reports.view_reporte_comercial %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'reports:comercial' %}">Reportes</a>
+                    </li>
+                    {% endif %}
                     {% if perms.tasks.view_tarea %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'tasks:mis_tareas' %}">Mis tareas</a>

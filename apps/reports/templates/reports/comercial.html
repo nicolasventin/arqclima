@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte comercial — ARQCLIMA{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Reporte comercial</h1>
+    <div class="d-flex align-items-center gap-2">
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}">◀</a>
+        <span class="fw-semibold">{{ mes }}/{{ anio }}</span>
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}">▶</a>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    Los estados (Aceptado, Rechazado, etc.) reflejan la situación <strong>actual</strong> de cada
+    presupuesto, no necesariamente resuelta dentro del período mostrado. Un presupuesto enviado
+    este mes que todavía sigue Enviado hoy puede pasar a Aceptado o Rechazado más adelante — si
+    volvés a generar este mismo reporte en el futuro, estos números pueden cambiar.
+</div>
+
+<h2 class="h5">Presupuestos enviados en el período</h2>
+<table class="table table-sm bg-white" style="max-width: 500px;">
+    <tbody>
+        <tr><th>Total enviados en el período</th><td>{{ metricas.total_realizados }}</td></tr>
+        <tr><th>Aceptados</th><td>{{ metricas.aceptados }}</td></tr>
+        <tr><th>Rechazados</th><td>{{ metricas.rechazados }}</td></tr>
+        <tr><th>Vencidos</th><td>{{ metricas.vencidos }}</td></tr>
+        <tr><th>Cancelados</th><td>{{ metricas.cancelados }}</td></tr>
+        <tr><th>Todavía Enviados (sin resolver)</th><td>{{ metricas.enviados_sin_resolver }}</td></tr>
+        <tr><th>Reabiertos a Borrador</th><td>{{ metricas.reabiertos_a_borrador }}</td></tr>
+        <tr>
+            <th>Tasa de conversión</th>
+            <td>{% if metricas.tasa_conversion is not None %}{{ metricas.tasa_conversion|floatformat:1 }}%{% else %}—{% endif %}</td>
+        </tr>
+        <tr>
+            <th>Descuento general promedio</th>
+            <td>{% if metricas.descuento_promedio is not None %}{{ metricas.descuento_promedio|floatformat:1 }}%{% else %}—{% endif %}</td>
+        </tr>
+    </tbody>
+</table>
+
+{% if montos %}
+<h2 class="h5 mt-4">Montos <span class="badge bg-warning text-dark">Confidencial — solo Administrador</span></h2>
+<table class="table table-sm bg-white" style="max-width: 500px;">
+    <tbody>
+        <tr><th>Facturación potencial (Enviados sin resolver)</th><td>${{ montos.facturacion_potencial }}</td></tr>
+        <tr><th>Facturación aceptada del período</th><td>${{ montos.facturacion_aceptada }}</td></tr>
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}
