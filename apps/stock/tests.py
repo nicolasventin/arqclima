@@ -232,8 +232,16 @@ class PermisosStockTests(TestCase):
         self.assertFalse(puede_registrar_entrada_salida(self.contri, Deposito.REPUESTOS))
         self.assertTrue(puede_ajustar_stock(self.contri, Deposito.GENERAL))
 
-    def test_andres_general_sin_ajuste(self):
-        self.assertTrue(puede_registrar_entrada_salida(self.andres, Deposito.GENERAL))
+    def test_andres_sin_acceso_crudo_a_stock_general(self):
+        """
+        Cierra la decisión 42bis (Etapa 7/8, quedaba abierta para la
+        Etapa 9): Andrés ya NO tiene manage_stock_general — su
+        necesidad real (enviar material a su trabajo, devolver
+        sobrante) está cubierta por apps.jobs (enviar_material()/
+        registrar_sobrante(), gateadas por manage_ejecucion_propia +
+        chequeo de fila), que ya lo acota a sus propios trabajos.
+        """
+        self.assertFalse(puede_registrar_entrada_salida(self.andres, Deposito.GENERAL))
         self.assertFalse(puede_registrar_entrada_salida(self.andres, Deposito.REPUESTOS))
         self.assertFalse(puede_ajustar_stock(self.andres, Deposito.GENERAL))
 
@@ -295,19 +303,25 @@ class StockViewsTests(TestCase):
         self.assertTrue(salida.requiere_devolucion)
         self.assertEqual(salidas_repuestos_pendientes(), [salida])
 
-    def test_andres_puede_registrar_entrada_y_salida_general(self):
+    def test_andres_no_puede_registrar_entrada_ni_salida_general_cruda(self):
+        """
+        Cierra la decisión 42bis: la pantalla cruda de stock (sin ningún
+        Trabajo vinculado) ya no es la vía de Andrés — eso vive en
+        apps.jobs (EnviarMaterialView/RegistrarConsumoView), acotado a
+        sus propios trabajos.
+        """
         producto = _producto("V4")
         self.client.login(username="andres_vistas_stock", password="clave12345")
         r1 = self.client.post(
             reverse("stock:entrada", args=["general"]),
             {"producto": producto.pk, "cantidad": "5", "referencia_libre": "Sobrante obra"},
         )
-        self.assertEqual(r1.status_code, 302)
+        self.assertEqual(r1.status_code, 403)
         r2 = self.client.post(
             reverse("stock:salida", args=["general"]),
             {"producto": producto.pk, "cantidad": "2", "referencia_libre": ""},
         )
-        self.assertEqual(r2.status_code, 302)
+        self.assertEqual(r2.status_code, 403)
 
     def test_andres_no_puede_ajustar(self):
         self.client.login(username="andres_vistas_stock", password="clave12345")

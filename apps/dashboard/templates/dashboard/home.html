@@ -51,16 +51,53 @@
         </div>
     </div>
 
+    {% if presupuestos_pendientes is not None %}
     <div class="col-md-4">
         <div class="card h-100">
             <div class="card-body">
-                <h5 class="card-title">Próximamente</h5>
-                <p class="card-text text-muted">
-                    Stock y trabajos se van a ir sumando acá a medida que avancemos
-                    con las próximas etapas.
-                </p>
+                <h5 class="card-title">Presupuestos pendientes</h5>
+                <p class="card-text display-6 mb-1">{{ presupuestos_pendientes }}</p>
+                <p class="card-text text-muted small">Enviados sin resolver</p>
+                <a href="{% url 'quotes:lista' %}?estado=enviado" class="btn btn-sm btn-primary">Ver</a>
             </div>
         </div>
     </div>
+    {% endif %}
+
+    {% if stock_bajo_total is not None %}
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Stock bajo</h5>
+                {% if stock_bajo %}
+                <ul class="list-unstyled mb-2">
+                    {% for producto, deposito, cantidad in stock_bajo %}
+                    <li>{{ producto }} <span class="text-muted small">({{ deposito.label }})</span></li>
+                    {% endfor %}
+                </ul>
+                {% if stock_bajo_total > 5 %}
+                <p class="text-muted small">y {{ stock_bajo_total|add:"-5" }} más…</p>
+                {% endif %}
+                {% else %}
+                <p class="card-text text-muted">Ningún producto por debajo del mínimo.</p>
+                {% endif %}
+                <a href="{% url 'stock:lista' %}" class="btn btn-sm btn-primary">Ver stock</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if mis_trabajos_activos is not None %}
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Mis trabajos activos</h5>
+                <p class="card-text display-6 mb-1">{{ mis_trabajos_activos }}</p>
+                <p class="card-text text-muted small">Asignados, sin terminar ni cancelar</p>
+                <a href="{% url 'jobs:lista' %}" class="btn btn-sm btn-primary">Ver trabajos</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
