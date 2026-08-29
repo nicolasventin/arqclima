@@ -1,34 +1,89 @@
 {% extends "base.html" %}
 
 {% block title %}Trabajos — ARQCLIMA{% endblock %}
+{% block page_heading %}Trabajos{% endblock %}
+{% block page_subheading %}Seguimiento de obras y ejecución{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-3">Trabajos</h1>
+<div class="page-heading">
+    <div class="page-heading-copy">
+        <div class="page-heading-kicker">Operación</div>
+        <h1>Trabajos</h1>
+        <p>Visualizá el avance, cliente y técnico asignado de cada trabajo.</p>
+    </div>
+</div>
 
-<table class="table table-sm table-hover bg-white">
-    <thead>
-        <tr>
-            <th>#</th>
-            <th>Cliente</th>
-            <th>Técnico asignado</th>
-            <th>Estado</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for trabajo in trabajos %}
-        <tr>
-            <td><a href="{% url 'jobs:detalle' trabajo.pk %}">#{{ trabajo.pk }}</a></td>
-            <td>{{ trabajo.presupuesto.cliente.nombre }}</td>
-            <td>{{ trabajo.tecnico_asignado|default:"Sin asignar" }}</td>
-            <td>
-                <span class="badge {% if trabajo.estado == 'cancelado' %}bg-danger{% else %}bg-secondary{% endif %}">
-                    {{ trabajo.get_estado_display }}
-                </span>
-            </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="4" class="text-muted">No hay trabajos todavía.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+<form method="get" class="filter-bar">
+    <div class="filter-field filter-field-search">
+        <label for="trabajo-q">Buscar</label>
+        <input id="trabajo-q" type="text" name="q" value="{{ request.GET.q }}"
+               class="form-control form-control-sm" placeholder="Cliente o dirección">
+    </div>
+    <div class="filter-field">
+        <label for="trabajo-estado">Estado</label>
+        <select id="trabajo-estado" name="estado" class="form-select form-select-sm">
+            <option value="">Todos</option>
+            {% for valor, etiqueta in estados %}
+            <option value="{{ valor }}" {% if request.GET.estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="filter-actions">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+        {% if request.GET.q or request.GET.estado %}
+        <a href="{% url 'jobs:lista' %}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        {% endif %}
+    </div>
+</form>
+
+<div class="data-panel">
+    <div class="table-responsive">
+        <table class="table data-table table-hover">
+            <thead>
+                <tr>
+                    <th>Trabajo</th>
+                    <th>Cliente</th>
+                    <th>Técnico asignado</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for trabajo in trabajos %}
+                <tr>
+                    <td>
+                        <a class="table-link" href="{% url 'jobs:detalle' trabajo.pk %}">#{{ trabajo.pk }}</a>
+                        {% if trabajo.direccion %}<span class="table-secondary-text">{{ trabajo.direccion }}</span>{% endif %}
+                    </td>
+                    <td><span class="table-primary-text">{{ trabajo.presupuesto.cliente.nombre }}</span></td>
+                    <td>
+                        {% if trabajo.tecnico_asignado %}
+                        {{ trabajo.tecnico_asignado }}
+                        {% else %}
+                        <span class="text-muted">Sin asignar</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if trabajo.estado == "terminado" %}
+                        <span class="status-pill status-pill-success">{{ trabajo.get_estado_display }}</span>
+                        {% elif trabajo.estado == "cancelado" %}
+                        <span class="status-pill status-pill-danger">{{ trabajo.get_estado_display }}</span>
+                        {% elif trabajo.estado == "en_ejecucion" %}
+                        <span class="status-pill status-pill-warning">{{ trabajo.get_estado_display }}</span>
+                        {% elif trabajo.estado == "listo" %}
+                        <span class="status-pill status-pill-success">{{ trabajo.get_estado_display }}</span>
+                        {% elif trabajo.estado == "preparando_materiales" %}
+                        <span class="status-pill status-pill-info">{{ trabajo.get_estado_display }}</span>
+                        {% else %}
+                        <span class="status-pill status-pill-neutral">{{ trabajo.get_estado_display }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="empty-table"><i class="bi bi-tools"></i>No hay trabajos que coincidan con los filtros.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% include "includes/pagination.html" %}
 {% endblock %}
