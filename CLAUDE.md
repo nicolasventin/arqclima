@@ -251,6 +251,15 @@ La Etapa 11 se continúa en bloques pequeños y verificables, sin agrupar cambio
 - El proveedor debe tener email. En producción se usa SMTP por defecto; las credenciales y datos corporativos salen de variables de entorno.
 - Volver una OC Emitida a Borrador invalida y limpia el snapshot PDF técnico previo para no enviar un documento viejo después de editar.
 - **11I — Reportes visuales**: incorporar KPIs y gráficos útiles, evitando gráficos decorativos sin información.
+
+**11I — Reportes visuales (implementado):**
+- Comercial: KPIs de enviados/conversión/sin resolver/descuento, gráfico de distribución por estado y comparativa de facturación aceptada vs. potencial solo para quien puede ver montos confidenciales.
+- Rentabilidad: KPI de margen, ranking visual de productos y gráficos de ganancia por presupuesto/trabajo restringidos por el permiso de montos confidenciales.
+- Stock: KPIs de alertas/diferencias/valor y gráfico de material más utilizado; las tablas exactas se conservan como control.
+- Clientes: gráficos de clientes con más trabajos y de presupuestos pendientes, con acceso al historial.
+- Empleados: KPIs agregados y tarjetas comparativas de tareas, vencidas, trabajos activos y actividad administrativa.
+- Los gráficos son server-rendered con HTML/CSS y anchos calculados en la vista; no se agregó Chart.js ni otra dependencia JavaScript. Esto mantiene el frontend simple y hace que la información siga disponible aunque falle JavaScript.
+- La capa de negocio de `reports.services` no se duplicó: 11I transforma las métricas existentes únicamente para presentación y mantiene intacto el gating de `reports.view_montos_confidenciales`.
 - **11H — Importación masiva de productos**: Excel/CSV primero y luego PDF/Word, siempre con análisis, vista previa, validación y confirmación antes de modificar la base.
 - **11M — Auditoría de roles**: revisar la matriz real de permisos de Administrador, Ventas y Presupuestos, Service y Repuestos, Depósito y Técnico de Campo contra el trabajo real de la empresa.
 - **11N — Rediseño de permisos**: mostrar permisos en español y con lenguaje de negocio, diferenciando claramente permisos heredados por rol y permisos individuales extra.
