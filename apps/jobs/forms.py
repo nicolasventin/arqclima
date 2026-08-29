@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 from django import forms
+from django.core.validators import MinValueValidator
 
 from apps.accounts.models import User
 from apps.catalog.models import Producto
@@ -46,6 +49,10 @@ class CancelarTrabajoForm(forms.Form):
 
 
 class EtapaTrabajoForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["duracion_estimada_dias"].validators.append(MinValueValidator(1))
+
     class Meta:
         model = EtapaTrabajo
         fields = ["titulo", "fecha_estimada", "duracion_estimada_dias"]
@@ -63,7 +70,12 @@ class _MaterialFormBase(forms.ModelForm):
             self.fields["etapa"].queryset = trabajo.etapas.all()
         self.fields["etapa"].required = False
         self.fields["etapa"].widget.attrs["class"] = "form-select"
-        self.fields["cantidad_necesaria"].widget.attrs["class"] = "form-control"
+        self.fields["cantidad_necesaria"].validators.append(
+            MinValueValidator(Decimal("0.01"))
+        )
+        self.fields["cantidad_necesaria"].widget.attrs.update(
+            {"class": "form-control", "min": "0.01", "step": "0.01"}
+        )
 
 
 class MaterialCatalogoForm(_MaterialFormBase):
@@ -93,8 +105,20 @@ class ActualizarCantidadMaterialForm(forms.ModelForm):
         model = MaterialTrabajo
         fields = ["cantidad_necesaria"]
         widgets = {
-            "cantidad_necesaria": forms.NumberInput(attrs={"class": "form-control form-control-sm", "step": "0.01"}),
+            "cantidad_necesaria": forms.NumberInput(
+                attrs={
+                    "class": "form-control form-control-sm",
+                    "step": "0.01",
+                    "min": "0.01",
+                }
+            ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["cantidad_necesaria"].validators.append(
+            MinValueValidator(Decimal("0.01"))
+        )
 
 
 class RegistrarConsumoForm(forms.Form):
