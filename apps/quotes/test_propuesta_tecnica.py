@@ -264,11 +264,13 @@ class PropuestaTecnicaPresupuestoTests(TestCase):
         reader = PdfReader(BytesIO(response.content))
         self.assertEqual(len(reader.pages), 2)
 
-        self.assertIn(
-            b"/Subtype /Image",
-            response.content,
-            "El encabezado del PDF debe incluir el logo raster de ARQCLIMA.",
-        )
+        fecha_corta = presupuesto.fecha.strftime("%d/%m/%Y")
+        for page in reader.pages:
+            self.assertIn(
+                fecha_corta,
+                page.extract_text() or "",
+                "Cada página debe conservar el encabezado corporativo.",
+            )
 
         texto = "\n".join(page.extract_text() or "" for page in reader.pages)
         self.assertIn("Echeqs 0-30-60 sin recargo", texto)
