@@ -8,14 +8,6 @@
         size: A4;
         margin: 25mm 15mm 16mm 15mm;
 
-        @frame header_frame {
-            -pdf-frame-content: header_content;
-            left: 15mm;
-            right: 15mm;
-            top: 4mm;
-            height: 18mm;
-        }
-
         @frame footer_frame {
             -pdf-frame-content: footer_content;
             left: 15mm;
@@ -42,31 +34,10 @@
         border-collapse: collapse;
     }
 
-    #header_content {
-        border-bottom: 1px solid #d7e1e7;
-    }
-
     .header-table td {
         border: 0;
         vertical-align: middle;
         padding: 0;
-    }
-
-    .logo {
-        width: 45mm;
-        height: auto;
-    }
-
-    .company-data {
-        text-align: right;
-        color: #547080;
-        font-size: 6.8pt;
-        line-height: 1.18;
-    }
-
-    .company-data strong {
-        color: #075b9b;
-        font-size: 7.2pt;
     }
 
     #footer_content {
@@ -296,27 +267,6 @@
 </style>
 </head>
 <body>
-
-<div id="header_content">
-    <table class="header-table">
-        <tr>
-            <td style="width:55%;">
-                {% if logo_data_uri %}
-                <img src="{{ logo_data_uri }}" class="logo">
-                {% else %}
-                <strong style="font-size:14pt;color:#075b9b;">ARQCLIMA</strong>
-                {% endif %}
-            </td>
-            <td style="width:45%;" class="company-data">
-                <strong>Presupuesto Nº {{ presupuesto.numero }}</strong><br>
-                {{ presupuesto.fecha|date:"d/m/Y" }}
-                {% if empresa.direccion %}<br>{{ empresa.direccion }}{% endif %}
-                {% if empresa.telefono %}<br>Tel/Wapp {{ empresa.telefono }}{% endif %}
-                {% if empresa.email %}<br>{{ empresa.email }}{% endif %}
-            </td>
-        </tr>
-    </table>
-</div>
 
 <div id="footer_content">
     <table class="header-table">
