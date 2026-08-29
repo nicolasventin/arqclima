@@ -1,85 +1,17 @@
 {% extends "base.html" %}
-
 {% block title %}Importación #{{ importacion.pk }} — ARQCLIMA{% endblock %}
-
+{% block page_heading %}Importación #{{ importacion.pk }}{% endblock %}
+{% block page_subheading %}{{ importacion.proveedor.nombre_comercial }}{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-    <div>
-        <h1 class="h4 mb-0">Importación #{{ importacion.pk }} — {{ importacion.proveedor.nombre_comercial }}</h1>
-        <p class="text-muted mb-0">
-            Cargada por {{ importacion.cargado_por|default:"—" }} el {{ importacion.cargado_en|date:"d/m/Y H:i" }}
-        </p>
-    </div>
-    <div>
-        {% if importacion.estado == "pendiente" %}
-        <span class="badge bg-warning text-dark">Pendiente de confirmar</span>
-        {% elif importacion.estado == "confirmada" %}
-        <span class="badge bg-success">Confirmada</span>
-        {% else %}
-        <span class="badge bg-secondary">Descartada</span>
-        {% endif %}
-    </div>
-</div>
+<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Importaciones</div><h1>Importación #{{ importacion.pk }}</h1><div class="detail-subtitle">{{ importacion.proveedor.nombre_comercial }} · cargada por {{ importacion.cargado_por|default:"—" }} el {{ importacion.cargado_en|date:"d/m/Y H:i" }}</div></div><div class="detail-actions">{% if importacion.estado == "pendiente" %}<span class="status-pill status-pill-warning">Pendiente de confirmar</span>{% elif importacion.estado == "confirmada" %}<span class="status-pill status-pill-success">Confirmada</span>{% else %}<span class="status-pill status-pill-neutral">Descartada</span>{% endif %}<a href="{% url 'imports:lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a></div></div>
 
-<div class="mb-3">
-    {% for etiqueta, cantidad in resumen.items %}
-    <span class="badge bg-light text-dark border me-1">{{ etiqueta }}: {{ cantidad }}</span>
-    {% endfor %}
-</div>
+<div class="d-flex flex-wrap gap-2 mb-3">{% for etiqueta, cantidad in resumen.items %}<span class="status-pill status-pill-neutral">{{ etiqueta }}: {{ cantidad }}</span>{% endfor %}</div>
 
-<form method="post" action="{% url 'imports:confirmar' importacion.pk %}">
-    {% csrf_token %}
-    <table class="table table-sm bg-white">
-        <thead>
-            <tr>
-                {% if importacion.estado == "pendiente" %}<th>Incluir</th>{% endif %}
-                <th>Fila</th>
-                <th>Marca</th>
-                <th>Código</th>
-                <th>Nombre</th>
-                <th>Costo</th>
-                <th>Categoría</th>
-                <th>Detalle</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for fila in filas %}
-            <tr class="
-                {% if fila.categoria == 'error' %}table-danger
-                {% elif fila.categoria == 'para_revisar' %}table-warning
-                {% elif fila.categoria == 'nuevo_producto' or fila.categoria == 'nuevo_vinculo' %}table-info
-                {% elif fila.categoria == 'actualiza_costo' %}table-success
-                {% endif %}">
-                {% if importacion.estado == "pendiente" %}
-                <td>
-                    {% if fila.categoria != "error" %}
-                    <input type="checkbox" name="incluir" value="{{ fila.pk }}" {% if fila.incluir %}checked{% endif %}>
-                    {% endif %}
-                </td>
-                {% endif %}
-                <td>{{ fila.numero_fila }}</td>
-                <td>{{ fila.marca_texto }}</td>
-                <td>{{ fila.codigo }}</td>
-                <td>{{ fila.nombre_texto }}</td>
-                <td>{% if fila.costo %}${{ fila.costo }}{% else %}—{% endif %}</td>
-                <td>{{ fila.get_categoria_display }}</td>
-                <td class="text-muted">{{ fila.detalle }}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="8" class="text-muted">El archivo no tenía filas con datos.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    {% if importacion.estado == "pendiente" %}
-    <button type="submit" class="btn btn-primary">Confirmar importación</button>
-    {% endif %}
+<form method="post" action="{% url 'imports:confirmar' importacion.pk %}">{% csrf_token %}
+<div class="data-panel"><div class="table-responsive"><table class="table data-table"><thead><tr>{% if importacion.estado == "pendiente" %}<th>Incluir</th>{% endif %}<th>Fila</th><th>Marca</th><th>Código</th><th>Nombre</th><th>Costo</th><th>Categoría</th><th>Detalle</th></tr></thead><tbody>
+{% for fila in filas %}<tr class="{% if fila.categoria == 'error' %}table-danger{% elif fila.categoria == 'para_revisar' %}table-warning{% elif fila.categoria == 'nuevo_producto' or fila.categoria == 'nuevo_vinculo' %}table-info{% elif fila.categoria == 'actualiza_costo' %}table-success{% endif %}">{% if importacion.estado == "pendiente" %}<td>{% if fila.categoria != "error" %}<input type="checkbox" name="incluir" value="{{ fila.pk }}" {% if fila.incluir %}checked{% endif %}>{% endif %}</td>{% endif %}<td>{{ fila.numero_fila }}</td><td>{{ fila.marca_texto }}</td><td>{{ fila.codigo }}</td><td>{{ fila.nombre_texto }}</td><td>{% if fila.costo %}&#36;{{ fila.costo }}{% else %}—{% endif %}</td><td>{{ fila.get_categoria_display }}</td><td class="text-muted">{{ fila.detalle }}</td></tr>{% empty %}<tr><td colspan="8" class="empty-table">El archivo no tenía filas con datos.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% if importacion.estado == "pendiente" %}<div class="form-actions"><button type="submit" class="btn btn-primary">Confirmar importación</button></div>{% endif %}
 </form>
-
-{% if importacion.estado == "pendiente" %}
-<form method="post" action="{% url 'imports:descartar' importacion.pk %}" class="mt-2">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-outline-danger btn-sm">Descartar sin aplicar cambios</button>
-</form>
-{% endif %}
+{% if importacion.estado == "pendiente" %}<div class="detail-card danger-zone mt-3"><div class="detail-card-title"><h2>Descartar importación</h2><span>No aplica cambios</span></div><form method="post" action="{% url 'imports:descartar' importacion.pk %}">{% csrf_token %}<button type="submit" class="btn btn-outline-danger btn-sm">Descartar sin aplicar cambios</button></form></div>{% endif %}
 {% endblock %}
