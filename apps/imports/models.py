@@ -24,6 +24,7 @@ class ImportacionListaPrecios(models.Model):
         CSV = "csv", "CSV"
         PDF = "pdf", "PDF"
         DOCX = "docx", "Word (.docx)"
+        IMAGEN = "imagen", "Foto de lista (imagen)"
 
     class EstadoAnalisis(models.TextChoices):
         COMPLETO = "completo", "Analizado"
@@ -45,6 +46,21 @@ class ImportacionListaPrecios(models.Model):
     )
     advertencias_analisis = models.JSONField(default=list, blank=True)
     analizado_en = models.DateTimeField(null=True, blank=True)
+
+    usa_ia = models.BooleanField(
+        default=False,
+        help_text="Se usó Claude (mapeo de columnas y/o extracción) para analizar esta importación.",
+    )
+    ia_resultado = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Metadatos de las llamadas a Claude para esta importación (modelo, "
+            "tokens, filas devueltas por origen). No guarda el archivo ni la "
+            "API key; solo la respuesta estructurada ya parseada, para poder "
+            "auditar una extracción dudosa sin volver a llamar a la API."
+        ),
+    )
 
     cargado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -168,3 +184,43 @@ class ImportacionImagen(models.Model):
 
     def __str__(self):
         return f"Imagen de importación #{self.importacion_id} · {self.origen or 'archivo'}"
+
+
+class ProveedorColumnMapping(models.Model):
+    """
+    Cachea el mapeo de columnas que Claude Haiku resuelve para una hoja
+    Excel/CSV "plana" cuyos encabezados no matchean los alias conocidos
+    (apps.imports.parsing.CAMPOS_ALIAS).
+
+    La clave es (proveedor, hash de encabezados), no solo proveedor: un
+    mismo proveedor puede mandar listas con layouts distintos con el tiempo,
+    y cada layout nuevo genera su propia fila en vez de pisar la anterior.
+    Mientras el header no cambie, nunca se vuelve a llamar a la API para
+    ese proveedor.
+    """
+
+    proveedor = models.ForeignKey(
+        Proveedor, on_delete=models.CASCADE, related_name="mapeos_columnas_ia"
+    )
+    encabezados = models.JSONField(
+        help_text="Encabezados crudos tal como se leyeron del archivo, para poder auditar a qué corresponde el hash."
+    )
+    encabezados_hash = models.CharField(max_length=64)
+    mapeo = models.JSONField(
+        help_text="Campo canónico → índice de columna (0-based), igual forma que detectar_columnas()."
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-creado_en"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["proveedor", "encabezados_hash"],
+                name="imports_mapeo_columnas_unico_por_proveedor_hash",
+            ),
+        ]
+        verbose_name = "Mapeo de columnas (IA)"
+        verbose_name_plural = "Mapeos de columnas (IA)"
+
+    def __str__(self):
+        return f"Mapeo IA · {self.proveedor} · {self.encabezados_hash[:8]}"

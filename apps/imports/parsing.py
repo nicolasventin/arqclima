@@ -12,6 +12,7 @@ from pathlib import Path
 import openpyxl
 import xlrd
 from docx import Document
+from openpyxl.utils import get_column_letter
 from PIL import Image, ImageOps
 from pypdf import PdfReader
 
@@ -24,6 +25,7 @@ MAX_IMAGEN_BYTES = 8 * 1024 * 1024
 MAX_IMAGEN_PIXELES = 24_000_000
 MAX_ZIP_DESCOMPRIMIDO = 180 * 1024 * 1024
 MAX_RATIO_ZIP = 250
+MAX_CARACTERES_TEXTO_IA = 300_000
 
 ALIAS_MARCA = {"marca", "brand", "fabricante", "manufacturer"}
 ALIAS_CODIGO = {
@@ -75,6 +77,7 @@ class FilaAnalizada:
     origen: str
     datos: dict
     confianza: str = "alta"
+    nota_ia: str = ""
 
 
 @dataclass
@@ -90,10 +93,40 @@ class ImagenAnalizada:
 
 
 @dataclass
+class PendienteIA:
+    """
+    Trabajo que este módulo no pudo resolver de forma local y que requiere
+    llamar a Claude. parsing.py arma el pendiente pero nunca lo resuelve —
+    eso es responsabilidad de apps.imports.services (única capa que tiene
+    acceso a DB para el cache de ProveedorColumnMapping) llamando a
+    apps.imports.ai (única capa que habla con la API).
+
+    tipo="mapeo_columnas": Excel/CSV "plano" cuyos encabezados no matchean
+    los alias conocidos. `matriz_restante` son las filas después del header
+    candidato, listas para pasarle a extraer_filas_con_mapeo() una vez que
+    se resuelva el mapeo.
+
+    tipo="extraccion": PDF/imagen/docx/Excel-catálogo. `contenido` son bytes
+    (pdf/imagen) o texto ya extraído localmente (docx_texto/excel_celdas) —
+    nunca el binario original para estos dos últimos.
+    """
+
+    tipo: str
+    origen: str
+    encabezados: list | None = None
+    muestra_filas: list | None = None
+    matriz_restante: list | None = None
+    contenido: object = None
+    tipo_contenido: str | None = None
+    extension_imagen: str | None = None
+
+
+@dataclass
 class ResultadoAnalisis:
     filas: list[FilaAnalizada] = field(default_factory=list)
     imagenes: list[ImagenAnalizada] = field(default_factory=list)
     advertencias: list[str] = field(default_factory=list)
+    pendientes_ia: list[PendienteIA] = field(default_factory=list)
 
 
 def _normalizar(texto):
@@ -129,11 +162,16 @@ class ArchivoImportacionInvalido(ValueError):
     pass
 
 
+EXTENSIONES_IMAGEN = {"jpg", "jpeg", "png", "webp"}
+
+
 def tipo_archivo_por_nombre(nombre):
     extension = Path(nombre or "").suffix.lower().lstrip(".")
+    if extension in EXTENSIONES_IMAGEN:
+        return "imagen"
     if extension not in {"xlsx", "xls", "csv", "pdf", "docx"}:
         raise ArchivoImportacionInvalido(
-            "Formato no soportado. Usá .xlsx, .xls, .csv, .pdf o .docx."
+            "Formato no soportado. Usá .xlsx, .xls, .csv, .pdf, .docx, .jpg, .jpeg, .png o .webp."
         )
     return extension
 
@@ -175,18 +213,34 @@ def _puntaje_encabezado(encabezados):
     )
 
 
-def _detectar_encabezado(matriz, origen, limite=25):
-    mejor = (0, [])
+def _mejor_candidata_encabezado(matriz, limite=25):
+    """
+    Fila con más alias de campos canónicos reconocidos, sin exigir que estén
+    los 3 obligatorios juntos (a diferencia de detectar_columnas). Se usa
+    tanto para el mensaje de ColumnasNoDetectadas como para decidir, cuando
+    el mapeo clásico falla, qué fila mandarle a Claude como candidata a
+    encabezado y desde dónde empezar a leer datos.
+    """
+    mejor_puntaje = 0
+    mejor_posicion = 0
+    mejor_fila = []
     for posicion, (_, fila) in enumerate(matriz[:limite]):
         puntaje = _puntaje_encabezado(fila)
-        if puntaje > mejor[0]:
-            mejor = (puntaje, fila)
+        if puntaje > mejor_puntaje:
+            mejor_puntaje = puntaje
+            mejor_posicion = posicion
+            mejor_fila = fila
+    return mejor_posicion, mejor_fila
+
+
+def _detectar_encabezado(matriz, origen, limite=25):
+    for posicion, (_, fila) in enumerate(matriz[:limite]):
         try:
             return posicion, detectar_columnas(fila)
         except ColumnasNoDetectadas:
             continue
-    faltantes = list(CAMPOS_REQUERIDOS)
-    raise ColumnasNoDetectadas(faltantes, mejor[1], origen=origen)
+    _, mejor_fila = _mejor_candidata_encabezado(matriz, limite=limite)
+    raise ColumnasNoDetectadas(list(CAMPOS_REQUERIDOS), mejor_fila, origen=origen)
 
 
 def parsear_costo(valor):
@@ -240,20 +294,19 @@ def _texto_celda(valor):
     return str(valor).strip()
 
 
-def _extraer_filas_matriz(matriz, origen, confianza="alta"):
-    if not matriz:
-        return [], []
+def extraer_filas_con_mapeo(matriz_restante, origen, mapeo, confianza="alta"):
+    """
+    Lee filas de datos dado un mapeo campo→índice de columna ya resuelto —
+    por detectar_columnas() (camino clásico) o por ai.mapear_columnas()
+    (camino Haiku, cuando los alias conocidos no reconocen el encabezado).
 
-    posicion_header, mapeo = _detectar_encabezado(matriz, origen)
+    Es la ÚNICA función que interpreta filas de producto a partir de un
+    mapeo de columnas; tanto _extraer_filas_matriz como el resolutor de
+    PendienteIA en services.py pasan por acá para no duplicar esta lógica.
+    """
     advertencias = []
-    if "marca" not in mapeo:
-        advertencias.append(
-            f"{origen}: no se detectó columna Marca. Las filas nuevas deberán "
-            "tener una marca resoluble antes de confirmarse."
-        )
-
     filas = []
-    for numero, valores in matriz[posicion_header + 1 :]:
+    for numero, valores in matriz_restante:
         if len(filas) >= MAX_FILAS:
             advertencias.append(
                 f"{origen}: se alcanzó el límite de {MAX_FILAS} filas; el resto no se analizó."
@@ -294,6 +347,25 @@ def _extraer_filas_matriz(matriz, origen, confianza="alta"):
                 },
             )
         )
+    return filas, advertencias
+
+
+def _extraer_filas_matriz(matriz, origen, confianza="alta"):
+    if not matriz:
+        return [], []
+
+    posicion_header, mapeo = _detectar_encabezado(matriz, origen)
+    advertencias = []
+    if "marca" not in mapeo:
+        advertencias.append(
+            f"{origen}: no se detectó columna Marca. Las filas nuevas deberán "
+            "tener una marca resoluble antes de confirmarse."
+        )
+
+    filas, adv_filas = extraer_filas_con_mapeo(
+        matriz[posicion_header + 1 :], origen, mapeo, confianza=confianza
+    )
+    advertencias.extend(adv_filas)
     return filas, advertencias
 
 
@@ -374,6 +446,44 @@ def _parece_nombre_producto(valor):
     if len(texto) < 4:
         return False
     return any(caracter.isalpha() for caracter in texto)
+
+
+def _fila_parece_producto(valores):
+    """
+    Señal barata e independiente del encabezado: ¿esta fila tiene "algo que
+    parece código", "algo que parece nombre" y "algo que parece un precio"?
+    No identifica QUÉ columna es cada cosa (para eso está _inferir_columnas_bloque),
+    solo estima cuántas filas de una hoja parecen filas de producto, para
+    medir si el camino local (clásico + bloques) cubrió razonablemente el
+    archivo o si hace falta escalar a IA.
+    """
+    return (
+        any(_parece_codigo(v) for v in valores)
+        and any(_parece_nombre_producto(v) for v in valores)
+        and any(parsear_costo(v) is not None for v in valores)
+    )
+
+
+def _contar_filas_header(matriz, tope=2):
+    """
+    Cuenta filas de TODA la matriz (no solo las primeras 25) donde
+    detectar_columnas() tiene éxito — es decir, headers independientes que
+    matchean código+nombre+costo por sí solos. Una tabla plana tiene 1; un
+    Excel "tipo catálogo" con una subtabla por sección (ej. "TUBO FUSION
+    PN12", "TUBO FUSION PN20", "CODO A 90º"... cada una con su propio
+    header) tiene varios, y ningún mapeo de columnas único cubre el archivo.
+    Corta apenas llega a `tope` porque solo nos importa distinguir 0/1 de 2+.
+    """
+    contador = 0
+    for _, valores in matriz:
+        try:
+            detectar_columnas(valores)
+        except ColumnasNoDetectadas:
+            continue
+        contador += 1
+        if contador >= tope:
+            break
+    return contador
 
 
 def _inferir_columnas_bloque(filas_bloque, indice_precio):
@@ -561,6 +671,130 @@ def _extraer_filas_excel_por_bloques(matriz, origen):
 
     return filas_resultado, advertencias
 
+
+def _recortar_texto_ia(texto, origen):
+    if len(texto) <= MAX_CARACTERES_TEXTO_IA:
+        return texto, None
+    return (
+        texto[:MAX_CARACTERES_TEXTO_IA],
+        f"{origen}: el contenido para IA se recortó a {MAX_CARACTERES_TEXTO_IA} caracteres.",
+    )
+
+
+def construir_texto_celdas_no_vacias(matriz, origen=""):
+    """
+    Representación de solo celdas no vacías (coordenada Excel: valor), nunca
+    el binario del archivo. Para un Excel "tipo catálogo" real de ~400 filas
+    x 29 columnas con ~150 productos esto da unos pocos miles de tokens, muy
+    lejos del costo de mandar el archivo completo.
+
+    Se preservan los cortes de fila en blanco como línea vacía: son la
+    misma señal visual que ve una persona para separar bloques/secciones,
+    y ayudan al modelo a agrupar filas del mismo producto.
+    """
+    lineas = []
+    hubo_fila_no_vacia = False
+    fila_en_blanco_pendiente = False
+    for numero, valores in matriz:
+        celdas = [
+            (indice, texto)
+            for indice, valor in enumerate(valores)
+            if (texto := _texto_celda(valor))
+        ]
+        if not celdas:
+            if hubo_fila_no_vacia:
+                fila_en_blanco_pendiente = True
+            continue
+        if fila_en_blanco_pendiente:
+            lineas.append("")
+            fila_en_blanco_pendiente = False
+        hubo_fila_no_vacia = True
+        texto_fila = "  ".join(
+            f"{get_column_letter(indice + 1)}{numero}: {texto}" for indice, texto in celdas
+        )
+        lineas.append(texto_fila)
+    texto, advertencia = _recortar_texto_ia("\n".join(lineas), origen)
+    return texto, advertencia
+
+
+def _analizar_matriz_con_posible_ia(matriz, origen):
+    """
+    Intenta primero los caminos 100% locales (clásico y fallback por
+    bloques, ambos ya existentes desde 11H). Si un header único no alcanza
+    para explicar el archivo, arma un PendienteIA en vez de llamar a la IA
+    desde acá — parsing.py nunca hace red ni DB; eso lo resuelve
+    services.py. Devuelve (filas, advertencias, pendiente_ia | None).
+    """
+    if _contar_filas_header(matriz) >= 2:
+        texto, advertencia_recorte = construir_texto_celdas_no_vacias(matriz, origen)
+        advertencias = [advertencia_recorte] if advertencia_recorte else []
+        return (
+            [],
+            advertencias,
+            PendienteIA(
+                tipo="extraccion",
+                origen=origen,
+                contenido=texto,
+                tipo_contenido="excel_celdas",
+            ),
+        )
+
+    mensaje_clasico = None
+    try:
+        filas, adv = _extraer_filas_matriz(matriz, origen, confianza="alta")
+        return filas, adv, None
+    except ColumnasNoDetectadas as exc_clasico:
+        # Python borra la variable del "except ... as" al salir del bloque:
+        # el mensaje se guarda acá para poder usarlo más abajo.
+        mensaje_clasico = str(exc_clasico)
+
+    filas_bloques, adv_bloques = _extraer_filas_excel_por_bloques(matriz, origen)
+    candidatas = sum(1 for _, valores in matriz if _fila_parece_producto(valores))
+    if filas_bloques and (candidatas == 0 or len(filas_bloques) >= candidatas * 0.5):
+        return filas_bloques, adv_bloques, None
+
+    if candidatas == 0:
+        # Ni el clásico ni el fallback por bloques encontraron nada, y
+        # tampoco hay señal estructural de catálogo: mismo comportamiento
+        # que antes de la IA (advertencia, sin filas), sin gastar una
+        # llamada que muy probablemente tampoco iba a encontrar nada.
+        return filas_bloques, [mensaje_clasico, *adv_bloques], None
+
+    posicion, mejor_fila = _mejor_candidata_encabezado(matriz)
+    if mejor_fila:
+        muestra_filas = [
+            valores
+            for _, valores in matriz[posicion + 1 : posicion + 4]
+            if valores and any(_texto_celda(v) for v in valores)
+        ]
+        return (
+            [],
+            [],
+            PendienteIA(
+                tipo="mapeo_columnas",
+                origen=origen,
+                encabezados=[_texto_celda(v) for v in mejor_fila],
+                muestra_filas=muestra_filas,
+                matriz_restante=matriz[posicion + 1 :],
+            ),
+        )
+
+    # Hay filas que parecen producto pero ni siquiera un header candidato
+    # débil: último recurso antes de rendirse, extracción completa con IA.
+    texto, advertencia_recorte = construir_texto_celdas_no_vacias(matriz, origen)
+    advertencias = [advertencia_recorte] if advertencia_recorte else []
+    return (
+        [],
+        advertencias,
+        PendienteIA(
+            tipo="extraccion",
+            origen=origen,
+            contenido=texto,
+            tipo_contenido="excel_celdas",
+        ),
+    )
+
+
 def _validar_zip_seguro(datos):
     try:
         with zipfile.ZipFile(BytesIO(datos)) as zf:
@@ -668,14 +902,11 @@ def _analizar_xlsx(datos):
             if not any(any(_texto_celda(v) for v in valores) for _, valores in matriz):
                 continue
             origen = f"Hoja {hoja.title}"
-            try:
-                filas, adv = _extraer_filas_matriz(matriz, origen, confianza="alta")
-            except ColumnasNoDetectadas as exc:
-                filas, adv = _extraer_filas_excel_por_bloques(matriz, origen)
-                if not filas:
-                    resultado.advertencias.append(str(exc))
+            filas, adv, pendiente = _analizar_matriz_con_posible_ia(matriz, origen)
             resultado.filas.extend(filas)
             resultado.advertencias.extend(adv)
+            if pendiente is not None:
+                resultado.pendientes_ia.append(pendiente)
     finally:
         libro.close()
 
@@ -730,12 +961,11 @@ def _analizar_xls(datos):
             if not matriz:
                 continue
             origen = f"Hoja {hoja.name}"
-            try:
-                filas, adv = _extraer_filas_matriz(matriz, origen, confianza="alta")
-                resultado.filas.extend(filas)
-                resultado.advertencias.extend(adv)
-            except ColumnasNoDetectadas as exc:
-                resultado.advertencias.append(str(exc))
+            filas, adv, pendiente = _analizar_matriz_con_posible_ia(matriz, origen)
+            resultado.filas.extend(filas)
+            resultado.advertencias.extend(adv)
+            if pendiente is not None:
+                resultado.pendientes_ia.append(pendiente)
     finally:
         libro.release_resources()
 
@@ -773,9 +1003,11 @@ def _analizar_csv(datos):
             break
         matriz.append((numero, fila))
 
-    filas, adv = _extraer_filas_matriz(matriz, "CSV", confianza="alta")
+    filas, adv, pendiente = _analizar_matriz_con_posible_ia(matriz, "CSV")
     resultado.filas.extend(filas)
     resultado.advertencias.extend(adv)
+    if pendiente is not None:
+        resultado.pendientes_ia.append(pendiente)
     if encoding not in ("utf-8-sig", "utf-8"):
         resultado.advertencias.append(
             f"CSV: se interpretó usando codificación {encoding}."
@@ -847,7 +1079,48 @@ def _analizar_docx(datos):
             nombre=nombre,
         )
 
+    if not resultado.filas:
+        texto = _texto_docx_para_ia(documento)
+        if texto.strip():
+            texto, advertencia_recorte = _recortar_texto_ia(texto, "Documento Word")
+            if advertencia_recorte:
+                resultado.advertencias.append(advertencia_recorte)
+            resultado.pendientes_ia.append(
+                PendienteIA(
+                    tipo="extraccion",
+                    origen="Documento Word",
+                    contenido=texto,
+                    tipo_contenido="docx_texto",
+                )
+            )
+
     return resultado
+
+
+def _texto_docx_para_ia(documento):
+    """
+    Texto plano de tablas + párrafos para mandarle a Sonnet cuando ninguna
+    tabla local fue interpretable (o no había tablas). Nunca se manda el
+    .docx original: python-docx ya extrajo el texto acá, localmente.
+    """
+    partes = []
+    for indice, tabla in enumerate(documento.tables, start=1):
+        filas_tabla = []
+        for fila in tabla.rows:
+            celdas = [celda.text.strip() for celda in fila.cells]
+            if any(celdas):
+                filas_tabla.append(" | ".join(celdas))
+        if filas_tabla:
+            partes.append(f"Tabla {indice}:")
+            partes.extend(filas_tabla)
+            partes.append("")
+
+    parrafos = [p.text.strip() for p in documento.paragraphs if p.text.strip()]
+    if parrafos:
+        partes.append("Texto del documento:")
+        partes.extend(parrafos)
+
+    return "\n".join(partes)
 
 
 def _lineas_pdf_a_matriz(texto):
@@ -942,6 +1215,47 @@ def _analizar_pdf(datos):
             "Nombre/Descripción y Costo/Precio."
         )
 
+    if not resultado.filas:
+        # Cubre tanto el PDF escaneado (paginas_con_texto == 0, necesita
+        # visión) como el PDF con texto pero sin tabla reconocible por el
+        # parser local: en los dos casos, se manda el PDF completo (nunca
+        # solo texto suelto) como bloque "document" nativo, para que Sonnet
+        # pueda usar layout/visión si hace falta.
+        resultado.pendientes_ia.append(
+            PendienteIA(
+                tipo="extraccion",
+                origen="PDF completo",
+                contenido=datos,
+                tipo_contenido="pdf",
+            )
+        )
+
+    return resultado
+
+
+def _analizar_imagen(datos):
+    """
+    Foto de una lista de precios. No hay camino local para esto (a
+    diferencia de Excel/CSV/PDF/Word, nunca hubo un parser que "lea" una
+    imagen como datos) — siempre se resuelve con Sonnet. La imagen
+    normalizada se guarda además como evidencia visual, igual que las
+    imágenes embebidas de los otros formatos.
+    """
+    resultado = ResultadoAnalisis()
+    imagen, advertencia = _normalizar_imagen(datos, origen="Imagen cargada")
+    if advertencia:
+        raise ArchivoImportacionInvalido(advertencia)
+
+    resultado.imagenes.append(imagen)
+    resultado.pendientes_ia.append(
+        PendienteIA(
+            tipo="extraccion",
+            origen="Imagen cargada",
+            contenido=imagen.contenido,
+            tipo_contenido="imagen",
+            extension_imagen=imagen.extension,
+        )
+    )
     return resultado
 
 
@@ -980,6 +1294,7 @@ def analizar_archivo(archivo, tipo_archivo=None):
         "csv": _analizar_csv,
         "pdf": _analizar_pdf,
         "docx": _analizar_docx,
+        "imagen": _analizar_imagen,
     }
     parser = parsers.get(tipo_archivo)
     if parser is None:

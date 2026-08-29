@@ -16,7 +16,7 @@ class NuevaImportacionForm(forms.Form):
         widget=forms.ClearableFileInput(
             attrs={
                 "class": "form-control",
-                "accept": ".xlsx,.xls,.csv,.pdf,.docx",
+                "accept": ".xlsx,.xls,.csv,.pdf,.docx,.jpg,.jpeg,.png,.webp",
             }
         ),
     )

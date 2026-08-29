@@ -123,6 +123,16 @@ DEFAULT_FROM_EMAIL = env(
     default="ARQCLIMA <no-reply@localhost>",
 )
 
+# Importaciones asistidas por IA (Etapa 11 — apps.imports). Los IDs de modelo
+# quedan configurables por env en vez de hardcodeados en apps/imports/ai.py:
+# Haiku va pineado a un snapshot con fecha a propósito (no al alias
+# claude-haiku-4-5) para que el mapeo de columnas no cambie de comportamiento
+# si el alias pasa a apuntar a otro snapshot en el futuro. Sonnet usa el alias
+# porque no hay un snapshot con fecha confirmado para pinnear todavía.
+ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
+ANTHROPIC_MODEL_HAIKU = env("ANTHROPIC_MODEL_HAIKU", default="claude-haiku-4-5-20251001")
+ANTHROPIC_MODEL_SONNET = env("ANTHROPIC_MODEL_SONNET", default="claude-sonnet-5")
+
 # Datos opcionales para documentos oficiales. Solo se muestran los campos
 # configurados: no se inventa razón social, CUIT, dirección ni contacto.
 ARQCLIMA_COMPANY = {

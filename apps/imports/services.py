@@ -1,3 +1,4 @@
+import hashlib
 import unicodedata
 from decimal import Decimal
 
@@ -10,8 +11,21 @@ from apps.catalog.permissions import puede_crear_producto
 from apps.pricing.permissions import puede_registrar_costo
 from apps.pricing.services import costo_actual, registrar_costo
 
-from .models import ImportacionFila, ImportacionImagen, ImportacionListaPrecios
-from .parsing import ColumnasNoDetectadas, analizar_archivo, parsear_costo
+from .ai import ExtraccionIAError, extraer_lista_precios, mapear_columnas
+from .models import (
+    ImportacionFila,
+    ImportacionImagen,
+    ImportacionListaPrecios,
+    ProveedorColumnMapping,
+)
+from .parsing import (
+    CAMPOS_REQUERIDOS,
+    ColumnasNoDetectadas,
+    FilaAnalizada,
+    analizar_archivo,
+    extraer_filas_con_mapeo,
+    parsear_costo,
+)
 
 
 UNIDAD_ALIASES = {
@@ -265,6 +279,8 @@ def _crear_fila_desde_analisis(importacion, fila_analizada, usuario):
             f"{fila_analizada.confianza}; verificar visualmente antes de incluir."
         )
         detalle = f"{detalle} {nota}".strip()
+    if fila_analizada.nota_ia:
+        detalle = f"{detalle} IA: {fila_analizada.nota_ia}".strip()
 
     return ImportacionFila.objects.create(
         importacion=importacion,
@@ -414,17 +430,150 @@ def _guardar_imagenes(importacion, imagenes):
     return guardadas
 
 
+def _hash_encabezados(encabezados):
+    normalizado = "|".join(_normalizar(str(e)) for e in encabezados)
+    return hashlib.sha256(normalizado.encode("utf-8")).hexdigest()
+
+
+def _obtener_mapeo_columnas(proveedor, encabezados, muestra_filas):
+    """
+    Cache-first: si este proveedor ya resolvió este mismo header alguna vez
+    (ProveedorColumnMapping), no se vuelve a llamar a Haiku. `meta["cache"]`
+    distingue en ia_resultado si hubo o no una llamada real a la API.
+    """
+    hash_actual = _hash_encabezados(encabezados)
+    cacheado = ProveedorColumnMapping.objects.filter(
+        proveedor=proveedor, encabezados_hash=hash_actual
+    ).first()
+    if cacheado is not None:
+        return cacheado.mapeo, [], {"cache": True}
+
+    mapeo, advertencias, meta = mapear_columnas(encabezados, muestra_filas)
+    faltantes = [campo for campo in CAMPOS_REQUERIDOS if campo not in mapeo]
+    if faltantes:
+        raise ExtraccionIAError(
+            f"Claude no pudo identificar las columnas obligatorias ({', '.join(faltantes)})."
+        )
+
+    try:
+        ProveedorColumnMapping.objects.create(
+            proveedor=proveedor,
+            encabezados=list(encabezados),
+            encabezados_hash=hash_actual,
+            mapeo=mapeo,
+        )
+    except IntegrityError:
+        # Otra importación concurrente ya cacheó el mismo header primero;
+        # el mapeo que ya tenemos en memoria sigue siendo válido igual.
+        pass
+
+    meta["cache"] = False
+    return mapeo, advertencias, meta
+
+
+def _filas_desde_extraccion_ia(productos, origen):
+    filas = []
+    for numero, producto in enumerate(productos, start=1):
+        filas.append(
+            FilaAnalizada(
+                numero=numero,
+                origen=f"{origen} (IA)",
+                confianza=ImportacionFila.Confianza.MEDIA,
+                nota_ia=(producto.get("nota") or "").strip(),
+                datos={
+                    "marca": (producto.get("marca") or "").strip(),
+                    "codigo": (producto.get("codigo") or "").strip(),
+                    "nombre": (producto.get("nombre") or "").strip(),
+                    "descripcion": (producto.get("descripcion") or "").strip(),
+                    "costo_crudo": producto.get("costo_texto") or "",
+                    "codigo_proveedor": (producto.get("codigo_proveedor") or "").strip(),
+                    "unidad": (producto.get("unidad") or "").strip(),
+                    "categoria": (producto.get("categoria") or "").strip(),
+                },
+            )
+        )
+    return filas
+
+
+def resolver_pendientes_ia(resultado, importacion):
+    """
+    Resuelve, uno por uno, los PendienteIA que parsing.py no pudo cerrar
+    localmente. Es la única función de services.py que llama a apps.imports.ai
+    (red) combinado con ProveedorColumnMapping (DB) — parsing.py no toca
+    ninguna de las dos cosas.
+
+    Un pendiente que falla (timeout, rate limit, respuesta inválida) no
+    interrumpe el resto de la importación: se agrega una advertencia y esa
+    fuente en particular queda sin filas, igual que un archivo que no se
+    pudo analizar antes de que existiera este camino.
+
+    El except de acá abajo solo atrapa ExtraccionIAError (fallas externas:
+    red, rate limit, respuesta de Claude inválida) a propósito, aunque
+    extraer_filas_con_mapeo() —función 100% local, sin red ni DB— quede
+    sintácticamente dentro del mismo try. Mismo criterio que el resto del
+    proyecto (regla general de la sesión: no envolver en manejo de errores
+    algo que "no debería pasar"): si esa función local lanza algo que no sea
+    ExtraccionIAError, es un bug real de nuestro código operando sobre un
+    mapeo ya resuelto/cacheado, no una falla esperable del archivo o de la
+    API — debe cortar el resto del loop y hacer ruido en vez de disfrazarse
+    de "no se pudo procesar automáticamente con IA", que sería engañoso.
+    """
+    meta_llamadas = []
+    for pendiente in resultado.pendientes_ia:
+        try:
+            if pendiente.tipo == "mapeo_columnas":
+                mapeo, advertencias, meta = _obtener_mapeo_columnas(
+                    importacion.proveedor,
+                    pendiente.encabezados,
+                    pendiente.muestra_filas,
+                )
+                # Fuera del alcance real del except: ver nota arriba.
+                filas, adv_filas = extraer_filas_con_mapeo(
+                    pendiente.matriz_restante,
+                    pendiente.origen,
+                    mapeo,
+                    confianza="alta",
+                )
+                resultado.filas.extend(filas)
+                resultado.advertencias.extend(advertencias)
+                resultado.advertencias.extend(adv_filas)
+            elif pendiente.tipo == "extraccion":
+                productos, advertencias, meta = extraer_lista_precios(
+                    pendiente.contenido,
+                    pendiente.tipo_contenido,
+                    extension_imagen=pendiente.extension_imagen,
+                )
+                resultado.filas.extend(_filas_desde_extraccion_ia(productos, pendiente.origen))
+                resultado.advertencias.extend(advertencias)
+            else:  # pragma: no cover - defensivo, no debería pasar
+                continue
+        except ExtraccionIAError as exc:
+            resultado.advertencias.append(
+                f"{pendiente.origen}: no se pudo procesar automáticamente con IA ({exc})."
+            )
+            continue
+
+        importacion.usa_ia = True
+        meta_llamadas.append({"origen": pendiente.origen, "tipo": pendiente.tipo, **meta})
+
+    return meta_llamadas
+
+
 def procesar_importacion(importacion):
     """
     Analiza el archivo, genera preview de filas e imágenes y clasifica.
 
     Sigue siendo una operación de PREVIEW: no escribe Producto,
-    ProductoProveedor ni HistorialCosto.
+    ProductoProveedor ni HistorialCosto. Lo que parsing.py no pudo resolver
+    de forma local (PendienteIA) se resuelve acá con resolver_pendientes_ia
+    antes de decidir si la importación tiene algo para mostrar.
     """
     importacion.filas.all().delete()
     importacion.imagenes.all().delete()
 
     resultado = analizar_archivo(importacion.archivo, importacion.tipo_archivo)
+    meta_llamadas = resolver_pendientes_ia(resultado, importacion)
+
     if not resultado.filas and not resultado.imagenes:
         raise ColumnasNoDetectadas(
             ["codigo", "nombre", "costo"],
@@ -462,11 +611,15 @@ def procesar_importacion(importacion):
         else ImportacionListaPrecios.EstadoAnalisis.COMPLETO
     )
     importacion.analizado_en = timezone.now()
+    if meta_llamadas:
+        importacion.ia_resultado = meta_llamadas
     importacion.save(
         update_fields=[
             "advertencias_analisis",
             "estado_analisis",
             "analizado_en",
+            "usa_ia",
+            "ia_resultado",
         ]
     )
     return resultado

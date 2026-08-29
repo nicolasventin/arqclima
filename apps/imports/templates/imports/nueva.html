@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Nueva importación — ARQCLIMA{% endblock %}
 {% block page_heading %}Importar lista de precios{% endblock %}
-{% block page_subheading %}Análisis asistido de Excel, CSV, PDF y Word{% endblock %}
+{% block page_subheading %}Análisis asistido de Excel, CSV, PDF, Word e imágenes{% endblock %}
 
 {% block content %}
 <div class="detail-header">
@@ -31,7 +31,7 @@
     <div class="form-card">
         <div class="form-card-header">
             <h2>Archivo del proveedor</h2>
-            <p>Formatos admitidos: .xlsx, .xls, .csv, .pdf y .docx. Máximo 30 MB.</p>
+            <p>Formatos admitidos: .xlsx, .xls, .csv, .pdf, .docx, .jpg, .jpeg, .png y .webp. Máximo 30 MB.</p>
         </div>
         <div class="form-card-body">
             {% if form.non_field_errors %}
@@ -80,22 +80,26 @@
                 <article>
                     <i class="bi bi-file-earmark-spreadsheet"></i>
                     <strong>Excel / CSV</strong>
-                    <span>Mayor confianza. Revisa hojas, encabezados y filas automáticamente.</span>
+                    <span>Revisa hojas, encabezados y filas automáticamente. Si el proveedor usa nombres de columna
+                        raros o una planilla tipo catálogo con varias subtablas, se completa con IA.</span>
                 </article>
                 <article>
                     <i class="bi bi-file-earmark-word"></i>
                     <strong>Word</strong>
-                    <span>Lee tablas y listas tabuladas. También conserva imágenes embebidas.</span>
+                    <span>Lee tablas y listas tabuladas localmente; si no hay ninguna tabla interpretable, se
+                        completa con IA. También conserva imágenes embebidas.</span>
                 </article>
                 <article>
                     <i class="bi bi-file-earmark-pdf"></i>
                     <strong>PDF</strong>
-                    <span>Extrae tablas de texto y guarda imágenes como evidencia visual. Puede requerir revisión.</span>
+                    <span>Extrae tablas de texto localmente; si no hay texto (escaneado) o no hay tabla reconocible,
+                        se completa con IA. Puede requerir revisión.</span>
                 </article>
                 <article>
                     <i class="bi bi-images"></i>
-                    <strong>Imágenes</strong>
-                    <span>Las imágenes embebidas se muestran en la vista previa, pero nunca identifican un producto por sí solas.</span>
+                    <strong>Foto de lista</strong>
+                    <span>Una foto de una lista de precios se lee siempre con IA. Las imágenes embebidas en otros
+                        formatos se muestran como evidencia, pero nunca identifican un producto por sí solas.</span>
                 </article>
             </div>
 
@@ -103,6 +107,8 @@
                 <i class="bi bi-shield-check me-1"></i>
                 <strong>Seguridad:</strong> un PDF escaneado sin texto no se interpreta con OCR automático.
                 Se conservan sus imágenes para revisión, evitando convertir una lectura dudosa en precios reales.
+                Cualquier producto extraído con IA (marcado "(IA)" en el origen) nace con confianza media y
+                destildado: nunca se aplica al catálogo sin revisión humana.
             </div>
 
             <div class="form-actions">

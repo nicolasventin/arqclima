@@ -81,6 +81,13 @@ El detalle completo de reglas de negocio y permisos por rol está en
 - **Autenticación**: la de Django, con roles (`django.contrib.auth.Group`)
   + overrides individuales de permisos por usuario.
 - Importación de listas de precios: `openpyxl` (.xlsx), `xlrd` (.xls), CSV estándar, `python-docx` (.docx) y `pypdf` (.pdf); `Pillow` valida y conserva imágenes embebidas. PDF de presupuestos y órdenes de compra: `xhtml2pdf`.
+- Importación asistida por IA: cuando el análisis local no alcanza (columnas
+  con nombres no estándar, Excel tipo catálogo con varias subtablas, PDF
+  escaneado, Word sin tabla, o una foto de lista), se usa la API de Claude
+  (`anthropic`) — Haiku solo para mapear columnas, Sonnet para extraer la
+  lista completa. Requiere `ANTHROPIC_API_KEY` en `.env`; sin esa variable,
+  esos caminos fallan igual que un archivo no interpretable, sin afectar el
+  resto del sistema. Ver `apps/imports/ai.py`.
 
 ## Estructura del proyecto
 
