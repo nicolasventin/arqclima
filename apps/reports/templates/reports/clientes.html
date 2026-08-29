@@ -3,46 +3,112 @@
 {% block title %}Reporte de clientes — ARQCLIMA{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-3">Reporte de clientes</h1>
-
-<div class="alert alert-info">
-    Estas métricas son de estado actual o histórico completo — no se filtran por mes/año como los
-    demás reportes.
+<div class="report-header">
+    <div>
+        <div class="detail-kicker">Reportes</div>
+        <h1>Clientes</h1>
+        <p>Concentración de trabajos y presupuestos que todavía esperan respuesta.</p>
+    </div>
 </div>
 
-<h2 class="h5">Clientes con más trabajos</h2>
-{% if clientes_con_mas_trabajos %}
-<table class="table table-sm bg-white" style="max-width: 600px;">
-    <thead><tr><th>Cliente</th><th>Trabajos</th><th></th></tr></thead>
-    <tbody>
-        {% for fila in clientes_con_mas_trabajos %}
-        <tr>
-            <td>{{ fila.cliente_nombre }}</td>
-            <td>{{ fila.cantidad_trabajos }}</td>
-            <td><a href="{% url 'reports:historial_cliente' fila.cliente_id %}">Ver historial</a></td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">Todavía no hay ningún Trabajo creado.</p>
-{% endif %}
+<div class="report-kpi-grid">
+    <article class="report-kpi report-kpi-info">
+        <span class="report-kpi-label">Presupuestos pendientes</span>
+        <strong>{{ resumen_clientes.presupuestos_pendientes }}</strong>
+        <small>Enviados y todavía sin resolver.</small>
+    </article>
+    <article class="report-kpi">
+        <span class="report-kpi-label">Clientes con pendientes</span>
+        <strong>{{ resumen_clientes.clientes_con_pendientes }}</strong>
+        <small>Clientes que requieren seguimiento comercial.</small>
+    </article>
+    <article class="report-kpi report-kpi-success">
+        <span class="report-kpi-label">Mayor cantidad de trabajos</span>
+        <strong>{{ resumen_clientes.max_trabajos_cliente }}</strong>
+        <small>Máximo histórico entre los clientes del ranking.</small>
+    </article>
+</div>
 
-<h2 class="h5 mt-4">Presupuestos pendientes por cliente</h2>
+<div class="alert alert-info report-note">
+    Este reporte es de <strong>estado actual e histórico completo</strong>: no usa filtro por mes.
+</div>
+
+<div class="report-grid">
+    <section class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h2>Clientes con más trabajos</h2>
+                <p>Top 10 por cantidad histórica de trabajos creados.</p>
+            </div>
+        </div>
+        {% if chart_clientes_trabajos %}
+        <div class="report-bar-chart">
+            {% for fila in chart_clientes_trabajos %}
+            <div class="report-bar-row">
+                <div class="report-bar-meta">
+                    <a class="report-bar-link" href="{% url 'reports:historial_cliente' fila.cliente_id %}">{{ fila.cliente_nombre }}</a>
+                    <strong>{{ fila.cantidad_trabajos }}</strong>
+                </div>
+                <div class="report-bar-track" role="img" aria-label="{{ fila.cliente_nombre }}: {{ fila.cantidad_trabajos }} trabajos">
+                    <span class="report-bar-fill report-bar-brand" style="--report-width: {{ fila.chart_width }}"></span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="report-empty">Todavía no hay ningún trabajo creado.</div>
+        {% endif %}
+    </section>
+
+    <section class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h2>Presupuestos pendientes por cliente</h2>
+                <p>Top 10 de clientes con más presupuestos Enviados sin respuesta.</p>
+            </div>
+        </div>
+        {% if chart_clientes_pendientes %}
+        <div class="report-bar-chart">
+            {% for fila in chart_clientes_pendientes %}
+            <div class="report-bar-row">
+                <div class="report-bar-meta">
+                    <a class="report-bar-link" href="{% url 'reports:historial_cliente' fila.cliente_id %}">{{ fila.cliente_nombre }}</a>
+                    <strong>{{ fila.cantidad_pendientes }}</strong>
+                </div>
+                <div class="report-bar-track" role="img" aria-label="{{ fila.cliente_nombre }}: {{ fila.cantidad_pendientes }} presupuestos pendientes">
+                    <span class="report-bar-fill report-bar-warning" style="--report-width: {{ fila.chart_width }}"></span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="report-empty report-empty-success"><i class="bi bi-check-circle"></i> No hay presupuestos Enviados sin resolver.</div>
+        {% endif %}
+    </section>
+</div>
+
 {% if presupuestos_pendientes_por_cliente %}
-<table class="table table-sm bg-white" style="max-width: 600px;">
-    <thead><tr><th>Cliente</th><th>Enviados sin resolver</th><th></th></tr></thead>
-    <tbody>
-        {% for fila in presupuestos_pendientes_por_cliente %}
-        <tr>
-            <td>{{ fila.cliente_nombre }}</td>
-            <td>{{ fila.cantidad_pendientes }}</td>
-            <td><a href="{% url 'reports:historial_cliente' fila.cliente_id %}">Ver historial</a></td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">Ningún presupuesto Enviado sin resolver en este momento.</p>
+<section class="report-panel mt-3">
+    <div class="report-panel-header">
+        <div>
+            <h2>Seguimiento comercial</h2>
+            <p>Listado completo de clientes que hoy tienen presupuestos pendientes.</p>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table data-table">
+            <thead><tr><th>Cliente</th><th>Enviados sin resolver</th><th class="text-end">Acción</th></tr></thead>
+            <tbody>
+                {% for fila in presupuestos_pendientes_por_cliente %}
+                <tr data-row-href="{% url 'reports:historial_cliente' fila.cliente_id %}" tabindex="0" role="link" aria-label="Abrir historial de {{ fila.cliente_nombre }}">
+                    <td><span class="table-primary-text">{{ fila.cliente_nombre }}</span></td>
+                    <td>{{ fila.cantidad_pendientes }}</td>
+                    <td class="text-end"><a class="table-link" href="{% url 'reports:historial_cliente' fila.cliente_id %}">Ver historial</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
 {% endif %}
 {% endblock %}

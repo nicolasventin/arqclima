@@ -98,6 +98,7 @@ Una app de Django por concepto de negocio, no por capa técnica:
 - `apps/stock` — movimientos de stock (ledger), separado por depósito (general / repuestos).
 - `apps/jobs` — trabajos (nacen de un presupuesto aceptado), listado de materiales, consumo real.
 - `apps/purchasing` — órdenes de compra: borrador, emisión, envío y recepción, sin aprobación obligatoria.
+- `apps/reports` — reportes Comercial, Rentabilidad, Stock, Clientes y Empleados con KPIs, gráficos HTML/CSS y tablas de control.
 
 El estado de avance por etapa, con todas las decisiones de diseño tomadas en
 el camino, está documentado en `CLAUDE.md` — es la fuente de verdad para

@@ -3,99 +3,164 @@
 {% block title %}Reporte de rentabilidad — ARQCLIMA{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Reporte de rentabilidad</h1>
-    <div class="d-flex align-items-center gap-2">
-        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}">◀</a>
-        <span class="fw-semibold">{{ mes }}/{{ anio }}</span>
-        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}">▶</a>
+<div class="report-header">
+    <div>
+        <div class="detail-kicker">Reportes</div>
+        <h1>Rentabilidad</h1>
+        <p>Margen de productos y resultado económico de presupuestos y trabajos.</p>
+    </div>
+    <div class="report-period-nav" aria-label="Navegación del período">
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}" aria-label="Mes anterior"><i class="bi bi-chevron-left"></i></a>
+        <div class="report-period-label">
+            <span>Período</span>
+            <strong>{{ periodo_fecha|date:"F Y"|capfirst }}</strong>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}" aria-label="Mes siguiente"><i class="bi bi-chevron-right"></i></a>
     </div>
 </div>
 
-<div class="alert alert-info">
-    "Ganancia por trabajo" solo incluye trabajos <strong>Terminados</strong> cuyo presupuesto de origen fue
-    enviado en este período. El ingreso es el total pactado con el cliente (fijo, no se reescala por el
-    material realmente usado); el costo sí refleja el consumo real cuando hay un listado de materiales
-    generado — mano de obra y conceptos sin material vinculado usan el costo cotizado.
+<div class="report-kpi-grid">
+    <article class="report-kpi report-kpi-info">
+        <span class="report-kpi-label">Margen promedio de ítems</span>
+        <strong>{% if metricas.margen_promedio is not None %}{{ metricas.margen_promedio|floatformat:1 }}%{% else %}—{% endif %}</strong>
+        <small>Markup promedio de ítems con costo cargado.</small>
+    </article>
+    <article class="report-kpi">
+        <span class="report-kpi-label">Productos comparados</span>
+        <strong>{{ metricas.productos_mejor_margen|length }}</strong>
+        <small>Hasta 10 productos con margen calculable.</small>
+    </article>
+    {% if montos %}
+    <article class="report-kpi report-kpi-success">
+        <span class="report-kpi-label">Ganancia en presupuestos</span>
+        <strong>$ {{ montos.ganancia_total_presupuestos|floatformat:2 }}</strong>
+        <small>Solo Administrador.</small>
+    </article>
+    <article class="report-kpi {% if montos.ganancia_total_trabajos < 0 %}report-kpi-danger{% else %}report-kpi-success{% endif %}">
+        <span class="report-kpi-label">Ganancia en trabajos terminados</span>
+        <strong>$ {{ montos.ganancia_total_trabajos|floatformat:2 }}</strong>
+        <small>Solo Administrador.</small>
+    </article>
+    {% endif %}
 </div>
 
-<h2 class="h5">Margen</h2>
-<table class="table table-sm bg-white" style="max-width: 500px;">
-    <tbody>
-        <tr>
-            <th>Margen promedio de ítems del período</th>
-            <td>{% if metricas.margen_promedio is not None %}{{ metricas.margen_promedio|floatformat:1 }}%{% else %}—{% endif %}</td>
-        </tr>
-    </tbody>
-</table>
+<div class="alert alert-info report-note">
+    La ganancia por trabajo usa el precio pactado con el cliente y el consumo real cuando existe listado
+    de materiales. Si faltan costos cargados, el resultado del trabajo se marca como parcial.
+</div>
 
-<h2 class="h5 mt-4">Productos con mejor margen</h2>
-{% if metricas.productos_mejor_margen %}
-<table class="table table-sm bg-white" style="max-width: 600px;">
-    <thead><tr><th>Producto</th><th>Margen promedio</th></tr></thead>
-    <tbody>
-        {% for fila in metricas.productos_mejor_margen %}
-        <tr>
-            <td>{{ fila.producto }}</td>
-            <td>{{ fila.margen_promedio|floatformat:1 }}%</td>
-        </tr>
+<section class="report-panel">
+    <div class="report-panel-header">
+        <div>
+            <h2>Productos con mejor margen</h2>
+            <p>Comparación relativa del margen promedio de los ítems vendidos en el período.</p>
+        </div>
+    </div>
+
+    {% if chart_productos_margen %}
+    <div class="report-bar-chart">
+        {% for fila in chart_productos_margen %}
+        <div class="report-bar-row">
+            <div class="report-bar-meta">
+                <span>{{ fila.producto }}</span>
+                <strong class="{% if fila.chart_negative %}text-danger{% endif %}">{{ fila.margen_promedio|floatformat:1 }}%</strong>
+            </div>
+            <div class="report-bar-track" role="img" aria-label="{{ fila.producto }}: margen {{ fila.margen_promedio|floatformat:1 }} por ciento">
+                <span class="report-bar-fill {% if fila.chart_negative %}report-bar-danger{% else %}report-bar-brand{% endif %}" style="--report-width: {{ fila.chart_width }}"></span>
+            </div>
+        </div>
         {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">Sin ítems de catálogo con costo cargado en el período.</p>
-{% endif %}
+    </div>
+    {% else %}
+    <div class="report-empty">Sin ítems de catálogo con costo cargado en el período.</div>
+    {% endif %}
+</section>
 
 {% if montos %}
-<h2 class="h5 mt-4">Ganancia por presupuesto <span class="badge bg-warning text-dark">Confidencial — solo Administrador</span></h2>
-{% if montos.ganancia_presupuestos %}
-<table class="table table-sm bg-white" style="max-width: 600px;">
-    <thead><tr><th>Presupuesto</th><th>Ganancia</th></tr></thead>
-    <tbody>
-        {% for fila in montos.ganancia_presupuestos %}
-        <tr>
-            <td>{{ fila.presupuesto }}</td>
-            <td>${{ fila.ganancia }}</td>
-        </tr>
-        {% endfor %}
-        <tr class="fw-semibold">
-            <td>Total</td>
-            <td>${{ montos.ganancia_total_presupuestos }}</td>
-        </tr>
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">Sin presupuestos realizados en el período.</p>
-{% endif %}
+<div class="report-grid mt-3">
+    <section class="report-panel report-confidential">
+        <div class="report-panel-header">
+            <div>
+                <h2>Ganancia por presupuesto <span class="status-pill status-pill-warning ms-1">Solo Administrador</span></h2>
+                <p>Hasta 8 presupuestos del período, normalizados contra el de mayor resultado absoluto.</p>
+            </div>
+        </div>
+        {% if chart_ganancia_presupuestos %}
+        <div class="report-bar-chart">
+            {% for fila in chart_ganancia_presupuestos %}
+            <div class="report-bar-row">
+                <div class="report-bar-meta">
+                    <span>Presupuesto #{{ fila.presupuesto.numero }}</span>
+                    <strong class="{% if fila.chart_negative %}text-danger{% endif %}">$ {{ fila.ganancia|floatformat:2 }}</strong>
+                </div>
+                <div class="report-bar-track">
+                    <span class="report-bar-fill {% if fila.chart_negative %}report-bar-danger{% else %}report-bar-success{% endif %}" style="--report-width: {{ fila.chart_width }}"></span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="report-empty">Sin presupuestos realizados en el período.</div>
+        {% endif %}
+    </section>
 
-<h2 class="h5 mt-4">Ganancia por trabajo <span class="badge bg-warning text-dark">Confidencial — solo Administrador</span></h2>
-{% if montos.ganancia_trabajos %}
-<table class="table table-sm bg-white" style="max-width: 750px;">
-    <thead><tr><th>Trabajo</th><th>Ingreso</th><th>Costo</th><th>Ganancia</th><th></th></tr></thead>
-    <tbody>
-        {% for fila in montos.ganancia_trabajos %}
-        <tr>
-            <td>{{ fila.trabajo }}</td>
-            <td>${{ fila.ingreso }}</td>
-            <td>${{ fila.costo }}</td>
-            <td>${{ fila.ganancia }}</td>
-            <td>
+    <section class="report-panel report-confidential">
+        <div class="report-panel-header">
+            <div>
+                <h2>Ganancia por trabajo <span class="status-pill status-pill-warning ms-1">Solo Administrador</span></h2>
+                <p>Trabajos terminados cuyo presupuesto fue enviado en el período.</p>
+            </div>
+        </div>
+        {% if chart_ganancia_trabajos %}
+        <div class="report-bar-chart">
+            {% for fila in chart_ganancia_trabajos %}
+            <div class="report-bar-row">
+                <div class="report-bar-meta">
+                    <span>Trabajo #{{ fila.trabajo.pk }} · {{ fila.trabajo.presupuesto.cliente }}</span>
+                    <strong class="{% if fila.chart_negative %}text-danger{% endif %}">$ {{ fila.ganancia|floatformat:2 }}</strong>
+                </div>
+                <div class="report-bar-track">
+                    <span class="report-bar-fill {% if fila.chart_negative %}report-bar-danger{% else %}report-bar-success{% endif %}" style="--report-width: {{ fila.chart_width }}"></span>
+                </div>
                 {% if fila.tiene_costos_incompletos %}
-                <span class="badge bg-secondary" title="Hay ítems sin costo cargado — este número es parcial">Costos incompletos</span>
+                <small class="report-bar-note-warning"><i class="bi bi-exclamation-triangle"></i> Costos incompletos: el resultado es parcial.</small>
                 {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-        <tr class="fw-semibold">
-            <td>Total</td>
-            <td colspan="2"></td>
-            <td>${{ montos.ganancia_total_trabajos }}</td>
-            <td></td>
-        </tr>
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">Sin trabajos Terminados de presupuestos realizados en el período.</p>
-{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="report-empty">Sin trabajos Terminados de presupuestos realizados en el período.</div>
+        {% endif %}
+    </section>
+</div>
+
+<section class="report-panel report-confidential mt-3">
+    <div class="report-panel-header">
+        <div>
+            <h2>Detalle económico <span class="status-pill status-pill-warning ms-1">Solo Administrador</span></h2>
+            <p>Tabla de control para contrastar los gráficos con los valores exactos.</p>
+        </div>
+    </div>
+    {% if montos.ganancia_trabajos %}
+    <div class="table-responsive">
+        <table class="table data-table">
+            <thead><tr><th>Trabajo</th><th>Ingreso</th><th>Costo</th><th>Ganancia</th><th>Calidad del dato</th></tr></thead>
+            <tbody>
+                {% for fila in montos.ganancia_trabajos %}
+                <tr>
+                    <td>#{{ fila.trabajo.pk }} · {{ fila.trabajo.presupuesto.cliente }}</td>
+                    <td>$ {{ fila.ingreso|floatformat:2 }}</td>
+                    <td>$ {{ fila.costo|floatformat:2 }}</td>
+                    <td class="{% if fila.ganancia < 0 %}text-danger{% endif %}">$ {{ fila.ganancia|floatformat:2 }}</td>
+                    <td>{% if fila.tiene_costos_incompletos %}<span class="status-pill status-pill-warning">Costos incompletos</span>{% else %}<span class="status-pill status-pill-success">Completo</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="report-empty">No hay trabajos terminados para detallar.</div>
+    {% endif %}
+</section>
 {% endif %}
 {% endblock %}
