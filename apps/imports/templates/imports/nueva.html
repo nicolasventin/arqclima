@@ -1,12 +1,103 @@
 {% extends "base.html" %}
 {% block title %}Nueva importación — ARQCLIMA{% endblock %}
 {% block page_heading %}Importar lista de precios{% endblock %}
-{% block page_subheading %}Carga asistida desde Excel{% endblock %}
+{% block page_subheading %}Análisis asistido de Excel, CSV, PDF y Word{% endblock %}
+
 {% block content %}
-<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Importaciones</div><h1>Importar lista de precios</h1><div class="detail-subtitle">Primero se genera una vista previa; el catálogo no cambia hasta confirmar.</div></div></div>
-<form method="post" enctype="multipart/form-data" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Archivo del proveedor</h2><p>Formato soportado actualmente: Excel .xlsx.</p></div><div class="form-card-body">
-{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}{% if form.archivo.errors %}<div class="alert alert-danger">{{ form.archivo.errors|striptags }}</div>{% endif %}
-<div class="form-grid"><div class="form-field"><label>Proveedor</label>{{ form.proveedor }}{{ form.proveedor.errors }}</div><div class="form-field"><label>Archivo Excel (.xlsx)</label>{{ form.archivo }}<div class="field-help">Columnas reconocidas: Marca, Código/SKU/Cod. Fabricante, Nombre/Descripción y Costo/Precio. Código de proveedor es opcional.</div></div></div>
-<div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-upload me-1"></i>Subir y ver vista previa</button><a href="{% url 'imports:lista' %}" class="btn btn-outline-secondary">Cancelar</a></div>
-</div></div></form>
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Importaciones</div>
+        <h1>Importar lista de precios</h1>
+        <div class="detail-subtitle">
+            El archivo se analiza primero. Nada modifica catálogo ni costos hasta que revises y confirmes.
+        </div>
+    </div>
+    <div class="detail-actions">
+        <a href="{% url 'imports:lista' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+</div>
+
+<div class="import-flow mb-3" aria-label="Flujo de importación">
+    <div class="import-flow-step is-active"><span>1</span><strong>Archivo</strong><small>Subir documento</small></div>
+    <div class="import-flow-step"><span>2</span><strong>Análisis</strong><small>Detectar filas e imágenes</small></div>
+    <div class="import-flow-step"><span>3</span><strong>Revisión</strong><small>Corregir dudas</small></div>
+    <div class="import-flow-step"><span>4</span><strong>Confirmación</strong><small>Aplicar cambios</small></div>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="form-shell">
+    {% csrf_token %}
+    <div class="form-card">
+        <div class="form-card-header">
+            <h2>Archivo del proveedor</h2>
+            <p>Formatos admitidos: .xlsx, .xls, .csv, .pdf y .docx. Máximo 30 MB.</p>
+        </div>
+        <div class="form-card-body">
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+            {% if form.archivo.errors %}
+            <div class="alert alert-danger">{{ form.archivo.errors|striptags }}</div>
+            {% endif %}
+
+            <div class="form-grid">
+                <div class="form-field">
+                    <label>Proveedor</label>
+                    {{ form.proveedor }}
+                    {{ form.proveedor.errors }}
+                    <div class="field-help">
+                        El proveedor elegido se usa para matchear códigos propios y registrar el historial de costos.
+                    </div>
+                </div>
+
+                <div class="form-field">
+                    <label>Archivo</label>
+                    {{ form.archivo }}
+                    <div class="field-help">
+                        Columnas esperadas: <strong>Código</strong>, <strong>Nombre/Descripción</strong> y
+                        <strong>Costo/Precio</strong>. Marca es recomendable pero puede faltar si el producto ya
+                        se identifica por código de proveedor. Código de proveedor, unidad y categoría son opcionales.
+                    </div>
+                </div>
+            </div>
+
+            <div class="import-format-grid mt-3">
+                <article>
+                    <i class="bi bi-file-earmark-spreadsheet"></i>
+                    <strong>Excel / CSV</strong>
+                    <span>Mayor confianza. Revisa hojas, encabezados y filas automáticamente.</span>
+                </article>
+                <article>
+                    <i class="bi bi-file-earmark-word"></i>
+                    <strong>Word</strong>
+                    <span>Lee tablas y listas tabuladas. También conserva imágenes embebidas.</span>
+                </article>
+                <article>
+                    <i class="bi bi-file-earmark-pdf"></i>
+                    <strong>PDF</strong>
+                    <span>Extrae tablas de texto y guarda imágenes como evidencia visual. Puede requerir revisión.</span>
+                </article>
+                <article>
+                    <i class="bi bi-images"></i>
+                    <strong>Imágenes</strong>
+                    <span>Las imágenes embebidas se muestran en la vista previa, pero nunca identifican un producto por sí solas.</span>
+                </article>
+            </div>
+
+            <div class="alert alert-warning mt-3 mb-0">
+                <i class="bi bi-shield-check me-1"></i>
+                <strong>Seguridad:</strong> un PDF escaneado sin texto no se interpreta con OCR automático.
+                Se conservan sus imágenes para revisión, evitando convertir una lectura dudosa en precios reales.
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-search me-1"></i>Analizar archivo
+                </button>
+                <a href="{% url 'imports:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </div>
+    </div>
+</form>
 {% endblock %}
