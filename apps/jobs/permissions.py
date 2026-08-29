@@ -1,7 +1,7 @@
 from .models import EstadoTrabajo
 
 ESTADOS_PREPARACION = {EstadoTrabajo.PREPARANDO_MATERIALES, EstadoTrabajo.LISTO}
-ESTADOS_EJECUCION = {EstadoTrabajo.EN_EJECUCION, EstadoTrabajo.TERMINADO}
+ESTADOS_EJECUCION = {EstadoTrabajo.EN_EJECUCION}
 
 
 def puede_crear_trabajo(user):
@@ -99,3 +99,21 @@ def queryset_trabajos_visibles(user, queryset):
     ):
         return queryset
     return queryset.filter(tecnico_asignado=user)
+
+
+
+def puede_finalizar_trabajo(user, trabajo):
+    """
+    Terminar un trabajo deja de ser una transición genérica en 10F.
+    Diego puede finalizar cualquiera; el técnico de campo solo el suyo.
+    """
+    if user.has_perm("jobs.change_trabajo"):
+        return True
+    return (
+        user.has_perm("jobs.manage_ejecucion_propia")
+        and trabajo.tecnico_asignado_id == user.id
+    )
+
+
+def trabajo_esta_cerrado(trabajo):
+    return trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO)
