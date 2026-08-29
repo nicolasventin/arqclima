@@ -36,9 +36,17 @@
             <td>
                 {{ movimiento.get_tipo_display }}
                 {% if movimiento.requiere_devolucion %}<span class="badge bg-warning text-dark">Pendiente devolución</span>{% endif %}
+                {% if movimiento.forzado_stock_negativo %}
+                    <span class="badge bg-danger">Stock negativo forzado</span>
+                {% endif %}
             </td>
             <td>{{ movimiento.cantidad }}</td>
-            <td>{{ movimiento.referencia_libre|default:"—" }}</td>
+            <td>
+                {{ movimiento.referencia_libre|default:"—" }}
+                {% if movimiento.forzado_stock_negativo %}
+                    <div class="small text-danger">Motivo: {{ movimiento.motivo_forzado }}</div>
+                {% endif %}
+            </td>
             <td>{{ movimiento.registrado_por|default:"Sistema" }}</td>
         </tr>
         {% empty %}

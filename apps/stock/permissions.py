@@ -44,3 +44,9 @@ def puede_ajustar_stock(user, deposito):
 
 def puede_configurar_stock_minimo(user):
     return user.has_perm("stock.manage_stock_minimo")
+
+
+
+def puede_forzar_stock_negativo(user):
+    """Excepción explícita para permitir una salida que deje stock negativo."""
+    return user.has_perm("stock.force_negative_stock")

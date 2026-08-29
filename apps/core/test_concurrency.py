@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.db import close_old_connections
+from django.db.models import Sum
 from django.test import TestCase, TransactionTestCase
 
 from apps.accounts.models import User
@@ -35,6 +36,7 @@ from apps.quotes.models import (
 from apps.quotes.services import cambiar_estado
 from apps.stock.models import Deposito, MovimientoStock, TipoMovimiento
 from apps.stock.services import (
+    StockInsuficienteError,
     cantidad_pendiente_devolucion,
     registrar_devolucion,
     registrar_movimiento,
@@ -161,6 +163,13 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             producto=self.producto,
             cantidad_necesaria=Decimal("5"),
         )
+        registrar_movimiento(
+            producto=self.producto,
+            deposito=Deposito.GENERAL,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("5"),
+            usuario=self.usuario,
+        )
 
         def preparar():
             material_local = MaterialTrabajo.objects.get(pk=material.pk)
@@ -178,7 +187,47 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             1,
         )
 
+    def test_dos_salidas_simultaneas_no_pueden_consumir_el_mismo_stock(self):
+        registrar_movimiento(
+            producto=self.producto,
+            deposito=Deposito.GENERAL,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("5"),
+            usuario=self.usuario,
+        )
+
+        def preparar():
+            producto_local = Producto.objects.get(pk=self.producto.pk)
+            usuario_local = User.objects.get(pk=self.usuario.pk)
+            return lambda: registrar_movimiento(
+                producto=producto_local,
+                deposito=Deposito.GENERAL,
+                tipo=TipoMovimiento.SALIDA,
+                cantidad=Decimal("-4"),
+                usuario=usuario_local,
+            )
+
+        resultados = self.ejecutar_dos(preparar)
+
+        self.assertEqual(sum(resultado is None for resultado in resultados), 1)
+        self.assertEqual(
+            sum(isinstance(resultado, StockInsuficienteError) for resultado in resultados),
+            1,
+        )
+        total = MovimientoStock.objects.filter(
+            producto=self.producto,
+            deposito=Deposito.GENERAL,
+        ).aggregate(total=Sum("cantidad"))["total"]
+        self.assertEqual(total, Decimal("1"))
+
     def test_dos_devoluciones_simultaneas_no_superan_lo_pendiente(self):
+        registrar_movimiento(
+            producto=self.producto,
+            deposito=Deposito.REPUESTOS,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("5"),
+            usuario=self.usuario,
+        )
         salida = registrar_movimiento(
             producto=self.producto,
             deposito=Deposito.REPUESTOS,

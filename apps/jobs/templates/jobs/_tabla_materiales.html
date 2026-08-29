@@ -27,12 +27,34 @@
             <td>
                 {% if fila.material.producto %}
                     {{ fila.pendiente_envio }}
+                    <div class="small text-muted">Stock: {{ fila.stock_disponible }}</div>
+                    {% if fila.requiere_forzado %}
+                        <span class="badge bg-danger">Stock insuficiente</span>
+                    {% endif %}
                 {% else %}
                     <span class="text-muted">— (manual)</span>
                 {% endif %}
             </td>
             <td class="d-flex gap-1">
-                {% if fila.puede_enviar %}
+                {% if fila.requiere_forzado %}
+                    {% if fila.puede_forzar %}
+                    <form method="post" action="{% url 'jobs:enviar_material' fila.material.pk %}" class="d-flex gap-1 align-items-center">
+                        {% csrf_token %}
+                        <input type="hidden" name="forzar_stock_negativo" value="on">
+                        <input
+                            type="text"
+                            name="motivo_forzado"
+                            class="form-control form-control-sm"
+                            style="width: 220px;"
+                            placeholder="Motivo obligatorio"
+                            required
+                        >
+                        <button type="submit" class="btn btn-sm btn-danger">Forzar envío</button>
+                    </form>
+                    {% else %}
+                    <span class="text-danger small">No se puede enviar: stock insuficiente.</span>
+                    {% endif %}
+                {% elif fila.puede_enviar %}
                 <form method="post" action="{% url 'jobs:enviar_material' fila.material.pk %}">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-primary">Enviar</button>

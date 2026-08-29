@@ -11,8 +11,14 @@ from apps.core.mixins import PermisoRequeridoMixin
 
 from .forms import AjusteForm, DevolucionForm, EntradaSalidaForm, SalidaRepuestosForm, StockMinimoForm
 from .models import Deposito, MovimientoStock, TipoMovimiento
-from .permissions import puede_ajustar_stock, puede_configurar_stock_minimo, puede_registrar_entrada_salida
+from .permissions import (
+    puede_ajustar_stock,
+    puede_configurar_stock_minimo,
+    puede_forzar_stock_negativo,
+    puede_registrar_entrada_salida,
+)
 from .services import (
+    StockInsuficienteError,
     bajo_minimo,
     cantidad_pendiente_devolucion,
     registrar_devolucion,
@@ -113,24 +119,40 @@ class RegistrarSalidaView(UserPassesTestMixin, View):
     def _form_class(self):
         return SalidaRepuestosForm if self.deposito == Deposito.REPUESTOS else EntradaSalidaForm
 
+    def _form(self, *args, **kwargs):
+        return self._form_class()(
+            *args,
+            solo_repuestos=self.deposito == Deposito.REPUESTOS,
+            permitir_forzado=puede_forzar_stock_negativo(self.request.user),
+            **kwargs,
+        )
+
     def get(self, request, deposito):
-        form = self._form_class()(solo_repuestos=deposito == Deposito.REPUESTOS)
+        form = self._form()
         return render(request, self.template_name, {"form": form, "titulo": "Registrar salida"})
 
     def post(self, request, deposito):
-        form = self._form_class()(request.POST, solo_repuestos=deposito == Deposito.REPUESTOS)
+        form = self._form(request.POST)
         if form.is_valid():
-            registrar_movimiento(
-                producto=form.cleaned_data["producto"],
-                deposito=deposito,
-                tipo=TipoMovimiento.SALIDA,
-                cantidad=-form.cleaned_data["cantidad"],
-                usuario=request.user,
-                requiere_devolucion=form.cleaned_data.get("requiere_devolucion", False),
-                referencia_libre=form.cleaned_data["referencia_libre"],
-            )
-            messages.success(request, "Salida registrada.")
-            return redirect("stock:lista")
+            try:
+                registrar_movimiento(
+                    producto=form.cleaned_data["producto"],
+                    deposito=deposito,
+                    tipo=TipoMovimiento.SALIDA,
+                    cantidad=-form.cleaned_data["cantidad"],
+                    usuario=request.user,
+                    requiere_devolucion=form.cleaned_data.get("requiere_devolucion", False),
+                    referencia_libre=form.cleaned_data["referencia_libre"],
+                    forzar_stock_negativo=form.cleaned_data.get("forzar_stock_negativo", False),
+                    motivo_forzado=form.cleaned_data.get("motivo_forzado", ""),
+                )
+            except StockInsuficienteError as exc:
+                form.add_error("cantidad", str(exc))
+            except (PermissionError, ValueError) as exc:
+                form.add_error(None, str(exc))
+            else:
+                messages.success(request, "Salida registrada.")
+                return redirect("stock:lista")
         return render(request, self.template_name, {"form": form, "titulo": "Registrar salida"})
 
 
@@ -141,22 +163,37 @@ class RegistrarAjusteView(UserPassesTestMixin, View):
     def test_func(self):
         return puede_ajustar_stock(self.request.user, Deposito.GENERAL)
 
+    def _form(self, *args, **kwargs):
+        return AjusteForm(
+            *args,
+            permitir_forzado=puede_forzar_stock_negativo(self.request.user),
+            **kwargs,
+        )
+
     def get(self, request):
-        return render(request, self.template_name, {"form": AjusteForm()})
+        return render(request, self.template_name, {"form": self._form()})
 
     def post(self, request):
-        form = AjusteForm(request.POST)
+        form = self._form(request.POST)
         if form.is_valid():
-            registrar_movimiento(
-                producto=form.cleaned_data["producto"],
-                deposito=Deposito.GENERAL,
-                tipo=TipoMovimiento.AJUSTE,
-                cantidad=form.cleaned_data["cantidad"],
-                usuario=request.user,
-                referencia_libre=form.cleaned_data["referencia_libre"],
-            )
-            messages.success(request, "Ajuste registrado.")
-            return redirect("stock:lista")
+            try:
+                registrar_movimiento(
+                    producto=form.cleaned_data["producto"],
+                    deposito=Deposito.GENERAL,
+                    tipo=TipoMovimiento.AJUSTE,
+                    cantidad=form.cleaned_data["cantidad"],
+                    usuario=request.user,
+                    referencia_libre=form.cleaned_data["referencia_libre"],
+                    forzar_stock_negativo=form.cleaned_data.get("forzar_stock_negativo", False),
+                    motivo_forzado=form.cleaned_data.get("motivo_forzado", ""),
+                )
+            except StockInsuficienteError as exc:
+                form.add_error("cantidad", str(exc))
+            except (PermissionError, ValueError) as exc:
+                form.add_error(None, str(exc))
+            else:
+                messages.success(request, "Ajuste registrado.")
+                return redirect("stock:lista")
         return render(request, self.template_name, {"form": form})
 
 

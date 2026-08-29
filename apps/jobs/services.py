@@ -4,6 +4,7 @@ from django.db import transaction
 from django.db.models import Sum
 
 from apps.audit.services import log_action
+from apps.catalog.models import Producto
 from apps.quotes.models import EstadoPresupuesto, Presupuesto
 from apps.stock.models import Deposito, TipoMovimiento
 from apps.stock.services import registrar_movimiento
@@ -270,7 +271,13 @@ def materiales_pendientes_de_envio(trabajo):
 
 
 @transaction.atomic
-def enviar_material(material, usuario):
+def enviar_material(
+    material,
+    usuario,
+    *,
+    forzar_stock_negativo=False,
+    motivo_forzado="",
+):
     """
     Regla de negocio 11: "se asume que se usó todo" — manda exactamente
     lo que falta del plan (cantidad_necesaria menos lo ya enviado
@@ -297,11 +304,19 @@ def enviar_material(material, usuario):
         trabajo=material_bloqueado.trabajo,
         material_trabajo=material_bloqueado,
         referencia_libre=f"Envío a {material_bloqueado.trabajo}",
+        forzar_stock_negativo=forzar_stock_negativo,
+        motivo_forzado=motivo_forzado,
     )
 
 
 @transaction.atomic
-def enviar_materiales_pendientes(trabajo, usuario):
+def enviar_materiales_pendientes(
+    trabajo,
+    usuario,
+    *,
+    forzar_stock_negativo=False,
+    motivo_forzado="",
+):
     """
     Envía en bloque todos los materiales de catálogo con algo pendiente.
 
@@ -314,6 +329,18 @@ def enviar_materiales_pendientes(trabajo, usuario):
         .filter(trabajo_id=trabajo.pk, producto__isnull=False)
         .order_by("pk")
     )
+
+    # 10D agrega un lock de Producto dentro de registrar_movimiento().
+    # Para el envío masivo tomamos primero todos los productos en orden
+    # estable de PK: dos trabajos distintos que comparten productos no
+    # pueden invertir el orden de locks y caer en deadlock.
+    producto_ids = sorted({material.producto_id for material in materiales})
+    list(
+        Producto.objects.select_for_update()
+        .filter(pk__in=producto_ids)
+        .order_by("pk")
+    )
+
     movimientos = []
     for material in materiales:
         pendiente = cantidad_pendiente_envio(material)
@@ -329,6 +356,8 @@ def enviar_materiales_pendientes(trabajo, usuario):
                 trabajo=material.trabajo,
                 material_trabajo=material,
                 referencia_libre=f"Envío a {material.trabajo}",
+                forzar_stock_negativo=forzar_stock_negativo,
+                motivo_forzado=motivo_forzado,
             )
         )
     return movimientos

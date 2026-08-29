@@ -13,7 +13,43 @@ CAMPO_CANTIDAD = forms.DecimalField(
 )
 
 
-class EntradaSalidaForm(forms.Form):
+class ForzadoStockNegativoMixin:
+    def __init__(self, *args, permitir_forzado=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if permitir_forzado:
+            self.fields["forzar_stock_negativo"] = forms.BooleanField(
+                required=False,
+                label=(
+                    "Forzar salida aunque el stock quede negativo "
+                    "(acción excepcional y auditada)"
+                ),
+                widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            )
+            self.fields["motivo_forzado"] = forms.CharField(
+                required=False,
+                label="Motivo de la salida forzada",
+                widget=forms.Textarea(
+                    attrs={
+                        "class": "form-control",
+                        "rows": 2,
+                        "placeholder": "Explique por qué se autoriza dejar stock negativo.",
+                    }
+                ),
+            )
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("forzar_stock_negativo") and not (
+            cleaned.get("motivo_forzado") or ""
+        ).strip():
+            self.add_error(
+                "motivo_forzado",
+                "Debe indicar el motivo para forzar una salida con stock insuficiente.",
+            )
+        return cleaned
+
+
+class EntradaSalidaForm(ForzadoStockNegativoMixin, forms.Form):
     """
     Cantidad siempre se carga positiva acá — el servicio la guarda con
     el signo que corresponda según sea entrada o salida. Evita que el
@@ -46,7 +82,7 @@ class SalidaRepuestosForm(EntradaSalidaForm):
     )
 
 
-class AjusteForm(forms.Form):
+class AjusteForm(ForzadoStockNegativoMixin, forms.Form):
     producto = forms.ModelChoiceField(
         queryset=Producto.objects.filter(activo=True),
         widget=forms.Select(attrs={"class": "form-select"}),

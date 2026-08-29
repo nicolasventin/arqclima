@@ -112,6 +112,18 @@ class MovimientoStock(models.Model):
         help_text="Línea puntual de la orden que originó esta recepción (mismo criterio que material_trabajo).",
     )
 
+    forzado_stock_negativo = models.BooleanField(
+        default=False,
+        help_text=(
+            "Verdadero solo cuando una salida se autorizó explícitamente aun dejando "
+            "el depósito en negativo. Requiere permiso especial y motivo."
+        ),
+    )
+    motivo_forzado = models.TextField(
+        blank=True,
+        help_text="Motivo obligatorio cuando forzado_stock_negativo=True.",
+    )
+
     registrado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="movimientos_stock"
     )
@@ -134,6 +146,10 @@ class MovimientoStock(models.Model):
             (
                 "manage_stock_minimo",
                 "Puede configurar el stock mínimo de alerta por producto",
+            ),
+            (
+                "force_negative_stock",
+                "Puede forzar una salida aunque deje el stock en negativo",
             ),
         ]
         constraints = [
@@ -160,6 +176,13 @@ class MovimientoStock(models.Model):
                     | models.Q(tipo=TipoMovimiento.DEVOLUCION)
                 ),
                 name="movimientostock_salida_relacionada_solo_en_devolucion",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(forzado_stock_negativo=False, motivo_forzado="")
+                    | models.Q(forzado_stock_negativo=True, cantidad__lt=0)
+                ),
+                name="movimientostock_forzado_solo_resta",
             ),
         ]
 

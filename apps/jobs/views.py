@@ -7,6 +7,9 @@ from django.views.generic import DetailView, ListView
 from apps.audit.services import log_action
 from apps.core.mixins import PermisoRequeridoMixin
 from apps.quotes.models import EstadoPresupuesto, Presupuesto
+from apps.stock.models import Deposito
+from apps.stock.permissions import puede_forzar_stock_negativo
+from apps.stock.services import StockInsuficienteError, stock_actual
 
 from .forms import (
     ActualizarCantidadMaterialForm,
@@ -98,20 +101,38 @@ class TrabajoDetailView(PermisoRequeridoMixin, DetailView):
             context["cancelar_trabajo_form"] = CancelarTrabajoForm()
 
         puede_materiales = puede_gestionar_materiales(self.request.user)
+        puede_forzar = puede_forzar_stock_negativo(self.request.user)
         context["puede_gestionar_materiales"] = puede_materiales
+        context["puede_forzar_stock_negativo"] = puede_forzar
         context["listado_generado"] = trabajo.materiales.exists() or trabajo.etapas.exists()
 
         def _fila(material):
             pendiente = cantidad_pendiente_envio(material)
             enviado = cantidad_enviada(material)
             neto = cantidad_usada_neta(material)
+            disponible = (
+                stock_actual(material.producto, Deposito.GENERAL)
+                if material.producto_id is not None
+                else None
+            )
+            requiere_forzado = (
+                material.producto_id is not None
+                and pendiente > 0
+                and disponible < pendiente
+            )
             return {
                 "material": material,
                 "pendiente_envio": pendiente,
                 "enviado": enviado,
                 "neto_enviado": neto,
+                "stock_disponible": disponible,
+                "requiere_forzado": requiere_forzado,
+                "puede_forzar": puede_forzar,
                 "puede_enviar": (
-                    material.producto_id is not None and pendiente > 0 and puede_materiales
+                    material.producto_id is not None
+                    and pendiente > 0
+                    and puede_materiales
+                    and not requiere_forzado
                 ),
                 "puede_consumo": (
                     material.producto_id is not None
@@ -133,7 +154,23 @@ class TrabajoDetailView(PermisoRequeridoMixin, DetailView):
             context["etapa_form"] = EtapaTrabajoForm()
             context["material_catalogo_form"] = MaterialCatalogoForm(trabajo=trabajo)
             context["material_manual_form"] = MaterialManualForm(trabajo=trabajo)
-            context["puede_enviar_pendientes"] = bool(materiales_pendientes_de_envio(trabajo))
+
+            pendientes_batch = materiales_pendientes_de_envio(trabajo)
+            context["puede_enviar_pendientes"] = bool(pendientes_batch)
+
+            requerido_por_producto = {}
+            producto_por_id = {}
+            for material in pendientes_batch:
+                requerido_por_producto[material.producto_id] = (
+                    requerido_por_producto.get(material.producto_id, 0)
+                    + cantidad_pendiente_envio(material)
+                )
+                producto_por_id[material.producto_id] = material.producto
+
+            context["batch_requiere_forzado"] = any(
+                stock_actual(producto_por_id[producto_id], Deposito.GENERAL) < requerido
+                for producto_id, requerido in requerido_por_producto.items()
+            )
 
         # Advertencia persistente (no bloqueante) mientras el trabajo
         # esté en Listo o más adelante y sigan quedando materiales sin
@@ -365,9 +402,14 @@ class EnviarMaterialView(UserPassesTestMixin, View):
 
     def post(self, request, material_pk):
         try:
-            enviar_material(self.material, request.user)
+            enviar_material(
+                self.material,
+                request.user,
+                forzar_stock_negativo=request.POST.get("forzar_stock_negativo") == "on",
+                motivo_forzado=request.POST.get("motivo_forzado", ""),
+            )
             messages.success(request, "Material enviado.")
-        except ValueError as exc:
+        except (StockInsuficienteError, PermissionError, ValueError) as exc:
             messages.error(request, str(exc))
         return redirect("jobs:detalle", pk=self.material.trabajo_id)
 
@@ -380,11 +422,20 @@ class EnviarMaterialesPendientesView(UserPassesTestMixin, View):
         return puede_gestionar_materiales(self.request.user)
 
     def post(self, request, pk):
-        enviados = enviar_materiales_pendientes(self.trabajo, request.user)
-        if enviados:
-            messages.success(request, f"{len(enviados)} material(es) enviado(s).")
+        try:
+            enviados = enviar_materiales_pendientes(
+                self.trabajo,
+                request.user,
+                forzar_stock_negativo=request.POST.get("forzar_stock_negativo") == "on",
+                motivo_forzado=request.POST.get("motivo_forzado", ""),
+            )
+        except (StockInsuficienteError, PermissionError, ValueError) as exc:
+            messages.error(request, str(exc))
         else:
-            messages.info(request, "No había materiales pendientes de envío.")
+            if enviados:
+                messages.success(request, f"{len(enviados)} material(es) enviado(s).")
+            else:
+                messages.info(request, "No había materiales pendientes de envío.")
         return redirect("jobs:detalle", pk=pk)
 
 

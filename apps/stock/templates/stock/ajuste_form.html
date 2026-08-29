@@ -7,6 +7,9 @@
 
 <form method="post" class="row g-3" style="max-width: 600px;">
     {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="col-12"><div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div></div>
+    {% endif %}
     <div class="col-12">
         <label class="form-label">Producto</label>
         {{ form.producto }}
@@ -20,6 +23,21 @@
         <label class="form-label">Motivo</label>
         {{ form.referencia_libre }}
     </div>
+    {% if form.forzar_stock_negativo %}
+    <div class="col-12">
+        <div class="alert alert-warning mb-2">
+            <strong>Excepción de stock:</strong> un ajuste negativo que deje saldo
+            por debajo de cero requiere autorización explícita y quedará auditado.
+        </div>
+        <div class="form-check mb-2">
+            {{ form.forzar_stock_negativo }}
+            <label class="form-check-label">{{ form.forzar_stock_negativo.label }}</label>
+        </div>
+        <label class="form-label">{{ form.motivo_forzado.label }}</label>
+        {{ form.motivo_forzado }}
+        {% if form.motivo_forzado.errors %}<div class="text-danger small">{{ form.motivo_forzado.errors }}</div>{% endif %}
+    </div>
+    {% endif %}
     <div class="col-12">
         <button type="submit" class="btn btn-primary">Guardar</button>
     </div>

@@ -12,10 +12,16 @@ from apps.catalog.models import Marca, Producto
 from apps.tasks.models import EstadoTarea, Tarea, TipoAutomatizacion
 
 from .models import Deposito, MovimientoStock, TipoMovimiento
-from .permissions import puede_ajustar_stock, puede_configurar_stock_minimo, puede_registrar_entrada_salida
+from .permissions import (
+    puede_ajustar_stock,
+    puede_configurar_stock_minimo,
+    puede_forzar_stock_negativo,
+    puede_registrar_entrada_salida,
+)
 from .services import (
     bajo_minimo,
     cantidad_pendiente_devolucion,
+    StockInsuficienteError,
     productos_con_stock_bajo,
     registrar_movimiento,
     salidas_repuestos_pendientes,
@@ -108,6 +114,12 @@ class ConstraintsBaseDeDatosTests(TestCase):
 
     def setUp(self):
         self.producto = _producto("S3")
+        MovimientoStock.objects.create(
+            producto=self.producto,
+            deposito=Deposito.GENERAL,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("10"),
+        )
 
     def test_signo_incoherente_con_tipo_falla_en_la_base(self):
         with self.assertRaises(IntegrityError):
@@ -160,6 +172,13 @@ class PendienteDevolucionTests(TestCase):
     def setUp(self):
         self.diego = _crear_usuario("diego_devolucion", "Administrador")
         self.producto = _producto("S5", es_repuesto=True)
+        registrar_movimiento(
+            producto=self.producto,
+            deposito=Deposito.REPUESTOS,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("5"),
+            usuario=self.diego,
+        )
 
     def test_salida_sin_requiere_devolucion_no_aparece_en_pendientes(self):
         registrar_movimiento(
@@ -187,7 +206,7 @@ class PendienteDevolucionTests(TestCase):
         )
         self.assertEqual(cantidad_pendiente_devolucion(salida), Decimal("3"))
         self.assertEqual(salidas_repuestos_pendientes(), [salida])
-        self.assertEqual(stock_actual(self.producto, Deposito.REPUESTOS), Decimal("-3"))
+        self.assertEqual(stock_actual(self.producto, Deposito.REPUESTOS), Decimal("2"))
 
     def test_devolucion_completa_saca_de_pendientes(self):
         salida = registrar_movimiento(
@@ -216,6 +235,7 @@ class PermisosStockTests(TestCase):
         self.assertTrue(puede_registrar_entrada_salida(self.diego, Deposito.REPUESTOS))
         self.assertTrue(puede_ajustar_stock(self.diego, Deposito.GENERAL))
         self.assertTrue(puede_configurar_stock_minimo(self.diego))
+        self.assertTrue(puede_forzar_stock_negativo(self.diego))
 
     def test_rodrigo_no_puede_registrar_nada(self):
         self.assertFalse(puede_registrar_entrada_salida(self.rodrigo, Deposito.GENERAL))
@@ -248,6 +268,11 @@ class PermisosStockTests(TestCase):
     def test_solo_diego_configura_stock_minimo(self):
         self.assertFalse(puede_configurar_stock_minimo(self.contri))
         self.assertFalse(puede_configurar_stock_minimo(self.gabriel))
+
+    def test_solo_diego_puede_forzar_stock_negativo(self):
+        self.assertFalse(puede_forzar_stock_negativo(self.contri))
+        self.assertFalse(puede_forzar_stock_negativo(self.gabriel))
+        self.assertFalse(puede_forzar_stock_negativo(self.andres))
 
 
 class StockViewsTests(TestCase):
