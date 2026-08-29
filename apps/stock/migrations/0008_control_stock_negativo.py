@@ -155,8 +155,8 @@ class Migration(migrations.Migration):
                         ("motivo_forzado", ""),
                     ),
                     models.Q(
-                        ("forzado_stock_negativo", True),
                         ("cantidad__lt", 0),
+                        ("forzado_stock_negativo", True),
                     ),
                     _connector="OR",
                 ),
