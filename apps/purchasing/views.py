@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import OuterRef, Q, Subquery
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
@@ -13,8 +13,15 @@ from apps.pricing.models import HistorialCosto
 from apps.pricing.services import costo_actual
 from apps.stock.permissions import puede_registrar_entrada_salida
 
+from .documents import generar_pdf_orden, numero_documento_orden
 from .forms import CrearOrdenForm, LineaOrdenCompraForm, RecibirLineaForm
-from .models import EstadoOrdenCompra, LineaOrdenCompra, OrdenDeCompra
+from .mailing import EnvioOrdenCompraError, enviar_orden_por_email
+from .models import (
+    EstadoEnvioOrdenCompra,
+    EstadoOrdenCompra,
+    LineaOrdenCompra,
+    OrdenDeCompra,
+)
 from .permissions import (
     puede_cancelar_orden,
     puede_cerrar_orden,
@@ -118,18 +125,26 @@ class OrdenDetailView(PermisoRequeridoMixin, DetailView):
         context["puede_emitir"] = (
             puede_gestionar_orden(user) and es_borrador and tiene_lineas
         )
+        envio_en_curso = orden.estado_envio == EstadoEnvioOrdenCompra.ENVIANDO
         context["puede_reabrir"] = (
             puede_gestionar_orden(user)
             and orden.estado == EstadoOrdenCompra.EMITIDA
+            and not envio_en_curso
         )
-        context["puede_marcar_enviada"] = (
+        context["puede_enviar_email"] = (
             puede_gestionar_orden(user)
             and orden.estado == EstadoOrdenCompra.EMITIDA
+            and not envio_en_curso
+            and bool(orden.proveedor.email)
         )
+        context["puede_ver_pdf"] = orden.estado != EstadoOrdenCompra.BORRADOR
+        context["documento_numero"] = numero_documento_orden(orden)
+        context["envio_en_curso"] = envio_en_curso
         context["puede_cancelar"] = (
             puede_cancelar_orden(user)
             and orden.estado in (EstadoOrdenCompra.EMITIDA, EstadoOrdenCompra.ENVIADA)
             and not tiene_recepciones
+            and not envio_en_curso
         )
         context["puede_cerrar"] = (
             puede_cerrar_orden(user)
@@ -394,8 +409,55 @@ class ReabrirOrdenView(_TransicionOrdenView):
     nuevo_estado = EstadoOrdenCompra.BORRADOR
 
 
-class MarcarEnviadaView(_TransicionOrdenView):
-    nuevo_estado = EstadoOrdenCompra.ENVIADA
+class EnviarOrdenEmailView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.orden = get_object_or_404(
+            OrdenDeCompra.objects.select_related("proveedor"),
+            pk=self.kwargs["pk"],
+        )
+        return puede_gestionar_orden(self.request.user)
+
+    def post(self, request, pk):
+        try:
+            confirmada = enviar_orden_por_email(self.orden, request.user)
+        except (EnvioOrdenCompraError, PermissionError, ValueError) as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(
+                request,
+                f"{numero_documento_orden(confirmada)} enviada por email a {confirmada.enviada_a}.",
+            )
+        return redirect("purchasing:detalle", pk=pk)
+
+
+class OrdenPDFView(PermisoRequeridoMixin, View):
+    permission_required = "purchasing.view_ordendecompra"
+
+    def get(self, request, pk):
+        orden = get_object_or_404(
+            OrdenDeCompra.objects.select_related("proveedor"),
+            pk=pk,
+        )
+        if orden.estado == EstadoOrdenCompra.BORRADOR:
+            messages.error(request, "Emití la orden antes de generar su PDF oficial.")
+            return redirect("purchasing:detalle", pk=pk)
+
+        if orden.pdf_generado:
+            try:
+                with orden.pdf_generado.open("rb") as archivo:
+                    contenido = archivo.read()
+            except OSError:
+                contenido = generar_pdf_orden(orden)
+        else:
+            contenido = generar_pdf_orden(orden)
+
+        response = HttpResponse(contenido, content_type="application/pdf")
+        response["Content-Disposition"] = (
+            f'inline; filename="{numero_documento_orden(orden)}.pdf"'
+        )
+        return response
 
 
 class CancelarOrdenView(_TransicionOrdenView):
