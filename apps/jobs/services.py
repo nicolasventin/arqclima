@@ -11,6 +11,7 @@ from apps.stock.models import Deposito, TipoMovimiento
 from apps.stock.services import registrar_movimiento
 
 from .models import ORDEN_ESTADOS, EstadoTrabajo, EtapaTrabajo, MaterialTrabajo, Trabajo
+from .permissions import puede_cancelar_trabajo, puede_finalizar_trabajo
 
 
 class TransicionInvalidaError(ValueError):
@@ -157,6 +158,8 @@ def cancelar_trabajo(trabajo, usuario, motivo=""):
         .select_related("presupuesto__cliente")
         .get(pk=trabajo.pk)
     )
+    if not puede_cancelar_trabajo(usuario):
+        raise PermissionError("No tiene permiso para cancelar trabajos.")
     if trabajo_bloqueado.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
         raise TransicionInvalidaError(
             f"No se puede cancelar un trabajo en estado '{trabajo_bloqueado.estado}'."
@@ -229,6 +232,8 @@ def finalizar_trabajo(trabajo, usuario, observaciones=""):
         .select_related("presupuesto__cliente", "tecnico_asignado")
         .get(pk=trabajo.pk)
     )
+    if not puede_finalizar_trabajo(usuario, trabajo_bloqueado):
+        raise PermissionError("No tiene permiso para finalizar este trabajo.")
     if trabajo_bloqueado.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
         raise TransicionInvalidaError("El trabajo ya está cerrado.")
     if trabajo_bloqueado.estado != EstadoTrabajo.EN_EJECUCION:
