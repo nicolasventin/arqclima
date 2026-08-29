@@ -123,7 +123,7 @@
                     <span class="report-bar-fill {% if fila.chart_negative %}report-bar-danger{% else %}report-bar-success{% endif %}" style="--report-width: {{ fila.chart_width }}"></span>
                 </div>
                 {% if fila.tiene_costos_incompletos %}
-                <small class="report-bar-warning"><i class="bi bi-exclamation-triangle"></i> Costos incompletos: el resultado es parcial.</small>
+                <small class="report-bar-note-warning"><i class="bi bi-exclamation-triangle"></i> Costos incompletos: el resultado es parcial.</small>
                 {% endif %}
             </div>
             {% endfor %}
