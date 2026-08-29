@@ -3,53 +3,127 @@
 {% block title %}Reporte de empleados — ARQCLIMA{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Reporte de empleados</h1>
-    <div class="d-flex align-items-center gap-2">
-        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}">◀</a>
-        <span class="fw-semibold">{{ mes }}/{{ anio }}</span>
-        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}">▶</a>
+<div class="report-header">
+    <div>
+        <div class="detail-kicker">Reportes</div>
+        <h1>Empleados</h1>
+        <p>Carga operativa actual y actividad administrativa registrada durante el período.</p>
+    </div>
+    <div class="report-period-nav" aria-label="Navegación del período">
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}" aria-label="Mes anterior"><i class="bi bi-chevron-left"></i></a>
+        <div class="report-period-label">
+            <span>Período</span>
+            <strong>{{ periodo_fecha|date:"F Y"|capfirst }}</strong>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}" aria-label="Mes siguiente"><i class="bi bi-chevron-right"></i></a>
     </div>
 </div>
 
-<div class="alert alert-info">
-    Conteos agregados simples, no un registro de actividad minuto a minuto: "Tareas" y "Trabajos activos"
-    son el estado actual (no cambian al navegar de mes); "Actividad del período" sí depende del mes
-    seleccionado. Para Gabriel, "Servicios registrados" vs. "Repuestos vendidos" se clasifica según si el
-    movimiento de stock quedó marcado como pendiente de devolución — es una aproximación razonable, no un
-    dato que Gabriel cargue explícitamente como "tipo de operación".
+<div class="report-kpi-grid">
+    <article class="report-kpi">
+        <span class="report-kpi-label">Tareas pendientes</span>
+        <strong>{{ resumen_empleados.tareas_pendientes }}</strong>
+        <small>Estado actual del equipo mostrado.</small>
+    </article>
+    <article class="report-kpi {% if resumen_empleados.tareas_vencidas %}report-kpi-danger{% else %}report-kpi-success{% endif %}">
+        <span class="report-kpi-label">Tareas vencidas</span>
+        <strong>{{ resumen_empleados.tareas_vencidas }}</strong>
+        <small>Pendientes con fecha límite superada.</small>
+    </article>
+    <article class="report-kpi report-kpi-info">
+        <span class="report-kpi-label">Trabajos activos</span>
+        <strong>{{ resumen_empleados.trabajos_activos }}</strong>
+        <small>Foto actual de trabajos asignados en curso.</small>
+    </article>
+    <article class="report-kpi">
+        <span class="report-kpi-label">Actividad del período</span>
+        <strong>{{ resumen_empleados.actividad_periodo }}</strong>
+        <small>Suma de acciones administrativas contabilizadas.</small>
+    </article>
+</div>
+
+<div class="alert alert-info report-note">
+    Tareas y trabajos activos son una <strong>foto actual</strong>. La actividad administrativa sí usa el
+    período seleccionado. Son conteos operativos, no medición de horas ni productividad individual.
 </div>
 
 {% if filas %}
-<table class="table table-sm bg-white">
-    <thead>
-        <tr>
-            <th>Empleado</th>
-            <th>Tareas pendientes</th>
-            <th>Tareas vencidas</th>
-            <th>Trabajos activos</th>
-            <th>Actividad del período</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for fila in filas %}
-        <tr>
-            <td>{{ fila.usuario.get_full_name|default:fila.usuario.username }}</td>
-            <td>{{ fila.tareas_pendientes }}</td>
-            <td>{{ fila.tareas_vencidas }}</td>
-            <td>{{ fila.trabajos_activos }}</td>
-            <td>
-                {% for etiqueta, valor in fila.actividad_etiquetada %}
-                {{ etiqueta }}: {{ valor }}{% if not forloop.last %}, {% endif %}
-                {% empty %}
-                —
+<div class="report-employee-grid">
+    {% for fila in filas %}
+    <article class="report-panel report-employee-card">
+        <div class="report-panel-header">
+            <div>
+                <h2>{{ fila.usuario.get_full_name|default:fila.usuario.username }}</h2>
+                <p>{{ fila.usuario.groups.first.name|default:"Sin rol asignado" }}</p>
+            </div>
+            <span class="status-pill {% if fila.tareas_vencidas %}status-pill-danger{% else %}status-pill-success{% endif %}">
+                {{ fila.tareas_vencidas }} vencida{{ fila.tareas_vencidas|pluralize:"s" }}
+            </span>
+        </div>
+
+        <div class="report-mini-bars">
+            <div class="report-mini-bar">
+                <div><span>Tareas pendientes</span><strong>{{ fila.tareas_pendientes }}</strong></div>
+                <div class="report-bar-track"><span class="report-bar-fill report-bar-brand" style="--report-width: {{ fila.chart_tareas }}"></span></div>
+            </div>
+            <div class="report-mini-bar">
+                <div><span>Tareas vencidas</span><strong>{{ fila.tareas_vencidas }}</strong></div>
+                <div class="report-bar-track"><span class="report-bar-fill report-bar-danger" style="--report-width: {{ fila.chart_vencidas }}"></span></div>
+            </div>
+            <div class="report-mini-bar">
+                <div><span>Trabajos activos</span><strong>{{ fila.trabajos_activos }}</strong></div>
+                <div class="report-bar-track"><span class="report-bar-fill report-bar-info" style="--report-width: {{ fila.chart_trabajos }}"></span></div>
+            </div>
+            <div class="report-mini-bar">
+                <div><span>Actividad del período</span><strong>{{ fila.actividad_total }}</strong></div>
+                <div class="report-bar-track"><span class="report-bar-fill report-bar-success" style="--report-width: {{ fila.chart_actividad }}"></span></div>
+            </div>
+        </div>
+
+        <div class="report-activity-list">
+            {% for etiqueta, valor in fila.actividad_etiquetada %}
+            <div><span>{{ etiqueta }}</span><strong>{{ valor }}</strong></div>
+            {% empty %}
+            <div class="report-empty">Sin actividad registrada para el período.</div>
+            {% endfor %}
+        </div>
+    </article>
+    {% endfor %}
+</div>
+
+<section class="report-panel mt-3">
+    <div class="report-panel-header">
+        <div>
+            <h2>Detalle comparativo</h2>
+            <p>Los mismos datos en tabla para lectura exacta y control.</p>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table data-table">
+            <thead>
+                <tr>
+                    <th>Empleado</th>
+                    <th>Tareas pendientes</th>
+                    <th>Tareas vencidas</th>
+                    <th>Trabajos activos</th>
+                    <th>Actividad del período</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fila in filas %}
+                <tr>
+                    <td><span class="table-primary-text">{{ fila.usuario.get_full_name|default:fila.usuario.username }}</span></td>
+                    <td>{{ fila.tareas_pendientes }}</td>
+                    <td>{% if fila.tareas_vencidas %}<span class="status-pill status-pill-danger">{{ fila.tareas_vencidas }}</span>{% else %}0{% endif %}</td>
+                    <td>{{ fila.trabajos_activos }}</td>
+                    <td>{{ fila.actividad_total }}</td>
+                </tr>
                 {% endfor %}
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+            </tbody>
+        </table>
+    </div>
+</section>
 {% else %}
-<p class="text-muted">Sin empleados con tareas, trabajos o actividad para mostrar.</p>
+<div class="report-empty">Sin empleados con tareas, trabajos o actividad para mostrar.</div>
 {% endif %}
 {% endblock %}
