@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django import forms
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MinValueValidator
 
 from apps.catalog.models import Categoria, Marca, Producto
 
