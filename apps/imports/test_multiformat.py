@@ -71,6 +71,65 @@ def _xlsx_con_imagen():
     )
 
 
+
+
+def _xlsx_lista_comercial_por_bloques():
+    """
+    Replica el patrón de listas reales de proveedor donde la cabecera
+    nombra categoría/embalaje/precios pero NO rotula Código ni Nombre.
+    """
+    libro = openpyxl.Workbook()
+    hoja = libro.active
+    hoja.title = "LISTA GENERAL"
+
+    hoja["C5"] = "CODO A 90º HH"
+    hoja["E5"] = "EMBALAJE"
+    hoja["F5"] = "PRECIO $"
+    hoja["G5"] = "PRECIO BONIF"
+    hoja["H5"] = "PEDIDO"
+    hoja["I5"] = "SUB TOTAL"
+
+    hoja["C7"] = 101203105200000
+    hoja["D7"] = "CODO A 90º Ø 20"
+    hoja["E7"] = 200
+    hoja["F7"] = 100
+    hoja["G7"] = "$ 50.00"
+
+    hoja["C8"] = 101203105250000
+    hoja["D8"] = "CODO A 90º Ø 25"
+    hoja["E8"] = 120
+    hoja["F8"] = 200
+    hoja["G8"] = "$ 100.00"
+
+    # Producto anunciado pero todavía sin precio efectivo.
+    hoja["C9"] = 101203105400000
+    hoja["D9"] = "CODO A 90º Ø 40 - PROXIMAMENTE"
+    hoja["F9"] = 0
+    hoja["G9"] = "$ -"
+
+    hoja["C13"] = "CUPLA HH"
+    hoja["E13"] = "EMBALAJE"
+    hoja["F13"] = "PRECIO $"
+    hoja["G13"] = "PRECIO BONIF"
+    hoja["H13"] = "PEDIDO"
+    hoja["I13"] = "SUB TOTAL"
+
+    hoja["C15"] = "101203108200001"
+    hoja["D15"] = "CUPLA UNION Ø 20"
+    hoja["E15"] = 300
+    hoja["F15"] = 80
+    hoja["G15"] = "$ 40.00"
+
+    buffer = BytesIO()
+    libro.save(buffer)
+    buffer.seek(0)
+    return SimpleUploadedFile(
+        "lista-comercial-bloques.xlsx",
+        buffer.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 def _docx_con_tabla_e_imagen():
     documento = Document()
     tabla = documento.add_table(rows=2, cols=5)
@@ -168,6 +227,43 @@ class AnalisisMultiformatoTests(TestCase):
         self.assertEqual(imagen.numero_fila_origen, 2)
         self.assertGreater(imagen.ancho, 0)
         self.assertGreater(imagen.alto, 0)
+
+
+
+    def test_excel_por_bloques_detecta_codigo_nombre_y_precio_bonificado(self):
+        importacion = self._crear_importacion(_xlsx_lista_comercial_por_bloques())
+
+        filas = list(importacion.filas.order_by("numero_fila"))
+        self.assertEqual(len(filas), 4)
+
+        primera = filas[0]
+        self.assertEqual(primera.codigo, "101203105200000")
+        self.assertEqual(primera.nombre_texto, "CODO A 90º Ø 20")
+        self.assertEqual(primera.costo, Decimal("50.00"))
+        self.assertEqual(primera.categoria_texto, "CODO A 90º HH")
+        self.assertEqual(primera.categoria, ImportacionFila.Categoria.PARA_REVISAR)
+        self.assertFalse(primera.incluir)
+
+        sin_precio = next(fila for fila in filas if fila.numero_fila == 9)
+        self.assertEqual(sin_precio.costo, Decimal("0.00"))
+        self.assertEqual(sin_precio.categoria, ImportacionFila.Categoria.ERROR)
+
+        self.assertTrue(
+            any(
+                "bloque(s) comerciales" in advertencia
+                for advertencia in importacion.advertencias_analisis
+            )
+        )
+
+    def test_excel_por_bloques_no_confunde_embalaje_con_codigo(self):
+        importacion = self._crear_importacion(_xlsx_lista_comercial_por_bloques())
+
+        codigos = set(importacion.filas.values_list("codigo", flat=True))
+        self.assertIn("101203105200000", codigos)
+        self.assertIn("101203108200001", codigos)
+        self.assertNotIn("200", codigos)
+        self.assertNotIn("300", codigos)
+
 
     def test_word_extrae_tabla_e_imagen(self):
         importacion = self._crear_importacion(_docx_con_tabla_e_imagen())
@@ -412,6 +508,58 @@ class VistasMultiformatoTests(TestCase):
         fila.refresh_from_db()
         self.assertEqual(fila.categoria, ImportacionFila.Categoria.NUEVO_PRODUCTO)
         self.assertEqual(fila.confianza, ImportacionFila.Confianza.REVISADA)
+
+
+
+    def test_marca_masiva_reclasifica_lista_sin_columna_marca(self):
+        marca = Marca.objects.create(nombre="Tubofusion")
+        archivo = _xlsx_lista_comercial_por_bloques()
+        importacion = ImportacionListaPrecios.objects.create(
+            proveedor=self.proveedor,
+            archivo=archivo,
+            tipo_archivo=ImportacionListaPrecios.TipoArchivo.XLSX,
+            cargado_por=self.usuario,
+        )
+        procesar_importacion(importacion)
+
+        self.assertEqual(importacion.filas.filter(marca_texto="").count(), 4)
+
+        response = self.client.post(
+            reverse("imports:asignar_marca", args=[importacion.pk]),
+            {"marca": marca.pk},
+        )
+
+        self.assertRedirects(response, reverse("imports:detalle", args=[importacion.pk]))
+        self.assertFalse(importacion.filas.filter(marca_texto="").exists())
+        self.assertEqual(
+            importacion.filas.filter(
+                categoria=ImportacionFila.Categoria.NUEVO_PRODUCTO,
+                incluir=True,
+            ).count(),
+            3,
+        )
+        self.assertEqual(
+            importacion.filas.filter(categoria=ImportacionFila.Categoria.ERROR).count(),
+            1,
+        )
+
+    def test_preview_ofrece_marca_masiva_cuando_falta_columna_marca(self):
+        archivo = _xlsx_lista_comercial_por_bloques()
+        importacion = ImportacionListaPrecios.objects.create(
+            proveedor=self.proveedor,
+            archivo=archivo,
+            tipo_archivo=ImportacionListaPrecios.TipoArchivo.XLSX,
+            cargado_por=self.usuario,
+        )
+        procesar_importacion(importacion)
+
+        response = self.client.get(reverse("imports:detalle", args=[importacion.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "La planilla no informa Marca")
+        self.assertContains(response, "Detectamos códigos, nombres y precios")
+        self.assertContains(response, reverse("imports:asignar_marca", args=[importacion.pk]))
+
 
     def test_confirmacion_por_post_no_admite_fila_para_revisar_manipulada(self):
         archivo = SimpleUploadedFile(

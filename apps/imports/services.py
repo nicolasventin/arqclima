@@ -519,6 +519,67 @@ def reclasificar_fila(fila, usuario, datos_editados):
     return fila
 
 
+
+
+def asignar_marca_filas_sin_marca(importacion, usuario, marca):
+    """
+    Completa de forma masiva una marca elegida explícitamente por el usuario.
+
+    Está pensado para listas monomarca que no incluyen columna Marca. No
+    cambia confianza de extracción ni toca catálogo/costos: solo reclasifica
+    el preview con una decisión humana explícita.
+    """
+    filas = list(
+        importacion.filas.filter(marca_texto="").order_by("pk")
+    )
+    actualizadas = 0
+
+    for fila in filas:
+        clasificacion = _clasificar(
+            importacion,
+            {
+                "marca": marca.nombre,
+                "codigo": fila.codigo,
+                "nombre": fila.nombre_texto,
+                "descripcion": fila.descripcion_texto,
+                "costo_crudo": fila.costo,
+                "codigo_proveedor": fila.codigo_proveedor_texto,
+                "unidad": fila.unidad_texto,
+                "categoria": fila.categoria_texto,
+            },
+            usuario,
+        )
+        datos = clasificacion["datos"]
+        fila.marca_texto = datos["marca"]
+        fila.categoria = clasificacion["categoria"]
+        fila.detalle = clasificacion["detalle"]
+        fila.producto = clasificacion["producto"]
+        fila.incluir = (
+            fila.categoria not in (
+                ImportacionFila.Categoria.ERROR,
+                ImportacionFila.Categoria.PARA_REVISAR,
+                ImportacionFila.Categoria.SIN_CAMBIOS,
+            )
+            and fila.confianza not in (
+                ImportacionFila.Confianza.MEDIA,
+                ImportacionFila.Confianza.BAJA,
+            )
+        )
+        fila.save(
+            update_fields=[
+                "marca_texto",
+                "categoria",
+                "detalle",
+                "producto",
+                "incluir",
+            ]
+        )
+        actualizadas += 1
+
+    _restaurar_filas_marcadas_por_duplicado(importacion, usuario)
+    _marcar_duplicados(importacion)
+    return actualizadas
+
 def _crear_o_resolver_producto(fila, usuario):
     marca = _buscar_marca(fila.marca_texto)
     if marca is None:

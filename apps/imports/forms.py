@@ -1,6 +1,6 @@
 from django import forms
 
-from apps.catalog.models import Proveedor
+from apps.catalog.models import Marca, Proveedor
 
 from .models import ImportacionFila
 from .parsing import ArchivoImportacionInvalido, MAX_ARCHIVO_BYTES, tipo_archivo_por_nombre
@@ -34,6 +34,16 @@ class NuevaImportacionForm(forms.Form):
         if archivo.size == 0:
             raise forms.ValidationError("El archivo está vacío.")
         return archivo
+
+
+
+
+class AsignarMarcaImportacionForm(forms.Form):
+    marca = forms.ModelChoiceField(
+        queryset=Marca.objects.all().order_by("nombre"),
+        widget=forms.Select(attrs={"class": "form-select form-select-sm"}),
+        label="Marca",
+    )
 
 
 class EditarFilaImportacionForm(forms.Form):
