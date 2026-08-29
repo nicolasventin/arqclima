@@ -225,6 +225,18 @@ class ProveedorListView(PermisoRequeridoMixin, ListView):
     permission_required = "catalog.view_proveedor"
     template_name = "catalog/proveedor_list.html"
     context_object_name = "proveedores"
+    paginate_by = 50
+
+    def get_queryset(self):
+        qs = Proveedor.objects.all()
+        q = (self.request.GET.get("q") or "").strip()
+        if q:
+            qs = qs.filter(
+                db_models.Q(nombre_comercial__icontains=q)
+                | db_models.Q(contacto_nombre__icontains=q)
+                | db_models.Q(email__icontains=q)
+            )
+        return qs
 
 
 class ProveedorCreateView(PermisoRequeridoMixin, CreateView):
