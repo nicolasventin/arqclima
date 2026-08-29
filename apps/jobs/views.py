@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import DetailView, ListView
@@ -61,7 +62,24 @@ class TrabajoListView(PermisoRequeridoMixin, ListView):
 
     def get_queryset(self):
         qs = Trabajo.objects.select_related("presupuesto__cliente", "tecnico_asignado")
-        return queryset_trabajos_visibles(self.request.user, qs)
+        qs = queryset_trabajos_visibles(self.request.user, qs)
+
+        estado = self.request.GET.get("estado")
+        q = (self.request.GET.get("q") or "").strip()
+
+        if estado:
+            qs = qs.filter(estado=estado)
+        if q:
+            qs = qs.filter(
+                Q(presupuesto__cliente__nombre__icontains=q)
+                | Q(direccion__icontains=q)
+            )
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["estados"] = EstadoTrabajo.choices
+        return context
 
 
 class TrabajoDetailView(PermisoRequeridoMixin, DetailView):

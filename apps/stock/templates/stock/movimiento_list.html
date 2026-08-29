@@ -1,57 +1,100 @@
 {% extends "base.html" %}
 
 {% block title %}Movimientos de stock — ARQCLIMA{% endblock %}
+{% block page_heading %}Movimientos de stock{% endblock %}
+{% block page_subheading %}Historial inmutable de entradas, salidas y devoluciones{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-3">Movimientos de stock</h1>
+<div class="page-heading">
+    <div class="page-heading-copy">
+        <div class="page-heading-kicker">Inventario</div>
+        <h1>Movimientos de stock</h1>
+        <p>Historial cronológico de movimientos registrados en ambos depósitos.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'stock:lista' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver a stock
+        </a>
+    </div>
+</div>
 
-<form method="get" class="row g-2 mb-3">
-    <div class="col-auto">
-        <select name="deposito" class="form-select form-select-sm" onchange="this.form.submit()">
-            <option value="">Todos los depósitos</option>
+<form method="get" class="filter-bar">
+    <div class="filter-field filter-field-search">
+        <label for="movimiento-q">Buscar</label>
+        <input id="movimiento-q" type="text" name="q" value="{{ request.GET.q }}"
+               class="form-control form-control-sm"
+               placeholder="Producto, código, referencia o usuario">
+    </div>
+    <div class="filter-field">
+        <label for="movimiento-deposito">Depósito</label>
+        <select id="movimiento-deposito" name="deposito" class="form-select form-select-sm">
+            <option value="">Todos</option>
             <option value="general" {% if request.GET.deposito == "general" %}selected{% endif %}>Stock general</option>
             <option value="repuestos" {% if request.GET.deposito == "repuestos" %}selected{% endif %}>Stock de repuestos</option>
         </select>
     </div>
+    <div class="filter-actions">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+        {% if request.GET.q or request.GET.deposito %}
+        <a href="{% url 'stock:movimientos' %}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        {% endif %}
+    </div>
 </form>
 
-<table class="table table-sm bg-white">
-    <thead>
-        <tr>
-            <th>Fecha</th>
-            <th>Producto</th>
-            <th>Depósito</th>
-            <th>Tipo</th>
-            <th>Cantidad</th>
-            <th>Referencia</th>
-            <th>Registrado por</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for movimiento in movimientos %}
-        <tr>
-            <td>{{ movimiento.creado_en|date:"d/m/Y H:i" }}</td>
-            <td>{{ movimiento.producto }}</td>
-            <td>{{ movimiento.get_deposito_display }}</td>
-            <td>
-                {{ movimiento.get_tipo_display }}
-                {% if movimiento.requiere_devolucion %}<span class="badge bg-warning text-dark">Pendiente devolución</span>{% endif %}
-                {% if movimiento.forzado_stock_negativo %}
-                    <span class="badge bg-danger">Stock negativo forzado</span>
-                {% endif %}
-            </td>
-            <td>{{ movimiento.cantidad }}</td>
-            <td>
-                {{ movimiento.referencia_libre|default:"—" }}
-                {% if movimiento.forzado_stock_negativo %}
-                    <div class="small text-danger">Motivo: {{ movimiento.motivo_forzado }}</div>
-                {% endif %}
-            </td>
-            <td>{{ movimiento.registrado_por|default:"Sistema" }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="7" class="text-muted">No hay movimientos.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="data-panel">
+    <div class="table-responsive">
+        <table class="table data-table table-hover">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Producto</th>
+                    <th>Depósito</th>
+                    <th>Movimiento</th>
+                    <th>Cantidad</th>
+                    <th>Referencia</th>
+                    <th>Registrado por</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for movimiento in movimientos %}
+                <tr>
+                    <td>{{ movimiento.creado_en|date:"d/m/Y H:i" }}</td>
+                    <td><span class="table-primary-text">{{ movimiento.producto }}</span></td>
+                    <td>{{ movimiento.get_deposito_display }}</td>
+                    <td>
+                        {% if movimiento.tipo == "entrada" or movimiento.tipo == "devolucion" %}
+                        <span class="status-pill status-pill-success">{{ movimiento.get_tipo_display }}</span>
+                        {% elif movimiento.tipo == "salida" %}
+                        <span class="status-pill status-pill-info">{{ movimiento.get_tipo_display }}</span>
+                        {% else %}
+                        <span class="status-pill status-pill-neutral">{{ movimiento.get_tipo_display }}</span>
+                        {% endif %}
+                        {% if movimiento.requiere_devolucion %}
+                        <span class="status-pill status-pill-warning ms-1">Pendiente devolución</span>
+                        {% endif %}
+                        {% if movimiento.forzado_stock_negativo %}
+                        <span class="status-pill status-pill-danger ms-1">Negativo forzado</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="{% if movimiento.cantidad < 0 %}movement-negative{% else %}movement-positive{% endif %} table-primary-text">
+                            {{ movimiento.cantidad }}
+                        </span>
+                    </td>
+                    <td>
+                        {{ movimiento.referencia_libre|default:"—" }}
+                        {% if movimiento.forzado_stock_negativo %}
+                        <span class="table-secondary-text text-danger">Motivo: {{ movimiento.motivo_forzado }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ movimiento.registrado_por|default:"Sistema" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="empty-table"><i class="bi bi-clock-history"></i>No hay movimientos que coincidan con los filtros.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% include "includes/pagination.html" %}
 {% endblock %}

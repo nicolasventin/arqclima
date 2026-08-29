@@ -1,64 +1,95 @@
 {% extends "base.html" %}
 
 {% block title %}Stock — ARQCLIMA{% endblock %}
+{% block page_heading %}Stock{% endblock %}
+{% block page_subheading %}Disponibilidad por depósito y alertas mínimas{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Stock</h1>
-    <div class="d-flex gap-2">
+<div class="page-heading">
+    <div class="page-heading-copy">
+        <div class="page-heading-kicker">Inventario</div>
+        <h1>Stock</h1>
+        <p>Saldo actual por producto en stock general y repuestos.</p>
+    </div>
+    <div class="page-actions">
         {% if perms.stock.manage_stock_general or perms.stock.add_movimientostock %}
-        <a href="{% url 'stock:entrada' 'general' %}" class="btn btn-sm btn-outline-primary">+ Entrada general</a>
-        <a href="{% url 'stock:salida' 'general' %}" class="btn btn-sm btn-outline-primary">+ Salida general</a>
-        {% endif %}
-        {% if perms.stock.ajustar_stock_general %}
-        <a href="{% url 'stock:ajuste' %}" class="btn btn-sm btn-outline-secondary">Ajuste</a>
+        <a href="{% url 'stock:entrada' 'general' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-box-arrow-in-down me-1"></i>Entrada general
+        </a>
+        <a href="{% url 'stock:salida' 'general' %}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-box-arrow-up me-1"></i>Salida general
+        </a>
         {% endif %}
         {% if perms.stock.manage_stock_repuestos or perms.stock.add_movimientostock %}
-        <a href="{% url 'stock:entrada' 'repuestos' %}" class="btn btn-sm btn-outline-primary">+ Entrada repuestos</a>
-        <a href="{% url 'stock:salida' 'repuestos' %}" class="btn btn-sm btn-outline-primary">+ Salida repuestos</a>
-        <a href="{% url 'stock:pendientes_devolucion' %}" class="btn btn-sm btn-outline-warning">Pendientes de devolución</a>
+        <a href="{% url 'stock:entrada' 'repuestos' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-box-arrow-in-down me-1"></i>Entrada repuestos
+        </a>
+        <a href="{% url 'stock:salida' 'repuestos' %}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-box-arrow-up me-1"></i>Salida repuestos
+        </a>
         {% endif %}
-        <a href="{% url 'stock:movimientos' %}" class="btn btn-sm btn-outline-secondary">Ver movimientos</a>
+        {% if perms.stock.ajustar_stock_general %}
+        <a href="{% url 'stock:ajuste' %}" class="btn btn-outline-secondary btn-sm">Ajuste</a>
+        {% endif %}
+        {% if perms.stock.manage_stock_repuestos or perms.stock.add_movimientostock %}
+        <a href="{% url 'stock:pendientes_devolucion' %}" class="btn btn-outline-warning btn-sm">Devoluciones</a>
+        {% endif %}
+        <a href="{% url 'stock:movimientos' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-clock-history me-1"></i>Movimientos
+        </a>
     </div>
 </div>
 
-<form method="get" class="row g-2 mb-3">
-    <div class="col-auto">
-        <input type="text" name="q" value="{{ request.GET.q }}" class="form-control form-control-sm" placeholder="Buscar producto">
+<form method="get" class="filter-bar">
+    <div class="filter-field filter-field-search">
+        <label for="stock-q">Buscar producto</label>
+        <input id="stock-q" type="text" name="q" value="{{ request.GET.q }}"
+               class="form-control form-control-sm" placeholder="Nombre o código">
     </div>
-    <div class="col-auto">
-        <button type="submit" class="btn btn-sm btn-outline-secondary">Buscar</button>
+    <div class="filter-actions">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search me-1"></i>Buscar</button>
+        {% if request.GET.q %}
+        <a href="{% url 'stock:lista' %}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        {% endif %}
     </div>
 </form>
 
-<table class="table table-sm table-hover bg-white">
-    <thead>
-        <tr>
-            <th>Producto</th>
-            <th>Stock general</th>
-            <th>Stock repuestos</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for fila in filas %}
-        <tr>
-            <td>{{ fila.producto }}</td>
-            <td class="{% if fila.alerta_general %}table-danger{% endif %}">
-                {{ fila.stock_general }}
-                {% if fila.alerta_general %}<span class="badge bg-danger">Bajo mínimo</span>{% endif %}
-            </td>
-            <td class="{% if fila.alerta_repuestos %}table-danger{% endif %}">
-                {% if fila.stock_repuestos is not None %}
-                    {{ fila.stock_repuestos }}
-                    {% if fila.alerta_repuestos %}<span class="badge bg-danger">Bajo mínimo</span>{% endif %}
-                {% else %}
-                    <span class="text-muted">—</span>
-                {% endif %}
-            </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="3" class="text-muted">No hay productos.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="data-panel">
+    <div class="table-responsive">
+        <table class="table data-table table-hover">
+            <thead>
+                <tr>
+                    <th>Producto</th>
+                    <th>Stock general</th>
+                    <th>Stock repuestos</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fila in filas %}
+                <tr>
+                    <td>
+                        <span class="table-primary-text">{{ fila.producto }}</span>
+                        <span class="table-secondary-text">{{ fila.producto.codigo }}</span>
+                    </td>
+                    <td>
+                        <span class="stock-value {% if fila.alerta_general %}is-low{% endif %}">{{ fila.stock_general }}</span>
+                        {% if fila.alerta_general %}<span class="status-pill status-pill-danger ms-1">Bajo mínimo</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if fila.stock_repuestos is not None %}
+                        <span class="stock-value {% if fila.alerta_repuestos %}is-low{% endif %}">{{ fila.stock_repuestos }}</span>
+                        {% if fila.alerta_repuestos %}<span class="status-pill status-pill-danger ms-1">Bajo mínimo</span>{% endif %}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="empty-table"><i class="bi bi-box-seam"></i>No hay productos que coincidan con la búsqueda.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% include "includes/pagination.html" %}
 {% endblock %}

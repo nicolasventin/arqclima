@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
@@ -41,8 +42,14 @@ class OrdenListView(PermisoRequeridoMixin, ListView):
     def get_queryset(self):
         qs = OrdenDeCompra.objects.select_related("proveedor")
         estado = self.request.GET.get("estado")
+        q = (self.request.GET.get("q") or "").strip()
         if estado:
             qs = qs.filter(estado=estado)
+        if q:
+            qs = qs.filter(
+                Q(proveedor__nombre_comercial__icontains=q)
+                | Q(notas__icontains=q)
+            )
         return qs
 
     def get_context_data(self, **kwargs):

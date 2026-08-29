@@ -1,36 +1,66 @@
 {% extends "base.html" %}
 
 {% block title %}Pendientes de devolución — ARQCLIMA{% endblock %}
+{% block page_heading %}Pendientes de devolución{% endblock %}
+{% block page_subheading %}Repuestos enviados que todavía deben regresar{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-3">Repuestos pendientes de devolución</h1>
+<div class="page-heading">
+    <div class="page-heading-copy">
+        <div class="page-heading-kicker">Inventario</div>
+        <h1>Repuestos pendientes de devolución</h1>
+        <p>Salidas de service con unidades todavía pendientes de retornar al depósito.</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'stock:lista' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver a stock
+        </a>
+    </div>
+</div>
 
-<table class="table table-sm bg-white">
-    <thead>
-        <tr>
-            <th>Fecha</th>
-            <th>Producto</th>
-            <th>Enviado</th>
-            <th>Pendiente</th>
-            <th>Referencia</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for salida in pendientes %}
-        <tr>
-            <td>{{ salida.creado_en|date:"d/m/Y" }}</td>
-            <td>{{ salida.producto }}</td>
-            <td>{{ salida.enviado }}</td>
-            <td>{{ salida.pendiente }}</td>
-            <td>{{ salida.referencia_libre|default:"—" }}</td>
-            <td>
-                <a href="{% url 'stock:registrar_devolucion' salida.pk %}" class="btn btn-sm btn-outline-primary">Registrar devolución</a>
-            </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="6" class="text-muted">No hay repuestos pendientes de devolución.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="data-panel">
+    <div class="table-responsive">
+        <table class="table data-table table-hover">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Producto</th>
+                    <th>Enviado</th>
+                    <th>Pendiente</th>
+                    <th>Referencia</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for salida in pendientes %}
+                <tr>
+                    <td>{{ salida.creado_en|date:"d/m/Y" }}</td>
+                    <td><span class="table-primary-text">{{ salida.producto }}</span></td>
+                    <td>{{ salida.enviado }}</td>
+                    <td>
+                        <span class="stock-value is-low">{{ salida.pendiente }}</span>
+                        <span class="status-pill status-pill-warning ms-1">Pendiente</span>
+                    </td>
+                    <td>{{ salida.referencia_libre|default:"—" }}</td>
+                    <td>
+                        <div class="row-actions">
+                            <a href="{% url 'stock:registrar_devolucion' salida.pk %}"
+                               class="btn btn-sm btn-primary">
+                                <i class="bi bi-arrow-return-left me-1"></i>Registrar devolución
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="empty-table">
+                        <i class="bi bi-check-circle"></i>
+                        No hay repuestos pendientes de devolución.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endblock %}

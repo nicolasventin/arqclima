@@ -1,48 +1,90 @@
 {% extends "base.html" %}
 
 {% block title %}Presupuestos — ARQCLIMA{% endblock %}
+{% block page_heading %}Presupuestos{% endblock %}
+{% block page_subheading %}Seguimiento comercial y estado de cotizaciones{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Presupuestos</h1>
-    {% if perms.quotes.add_presupuesto %}
-    <a href="{% url 'quotes:nuevo' %}" class="btn btn-primary btn-sm">+ Nuevo presupuesto</a>
-    {% endif %}
+<div class="page-heading">
+    <div class="page-heading-copy">
+        <div class="page-heading-kicker">Comercial</div>
+        <h1>Presupuestos</h1>
+        <p>Consultá cotizaciones, estado comercial y total congelado de cada propuesta.</p>
+    </div>
+    <div class="page-actions">
+        {% if perms.quotes.add_presupuesto %}
+        <a href="{% url 'quotes:nuevo' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-file-earmark-plus me-1"></i>Nuevo presupuesto
+        </a>
+        {% endif %}
+    </div>
 </div>
 
-<form method="get" class="row g-2 mb-3">
-    <div class="col-auto">
-        <select name="estado" class="form-select form-select-sm" onchange="this.form.submit()">
-            <option value="">Todos los estados</option>
+<form method="get" class="filter-bar">
+    <div class="filter-field filter-field-search">
+        <label for="presupuesto-q">Buscar</label>
+        <input id="presupuesto-q" type="text" name="q" value="{{ request.GET.q }}"
+               class="form-control form-control-sm" placeholder="Cliente o dirección">
+    </div>
+    <div class="filter-field">
+        <label for="presupuesto-estado">Estado</label>
+        <select id="presupuesto-estado" name="estado" class="form-select form-select-sm">
+            <option value="">Todos</option>
             {% for valor, etiqueta in estados %}
             <option value="{{ valor }}" {% if request.GET.estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
             {% endfor %}
         </select>
     </div>
+    <div class="filter-actions">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+        {% if request.GET.q or request.GET.estado %}
+        <a href="{% url 'quotes:lista' %}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        {% endif %}
+    </div>
 </form>
 
-<table class="table table-sm table-hover bg-white">
-    <thead>
-        <tr>
-            <th>N°</th>
-            <th>Cliente</th>
-            <th>Fecha</th>
-            <th>Estado</th>
-            <th>Total</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for presupuesto in presupuestos %}
-        <tr>
-            <td><a href="{% url 'quotes:detalle' presupuesto.pk %}">#{{ presupuesto.numero }}</a></td>
-            <td>{{ presupuesto.cliente.nombre }}</td>
-            <td>{{ presupuesto.fecha|date:"d/m/Y" }}</td>
-            <td><span class="badge bg-secondary">{{ presupuesto.get_estado_display }}</span></td>
-            <td>${{ presupuesto.total_calculado }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5" class="text-muted">No hay presupuestos cargados todavía.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="data-panel">
+    <div class="table-responsive">
+        <table class="table data-table table-hover">
+            <thead>
+                <tr>
+                    <th>N°</th>
+                    <th>Cliente</th>
+                    <th>Fecha</th>
+                    <th>Estado</th>
+                    <th class="text-end">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for presupuesto in presupuestos %}
+                <tr>
+                    <td><a class="table-link" href="{% url 'quotes:detalle' presupuesto.pk %}">#{{ presupuesto.numero }}</a></td>
+                    <td>
+                        <span class="table-primary-text">{{ presupuesto.cliente.nombre }}</span>
+                        {% if presupuesto.direccion %}<span class="table-secondary-text">{{ presupuesto.direccion }}</span>{% endif %}
+                    </td>
+                    <td>{{ presupuesto.fecha|date:"d/m/Y" }}</td>
+                    <td>
+                        {% if presupuesto.estado == "aceptado" %}
+                        <span class="status-pill status-pill-success">{{ presupuesto.get_estado_display }}</span>
+                        {% elif presupuesto.estado == "enviado" %}
+                        <span class="status-pill status-pill-info">{{ presupuesto.get_estado_display }}</span>
+                        {% elif presupuesto.estado == "rechazado" or presupuesto.estado == "cancelado" %}
+                        <span class="status-pill status-pill-danger">{{ presupuesto.get_estado_display }}</span>
+                        {% elif presupuesto.estado == "vencido" %}
+                        <span class="status-pill status-pill-dark">{{ presupuesto.get_estado_display }}</span>
+                        {% else %}
+                        <span class="status-pill status-pill-neutral">{{ presupuesto.get_estado_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end"><span class="table-primary-text">&#36;{{ presupuesto.total_calculado }}</span></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="empty-table"><i class="bi bi-file-earmark-text"></i>No hay presupuestos que coincidan con los filtros.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% include "includes/pagination.html" %}
 {% endblock %}

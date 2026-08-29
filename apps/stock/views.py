@@ -75,8 +75,16 @@ class MovimientoListView(PermisoRequeridoMixin, ListView):
     def get_queryset(self):
         qs = MovimientoStock.objects.select_related("producto", "registrado_por")
         deposito = self.request.GET.get("deposito")
+        q = (self.request.GET.get("q") or "").strip()
         if deposito:
             qs = qs.filter(deposito=deposito)
+        if q:
+            qs = qs.filter(
+                Q(producto__nombre__icontains=q)
+                | Q(producto__codigo__icontains=q)
+                | Q(referencia_libre__icontains=q)
+                | Q(registrado_por__username__icontains=q)
+            )
         return qs
 
 
