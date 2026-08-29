@@ -228,11 +228,11 @@ def finalizar_trabajo(trabajo, usuario, observaciones=""):
     de stock toman el mismo lock, así ninguna operación concurrente puede
     cambiar la foto mientras se valida y cierra.
     """
-    trabajo_bloqueado = (
-        Trabajo.objects.select_for_update()
-        .select_related("presupuesto__cliente", "tecnico_asignado")
-        .get(pk=trabajo.pk)
-    )
+    # Bloquear únicamente la fila Trabajo. tecnico_asignado es nullable:
+    # incluirlo con select_related() genera un LEFT OUTER JOIN y PostgreSQL
+    # rechaza FOR UPDATE sobre el lado nullable. Las relaciones se leen
+    # luego por acceso normal; el mutex de 10F sigue siendo Trabajo.
+    trabajo_bloqueado = Trabajo.objects.select_for_update().get(pk=trabajo.pk)
     if not puede_finalizar_trabajo(usuario, trabajo_bloqueado):
         raise PermissionError("No tiene permiso para finalizar este trabajo.")
     if trabajo_bloqueado.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
