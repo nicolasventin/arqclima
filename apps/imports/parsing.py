@@ -38,7 +38,8 @@ ALIAS_NOMBRE = {
 ALIAS_COSTO = {
     "costo", "precio", "precio neto", "precio unitario", "importe",
     "precio de costo", "neto", "precio lista", "precio de lista", "price",
-    "unit price", "p. unitario",
+    "unit price", "p. unitario", "precio bonif", "precio bonificado",
+    "precio final", "costo neto", "costo bonificado",
 }
 ALIAS_CODIGO_PROVEEDOR = {
     "codigo proveedor", "código proveedor", "cod. proveedor", "cod proveedor",
@@ -296,6 +297,251 @@ def _extraer_filas_matriz(matriz, origen, confianza="alta"):
     return filas, advertencias
 
 
+
+
+PRECIO_PRIORITARIO = {
+    "precio bonif",
+    "precio bonificado",
+    "precio neto",
+    "precio final",
+    "costo neto",
+    "costo bonificado",
+}
+
+ENCABEZADOS_NO_CATEGORIA = {
+    "embalaje",
+    "pedido",
+    "sub total",
+    "subtotal",
+    "cantidad",
+    "cant",
+}
+
+
+def _indice_precio_bloque(valores):
+    """
+    Detecta la columna de precio/costo de una cabecera de bloque.
+
+    Si la lista tiene simultáneamente precio de lista y precio bonificado,
+    prioriza el bonificado/neto porque representa mejor el costo efectivo
+    que ARQCLIMA pagaría al proveedor.
+    """
+    candidatos = []
+    for indice, valor in enumerate(valores):
+        normalizado = _normalizar(valor)
+        if not normalizado:
+            continue
+
+        if normalizado in PRECIO_PRIORITARIO:
+            candidatos.append((0, indice))
+            continue
+
+        if normalizado in _ALIAS_NORMALIZADOS["costo"]:
+            candidatos.append((1, indice))
+            continue
+
+        if normalizado.startswith("precio") or normalizado.startswith("costo"):
+            candidatos.append((2, indice))
+
+    if not candidatos:
+        return None
+    candidatos.sort()
+    return candidatos[0][1]
+
+
+def _parece_codigo(valor):
+    texto = _texto_celda(valor)
+    if not texto or len(texto) < 5:
+        return False
+    if len(texto) > 80:
+        return False
+    if texto.count(" ") > 2:
+        return False
+
+    letras = sum(1 for caracter in texto if caracter.isalpha())
+    digitos = sum(1 for caracter in texto if caracter.isdigit())
+    if digitos >= 5 and letras <= 12:
+        return True
+
+    return bool(
+        re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{4,}", texto)
+        and digitos >= 1
+    )
+
+
+def _parece_nombre_producto(valor):
+    texto = _texto_celda(valor)
+    if len(texto) < 4:
+        return False
+    return any(caracter.isalpha() for caracter in texto)
+
+
+def _inferir_columnas_bloque(filas_bloque, indice_precio):
+    """
+    Infere Código y Nombre a partir del patrón de las filas del bloque.
+
+    Sirve para listas comerciales donde el proveedor no rotula esas dos
+    columnas en cada cabecera, pero las repite de manera estructurada.
+    """
+    candidatas = [
+        (numero, valores)
+        for numero, valores in filas_bloque
+        if indice_precio < len(valores)
+        and parsear_costo(valores[indice_precio]) is not None
+    ]
+    if not candidatas:
+        return None, None
+
+    limites = range(0, indice_precio)
+    puntajes_codigo = {}
+    puntajes_nombre = {}
+
+    for indice in limites:
+        puntajes_codigo[indice] = sum(
+            1
+            for _, valores in candidatas
+            if indice < len(valores) and _parece_codigo(valores[indice])
+        )
+        puntajes_nombre[indice] = sum(
+            1
+            for _, valores in candidatas
+            if indice < len(valores) and _parece_nombre_producto(valores[indice])
+        )
+
+    indice_codigo = max(puntajes_codigo, key=puntajes_codigo.get)
+    if puntajes_codigo[indice_codigo] == 0:
+        return None, None
+
+    candidatos_nombre = {
+        indice: puntaje
+        for indice, puntaje in puntajes_nombre.items()
+        if indice != indice_codigo
+    }
+    if not candidatos_nombre:
+        return None, None
+
+    indice_nombre = max(candidatos_nombre, key=candidatos_nombre.get)
+    if candidatos_nombre[indice_nombre] == 0:
+        return None, None
+
+    return indice_codigo, indice_nombre
+
+
+def _categoria_bloque(fila_cabecera, indice_precio):
+    candidatos = []
+    for indice, valor in enumerate(fila_cabecera[:indice_precio]):
+        texto = _texto_celda(valor)
+        normalizado = _normalizar(texto)
+        if not texto or normalizado in ENCABEZADOS_NO_CATEGORIA:
+            continue
+        if normalizado in _ALIAS_NORMALIZADOS["costo"]:
+            continue
+        if _parece_codigo(texto):
+            continue
+        if any(caracter.isalpha() for caracter in texto):
+            candidatos.append(texto)
+
+    if not candidatos:
+        return ""
+    return max(candidatos, key=len)
+
+
+def _extraer_filas_excel_por_bloques(matriz, origen):
+    """
+    Fallback estructural para listas Excel armadas por secciones.
+
+    Caso típico:
+        [categoría]  EMBALAJE  PRECIO $  PRECIO BONIF  PEDIDO  SUB TOTAL
+        [código]     [nombre]  [pack]    [precio]       ...
+
+    En estas planillas Código y Nombre no aparecen como encabezados
+    explícitos, por lo que el detector tabular clásico no puede encontrarlos.
+    """
+    cabeceras = []
+    for posicion, (_, valores) in enumerate(matriz):
+        indice_precio = _indice_precio_bloque(valores)
+        if indice_precio is not None:
+            cabeceras.append((posicion, indice_precio))
+
+    if not cabeceras:
+        return [], []
+
+    filas_resultado = []
+    advertencias = []
+    bloques_validos = 0
+
+    for bloque_indice, (posicion, indice_precio) in enumerate(cabeceras):
+        fin = (
+            cabeceras[bloque_indice + 1][0]
+            if bloque_indice + 1 < len(cabeceras)
+            else len(matriz)
+        )
+        numero_cabecera, fila_cabecera = matriz[posicion]
+        filas_bloque = matriz[posicion + 1 : fin]
+        indice_codigo, indice_nombre = _inferir_columnas_bloque(
+            filas_bloque,
+            indice_precio,
+        )
+        if indice_codigo is None or indice_nombre is None:
+            continue
+
+        categoria = _categoria_bloque(fila_cabecera, indice_precio)
+        bloques_validos += 1
+
+        for numero, valores in filas_bloque:
+            if len(filas_resultado) >= MAX_FILAS:
+                advertencias.append(
+                    f"{origen}: se alcanzó el límite de {MAX_FILAS} filas."
+                )
+                break
+
+            if (
+                indice_codigo >= len(valores)
+                or indice_nombre >= len(valores)
+                or indice_precio >= len(valores)
+            ):
+                continue
+
+            codigo = _texto_celda(valores[indice_codigo])
+            nombre = _texto_celda(valores[indice_nombre])
+            costo_crudo = valores[indice_precio]
+
+            if not _parece_codigo(codigo) or not _parece_nombre_producto(nombre):
+                continue
+            if parsear_costo(costo_crudo) is None:
+                continue
+
+            filas_resultado.append(
+                FilaAnalizada(
+                    numero=max(1, int(numero)),
+                    origen=f"{origen} · {categoria}" if categoria else origen,
+                    confianza="alta",
+                    datos={
+                        "marca": "",
+                        "codigo": codigo,
+                        "nombre": nombre,
+                        "descripcion": "",
+                        "costo_crudo": costo_crudo,
+                        "codigo_proveedor": "",
+                        "unidad": "",
+                        "categoria": categoria,
+                    },
+                )
+            )
+
+    if filas_resultado:
+        advertencias.append(
+            f"{origen}: se detectaron {len(filas_resultado)} productos en "
+            f"{bloques_validos} bloque(s) comerciales aunque la planilla no "
+            "trae encabezados explícitos Código/Nombre."
+        )
+        advertencias.append(
+            f"{origen}: cuando existe una columna de precio bonificado/neto "
+            "se usa como costo efectivo en lugar del precio de lista."
+        )
+
+    return filas_resultado, advertencias
+
 def _validar_zip_seguro(datos):
     try:
         with zipfile.ZipFile(BytesIO(datos)) as zf:
@@ -405,10 +651,12 @@ def _analizar_xlsx(datos):
             origen = f"Hoja {hoja.title}"
             try:
                 filas, adv = _extraer_filas_matriz(matriz, origen, confianza="alta")
-                resultado.filas.extend(filas)
-                resultado.advertencias.extend(adv)
             except ColumnasNoDetectadas as exc:
-                resultado.advertencias.append(str(exc))
+                filas, adv = _extraer_filas_excel_por_bloques(matriz, origen)
+                if not filas:
+                    resultado.advertencias.append(str(exc))
+            resultado.filas.extend(filas)
+            resultado.advertencias.extend(adv)
     finally:
         libro.close()
 
