@@ -57,7 +57,7 @@
             </thead>
             <tbody>
                 {% for orden in ordenes %}
-                <tr>
+                <tr data-row-href="{% url 'purchasing:detalle' orden.pk %}" tabindex="0" role="link" aria-label="Abrir orden #{{ orden.numero }}">
                     <td><a class="table-link" href="{% url 'purchasing:detalle' orden.pk %}">#{{ orden.numero }}</a></td>
                     <td><span class="table-primary-text">{{ orden.proveedor }}</span></td>
                     <td>{{ orden.get_deposito_destino_display }}</td>
