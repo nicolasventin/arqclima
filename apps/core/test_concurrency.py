@@ -354,8 +354,20 @@ class AtomicidadOperacionesCriticasTests(TestCase):
             cantidad=Decimal("5"),
             costo_esperado=Decimal("100"),
         )
-        OrdenDeCompra.objects.filter(pk=orden.pk).update(
-            estado=EstadoOrdenCompra.APROBADA
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            self.usuario,
+        )
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.APROBADA,
+            self.usuario,
+        )
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.ENVIADA,
+            self.usuario,
         )
         orden.refresh_from_db()
 
