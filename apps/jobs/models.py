@@ -105,10 +105,7 @@ class Trabajo(models.Model):
             models.CheckConstraint(
                 condition=(
                     ~models.Q(estado=EstadoTrabajo.TERMINADO)
-                    | (
-                        models.Q(terminado_por__isnull=False)
-                        & models.Q(terminado_en__isnull=False)
-                    )
+                    | models.Q(terminado_en__isnull=False)
                 ),
                 name="trabajo_terminado_requiere_metadata",
             ),
@@ -116,8 +113,7 @@ class Trabajo(models.Model):
                 condition=(
                     ~models.Q(estado=EstadoTrabajo.CANCELADO)
                     | (
-                        models.Q(cancelado_por__isnull=False)
-                        & models.Q(cancelado_en__isnull=False)
+                        models.Q(cancelado_en__isnull=False)
                         & ~models.Q(motivo_cancelacion="")
                     )
                 ),
