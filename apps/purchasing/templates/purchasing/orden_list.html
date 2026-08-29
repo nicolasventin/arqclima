@@ -2,7 +2,7 @@
 
 {% block title %}Órdenes de compra — ARQCLIMA{% endblock %}
 {% block page_heading %}Órdenes de compra{% endblock %}
-{% block page_subheading %}Aprobación, envío y recepción de compras{% endblock %}
+{% block page_subheading %}Emisión, envío y recepción de compras{% endblock %}
 
 {% block content %}
 <div class="page-heading">
@@ -62,15 +62,15 @@
                     <td><span class="table-primary-text">{{ orden.proveedor }}</span></td>
                     <td>{{ orden.get_deposito_destino_display }}</td>
                     <td>
-                        {% if orden.estado == "cancelada" or orden.estado == "rechazada" %}
+                        {% if orden.estado == "cancelada" %}
                         <span class="status-pill status-pill-danger">{{ orden.get_estado_display }}</span>
-                        {% elif orden.estado == "recepcion_parcial" or orden.estado == "pendiente_aprobacion" %}
+                        {% elif orden.estado == "emitida" or orden.estado == "recepcion_parcial" %}
                         <span class="status-pill status-pill-warning">{{ orden.get_estado_display }}</span>
                         {% elif orden.estado == "recibida" %}
                         <span class="status-pill status-pill-success">{{ orden.get_estado_display }}</span>
                         {% elif orden.estado == "cerrada" %}
                         <span class="status-pill status-pill-dark">{{ orden.get_estado_display }}</span>
-                        {% elif orden.estado == "enviada" or orden.estado == "aprobada" %}
+                        {% elif orden.estado == "enviada" %}
                         <span class="status-pill status-pill-info">{{ orden.get_estado_display }}</span>
                         {% else %}
                         <span class="status-pill status-pill-neutral">{{ orden.get_estado_display }}</span>
