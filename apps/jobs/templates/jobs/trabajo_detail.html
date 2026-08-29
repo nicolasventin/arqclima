@@ -11,7 +11,7 @@
         </p>
         <a href="{% url 'quotes:detalle' trabajo.presupuesto.pk %}">Ver presupuesto de origen (#{{ trabajo.presupuesto.numero }})</a>
     </div>
-    <span class="badge {% if trabajo.estado == 'cancelado' %}bg-danger{% else %}bg-secondary{% endif %} fs-6">
+    <span class="badge {% if trabajo.estado == 'cancelado' %}bg-danger{% elif trabajo.estado == 'terminado' %}bg-success{% else %}bg-secondary{% endif %} fs-6">
         {{ trabajo.get_estado_display }}
     </span>
 </div>
@@ -23,7 +23,33 @@
     <dt class="col-sm-3">Observaciones</dt>
     <dd class="col-sm-9" style="white-space: pre-line;">{{ trabajo.observaciones }}</dd>
     {% endif %}
+    {% if trabajo.terminado_en %}
+    <dt class="col-sm-3">Finalizado</dt>
+    <dd class="col-sm-9">
+        {{ trabajo.terminado_en|date:"d/m/Y H:i" }}
+        {% if trabajo.terminado_por %}por {{ trabajo.terminado_por }}{% endif %}
+    </dd>
+    {% endif %}
+    {% if trabajo.observaciones_cierre %}
+    <dt class="col-sm-3">Observaciones de cierre</dt>
+    <dd class="col-sm-9" style="white-space: pre-line;">{{ trabajo.observaciones_cierre }}</dd>
+    {% endif %}
+    {% if trabajo.cancelado_en %}
+    <dt class="col-sm-3">Cancelado</dt>
+    <dd class="col-sm-9">
+        {{ trabajo.cancelado_en|date:"d/m/Y H:i" }}
+        {% if trabajo.cancelado_por %}por {{ trabajo.cancelado_por }}{% endif %}
+    </dd>
+    <dt class="col-sm-3">Motivo de cancelación</dt>
+    <dd class="col-sm-9">{{ trabajo.motivo_cancelacion }}</dd>
+    {% endif %}
 </dl>
+
+{% if trabajo_cerrado %}
+<div class="alert alert-secondary py-2">
+    Este trabajo está cerrado. Los materiales, consumos y asignaciones operativas quedaron bloqueados.
+</div>
+{% endif %}
 
 {% if puede_asignar_tecnico %}
 <form method="post" action="{% url 'jobs:asignar_tecnico' trabajo.pk %}" class="row g-2 align-items-end mb-3" style="max-width: 500px;">
@@ -61,6 +87,30 @@
     </form>
     {% endfor %}
 </div>
+{% endif %}
+
+{% if puede_finalizar %}
+    {% if listo_para_finalizar %}
+    <form method="post" action="{% url 'jobs:finalizar' trabajo.pk %}" class="row g-2 mb-3" style="max-width: 650px;">
+        {% csrf_token %}
+        <div class="col-12">
+            <label class="form-label">{{ finalizar_trabajo_form.observaciones.label }}</label>
+            {{ finalizar_trabajo_form.observaciones }}
+        </div>
+        <div class="col-12">
+            <button type="submit" class="btn btn-sm btn-success">Finalizar trabajo</button>
+        </div>
+    </form>
+    {% elif trabajo.estado == 'en_ejecucion' %}
+    <div class="alert alert-warning py-2">
+        <strong>El trabajo todavía no se puede finalizar:</strong>
+        <ul class="mb-0">
+            {% for motivo in motivos_bloqueo_finalizacion %}
+            <li>{{ motivo }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
 {% endif %}
 
 {% if puede_cancelar %}
