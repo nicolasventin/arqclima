@@ -163,6 +163,17 @@ class LineaComercialPresupuestoForm(forms.ModelForm):
         self.fields["seccion"].required = False
         self.fields["monto"].validators.append(MinValueValidator(Decimal("0")))
 
+    def clean(self):
+        cleaned = super().clean()
+        opcional = cleaned.get("opcional")
+        incluido = cleaned.get("incluido")
+        recomendado = cleaned.get("recomendado")
+        if not opcional and incluido is False:
+            self.add_error("incluido", "Un concepto obligatorio debe estar incluido.")
+        if recomendado and not opcional:
+            self.add_error("recomendado", "Solo un concepto opcional puede marcarse como recomendado.")
+        return cleaned
+
 
 def _estilar_campos(fields):
     for name, field in fields.items():
