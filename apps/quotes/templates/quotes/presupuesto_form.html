@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{% if modo_edicion %}Editar presupuesto{% else %}Nuevo presupuesto{% endif %} — ARQCLIMA{% endblock %}
-{% block page_heading %}Nuevo presupuesto{% endblock %}
+{% block page_heading %}{% if modo_edicion %}Editar presupuesto{% else %}Nuevo presupuesto{% endif %}{% endblock %}
 {% block page_subheading %}Datos comerciales y condiciones de la propuesta{% endblock %}
 
 {% block content %}
