@@ -6,64 +6,74 @@
 <style>
     @page {
         size: A4;
-        margin: 31mm 15mm 20mm 15mm;
+        margin: 25mm 15mm 16mm 15mm;
+
         @frame header_frame {
             -pdf-frame-content: header_content;
             left: 15mm;
             right: 15mm;
-            top: 8mm;
-            height: 20mm;
+            top: 4mm;
+            height: 18mm;
         }
+
         @frame footer_frame {
             -pdf-frame-content: footer_content;
             left: 15mm;
             right: 15mm;
-            bottom: 7mm;
-            height: 9mm;
+            bottom: 5mm;
+            height: 7mm;
         }
     }
 
     body {
         font-family: Helvetica, Arial, sans-serif;
-        font-size: 9.5pt;
-        line-height: 1.35;
+        font-size: 8.6pt;
+        line-height: 1.22;
         color: #1f2933;
-    }
-
-    #header_content {
-        border-bottom: 1px solid #d7e1e7;
-        padding-bottom: 4mm;
     }
 
     .header-table,
     .meta-table,
     .commercial-table,
-    .summary-table {
+    .summary-table,
+    .bullet-table,
+    .callout-table {
         width: 100%;
         border-collapse: collapse;
+    }
+
+    #header_content {
+        border-bottom: 1px solid #d7e1e7;
     }
 
     .header-table td {
         border: 0;
         vertical-align: middle;
+        padding: 0;
     }
 
     .logo {
-        width: 52mm;
+        width: 45mm;
+        height: auto;
     }
 
     .company-data {
         text-align: right;
         color: #547080;
-        font-size: 7.8pt;
-        line-height: 1.25;
+        font-size: 6.8pt;
+        line-height: 1.18;
+    }
+
+    .company-data strong {
+        color: #075b9b;
+        font-size: 7.2pt;
     }
 
     #footer_content {
         border-top: 1px solid #d7e1e7;
-        padding-top: 2mm;
+        padding-top: 1.4mm;
         color: #71808a;
-        font-size: 7pt;
+        font-size: 6.4pt;
     }
 
     .footer-right {
@@ -71,17 +81,17 @@
     }
 
     .date-line {
-        margin: 0 0 5mm;
+        margin: 0 0 2.4mm;
         text-align: right;
-        font-size: 9.3pt;
+        font-size: 8.4pt;
     }
 
     .meta-table {
-        margin-bottom: 4mm;
+        margin-bottom: 2.6mm;
     }
 
     .meta-table td {
-        padding: 1.2mm 1.5mm;
+        padding: .7mm 1mm;
         border: 0;
         vertical-align: top;
     }
@@ -93,72 +103,83 @@
     }
 
     .quote-number {
-        margin: 5mm 0 5mm;
-        padding: 2.5mm 3mm;
-        border-left: 4px solid #f39200;
+        margin: 2.6mm 0 2.8mm;
+        padding: 1.6mm 2.6mm;
+        border-left: 3px solid #f39200;
         background: #f5f9fb;
         color: #075b9b;
-        font-size: 13pt;
+        font-size: 11.5pt;
         font-weight: bold;
     }
 
     .proposal-title {
-        margin: 5mm 0 2.5mm;
+        margin: 2.4mm 0 1.8mm;
         color: #075b9b;
-        font-size: 13pt;
+        font-size: 11.5pt;
         font-weight: bold;
         text-transform: uppercase;
     }
 
     .intro-note {
-        margin: 0 0 3mm;
+        margin: 0 0 1.8mm;
         color: #52636d;
+        font-size: 7.8pt;
         font-style: italic;
     }
 
     .technical-list {
-        margin: 0 0 4mm;
+        margin: 0 0 2mm;
+    }
+
+    .bullet-table {
+        margin: 0 0 .6mm;
+    }
+
+    .bullet-table td {
+        border: 0;
+        vertical-align: top;
         padding: 0;
     }
 
-    .technical-item {
-        margin: 0 0 2mm;
-        padding-left: 5mm;
-    }
-
-    .technical-item:before {
-        content: "✓";
+    .bullet-mark {
+        width: 5mm;
         color: #075b9b;
         font-weight: bold;
+        text-align: center;
+    }
+
+    .bullet-text {
+        padding-right: 1mm !important;
     }
 
     .stage {
-        margin-top: 5mm;
-        page-break-inside: avoid;
+        margin-top: 2.8mm;
     }
 
     .stage-title {
-        margin: 0 0 2.5mm;
-        padding: 2.2mm 3mm;
+        margin: 0 0 1.5mm;
+        padding: 1.4mm 2.6mm;
         background: #075b9b;
         color: #ffffff;
-        font-size: 11pt;
+        font-size: 9.8pt;
         font-weight: bold;
         text-transform: uppercase;
+        -pdf-keep-with-next: true;
     }
 
     .commercial-table {
-        margin: 3mm 0 2mm;
+        margin: 1.8mm 0 1.2mm;
+        page-break-inside: avoid;
     }
 
     .commercial-table td {
-        padding: 2mm 2.5mm;
+        padding: 1.25mm 2mm;
         border-bottom: 1px solid #dbe3e8;
         vertical-align: top;
     }
 
     .commercial-label {
-        width: 54%;
+        width: 56%;
         font-weight: bold;
     }
 
@@ -170,17 +191,19 @@
     }
 
     .commercial-amount {
-        width: 28%;
+        width: 26%;
         text-align: right;
         font-weight: bold;
         white-space: nowrap;
     }
 
     .optional-box {
-        margin: 3mm 0 4mm;
-        padding: 2.5mm 3mm;
-        border: 1px solid #f0c94c;
+        margin: 1.8mm 0 2mm;
+        padding: 1.7mm 2.4mm;
+        border: 1px solid #e8bd27;
         background: #fff9df;
+        font-size: 8pt;
+        page-break-inside: avoid;
     }
 
     .optional-box strong {
@@ -188,57 +211,59 @@
     }
 
     .section-block {
-        margin-top: 5mm;
+        margin-top: 3mm;
     }
 
     .section-heading {
-        margin: 0 0 2mm;
+        margin: 0;
         color: #142f42;
-        font-size: 10.5pt;
+        font-size: 9.4pt;
         font-weight: bold;
         text-transform: uppercase;
     }
 
-    .note-box {
-        margin-top: 5mm;
-        padding: 3mm 3.5mm;
-        border-left: 4px solid #ef4444;
-        background: #fff7f6;
+    .callout-table {
+        margin-top: 2.6mm;
+        page-break-inside: avoid;
     }
 
-    .payment-box {
-        margin-top: 5mm;
-        padding: 3mm 3.5mm;
-        border-left: 4px solid #f39200;
-        background: #fffaf0;
+    .callout-bar {
+        width: 2.2mm;
+        padding: 0;
     }
 
-    .warranty-box {
-        margin-top: 5mm;
-        padding: 3mm 3.5mm;
-        border-left: 4px solid #075b9b;
-        background: #f4f9fc;
+    .callout-content {
+        padding: 1.6mm 2.3mm;
+        vertical-align: top;
     }
 
-    .exclusion-box {
-        margin-top: 5mm;
-        padding: 3mm 3.5mm;
-        border-left: 4px solid #d4a800;
-        background: #fffcef;
+    .callout-content .section-heading {
+        margin-bottom: 1mm;
     }
 
-    .bullet {
-        margin: 0 0 1.4mm;
-        padding-left: 4mm;
+    .callout-note .callout-bar { background: #ef4444; }
+    .callout-note .callout-content { background: #fff7f6; }
+
+    .callout-payment .callout-bar { background: #f39200; }
+    .callout-payment .callout-content { background: #fffaf0; }
+
+    .callout-warranty .callout-bar { background: #075b9b; }
+    .callout-warranty .callout-content { background: #f4f9fc; }
+
+    .callout-exclusion .callout-bar { background: #d4a800; }
+    .callout-exclusion .callout-content { background: #fffcef; }
+
+    .compact-line {
+        margin: 0 0 .7mm;
     }
 
     .summary-table {
         width: 70mm;
-        margin: 5mm 0 0 auto;
+        margin: 3mm 0 0 auto;
     }
 
     .summary-table td {
-        padding: 2mm;
+        padding: 1.3mm;
         border-bottom: 1px solid #dbe3e8;
     }
 
@@ -246,21 +271,23 @@
         border-top: 2px solid #075b9b;
         border-bottom: 0;
         color: #075b9b;
-        font-size: 11pt;
+        font-size: 10pt;
         font-weight: bold;
     }
 
     .signature {
-        margin-top: 12mm;
+        margin-top: 5mm;
         text-align: right;
+        page-break-inside: avoid;
     }
 
     .signature-line {
         display: inline-block;
-        min-width: 60mm;
-        padding-top: 3mm;
+        min-width: 55mm;
+        padding-top: 2mm;
         border-top: 1px solid #7d8a91;
         text-align: left;
+        font-size: 8pt;
     }
 
     .muted {
@@ -273,13 +300,15 @@
 <div id="header_content">
     <table class="header-table">
         <tr>
-            <td style="width:58%;">
-                <img src="{% static 'img/arqclima-logo-oficial.svg' %}" class="logo">
+            <td style="width:55%;">
+                <img src="{% static 'img/arqclima-logo-pdf.png' %}" class="logo">
             </td>
-            <td style="width:42%;" class="company-data">
-                {% if empresa.direccion %}{{ empresa.direccion }}<br>{% endif %}
-                {% if empresa.telefono %}Tel/Wapp {{ empresa.telefono }}<br>{% endif %}
-                {% if empresa.email %}{{ empresa.email }}{% endif %}
+            <td style="width:45%;" class="company-data">
+                <strong>Presupuesto Nº {{ presupuesto.numero }}</strong><br>
+                {{ presupuesto.fecha|date:"d/m/Y" }}
+                {% if empresa.direccion %}<br>{{ empresa.direccion }}{% endif %}
+                {% if empresa.telefono %}<br>Tel/Wapp {{ empresa.telefono }}{% endif %}
+                {% if empresa.email %}<br>{{ empresa.email }}{% endif %}
             </td>
         </tr>
     </table>
@@ -319,7 +348,12 @@
 {% if alcance_lineas %}
 <div class="technical-list">
     {% for linea in alcance_lineas %}
-    <div class="technical-item">{{ linea }}</div>
+    <table class="bullet-table">
+        <tr>
+            <td class="bullet-mark">✓</td>
+            <td class="bullet-text">{{ linea }}</td>
+        </tr>
+    </table>
     {% endfor %}
 </div>
 {% endif %}
@@ -331,7 +365,12 @@
     {% if grupo.descripcion_lineas %}
     <div class="technical-list">
         {% for linea in grupo.descripcion_lineas %}
-        <div class="technical-item">{{ linea }}</div>
+        <table class="bullet-table">
+            <tr>
+                <td class="bullet-mark">✓</td>
+                <td class="bullet-text">{{ linea }}</td>
+            </tr>
+        </table>
         {% endfor %}
     </div>
     {% endif %}
@@ -405,31 +444,51 @@
 {% endif %}
 
 {% if notas_lineas %}
-<div class="note-box">
-    <div class="section-heading">NOTA</div>
-    {% for linea in notas_lineas %}<div class="bullet">- {{ linea }}</div>{% endfor %}
-</div>
+<table class="callout-table callout-note">
+    <tr>
+        <td class="callout-bar"></td>
+        <td class="callout-content">
+            <div class="section-heading">NOTA</div>
+            {% for linea in notas_lineas %}<div class="compact-line">- {{ linea }}</div>{% endfor %}
+        </td>
+    </tr>
+</table>
 {% endif %}
 
 {% if forma_pago_lineas %}
-<div class="payment-box">
-    <div class="section-heading">FORMA DE PAGO</div>
-    {% for linea in forma_pago_lineas %}<div class="bullet">- {{ linea }}</div>{% endfor %}
-</div>
+<table class="callout-table callout-payment">
+    <tr>
+        <td class="callout-bar"></td>
+        <td class="callout-content">
+            <div class="section-heading">FORMA DE PAGO</div>
+            {% for linea in forma_pago_lineas %}<div class="compact-line">- {{ linea }}</div>{% endfor %}
+        </td>
+    </tr>
+</table>
 {% endif %}
 
 {% if presupuesto.garantia %}
-<div class="warranty-box">
-    <div class="section-heading">GARANTÍA TRABAJOS</div>
-    <div>{{ presupuesto.garantia|linebreaksbr }}</div>
-</div>
+<table class="callout-table callout-warranty">
+    <tr>
+        <td class="callout-bar"></td>
+        <td class="callout-content">
+            <div class="section-heading">GARANTÍA TRABAJOS</div>
+            <div>{{ presupuesto.garantia|linebreaksbr }}</div>
+        </td>
+    </tr>
+</table>
 {% endif %}
 
 {% if exclusiones_lineas %}
-<div class="exclusion-box">
-    <div class="section-heading">EXCLUSIONES</div>
-    {% for linea in exclusiones_lineas %}<div class="bullet">✓ {{ linea }}</div>{% endfor %}
-</div>
+<table class="callout-table callout-exclusion">
+    <tr>
+        <td class="callout-bar"></td>
+        <td class="callout-content">
+            <div class="section-heading">EXCLUSIONES</div>
+            {% for linea in exclusiones_lineas %}<div class="compact-line">✓ {{ linea }}</div>{% endfor %}
+        </td>
+    </tr>
+</table>
 {% endif %}
 
 {% if presupuesto.condiciones %}
