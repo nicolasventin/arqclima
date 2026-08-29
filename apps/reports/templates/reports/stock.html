@@ -3,99 +3,168 @@
 {% block title %}Reporte de stock — ARQCLIMA{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Reporte de stock</h1>
-    <div class="d-flex align-items-center gap-2">
-        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}">◀</a>
-        <span class="fw-semibold">{{ mes }}/{{ anio }}</span>
-        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}">▶</a>
+<div class="report-header">
+    <div>
+        <div class="detail-kicker">Reportes</div>
+        <h1>Stock</h1>
+        <p>Alertas actuales, consumo del período y diferencias entre material enviado y utilizado.</p>
+    </div>
+    <div class="report-period-nav" aria-label="Navegación del período">
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}" aria-label="Mes anterior"><i class="bi bi-chevron-left"></i></a>
+        <div class="report-period-label">
+            <span>Período</span>
+            <strong>{{ periodo_fecha|date:"F Y"|capfirst }}</strong>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}" aria-label="Mes siguiente"><i class="bi bi-chevron-right"></i></a>
     </div>
 </div>
 
-<div class="alert alert-info">
-    "Poco stock" y "Stock valorizado" son una foto del estado <strong>actual</strong> — no cambian al navegar
-    de mes. "Material más utilizado" y "Diferencia enviado/usado" sí reflejan la actividad del período
-    seleccionado con el navegador de arriba.
+<div class="report-kpi-grid">
+    <article class="report-kpi {% if resumen_stock.stock_bajo %}report-kpi-danger{% else %}report-kpi-success{% endif %}">
+        <span class="report-kpi-label">Productos con stock bajo</span>
+        <strong>{{ resumen_stock.stock_bajo }}</strong>
+        <small>Foto del stock actual contra mínimos configurados.</small>
+    </article>
+    <article class="report-kpi report-kpi-info">
+        <span class="report-kpi-label">Productos con mayor salida</span>
+        <strong>{{ resumen_stock.productos_con_salida }}</strong>
+        <small>Productos que integran el ranking del período.</small>
+    </article>
+    <article class="report-kpi {% if resumen_stock.diferencias_materiales %}report-kpi-warning{% endif %}">
+        <span class="report-kpi-label">Materiales con diferencia</span>
+        <strong>{{ resumen_stock.diferencias_materiales }}</strong>
+        <small>Enviado distinto de utilizado en trabajos con actividad.</small>
+    </article>
+    {% if montos %}
+    <article class="report-kpi">
+        <span class="report-kpi-label">Stock valorizado</span>
+        <strong>$ {{ montos.total|floatformat:2 }}</strong>
+        <small>Foto actual · Solo Administrador.</small>
+    </article>
+    {% endif %}
 </div>
 
-<h2 class="h5">Productos con poco stock <span class="text-muted fw-normal">(estado actual)</span></h2>
-{% if metricas.productos_stock_bajo %}
-<table class="table table-sm bg-white" style="max-width: 600px;">
-    <thead><tr><th>Producto</th><th>Depósito</th><th>Cantidad actual</th></tr></thead>
-    <tbody>
-        {% for producto, deposito, cantidad in metricas.productos_stock_bajo %}
-        <tr>
-            <td>{{ producto }}</td>
-            <td>{{ deposito.label }}</td>
-            <td>{{ cantidad }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">Ningún producto por debajo de su stock mínimo.</p>
-{% endif %}
+<div class="alert alert-info report-note">
+    <strong>Stock bajo</strong> y <strong>stock valorizado</strong> son una foto actual. El ranking de material
+    utilizado y las diferencias enviado/usado sí dependen del período seleccionado.
+</div>
 
-<h2 class="h5 mt-4">Material más utilizado <span class="text-muted fw-normal">(actividad del período)</span></h2>
-{% if metricas.material_mas_utilizado %}
-<table class="table table-sm bg-white" style="max-width: 600px;">
-    <thead><tr><th>Producto</th><th>Cantidad salida</th></tr></thead>
-    <tbody>
-        {% for fila in metricas.material_mas_utilizado %}
-        <tr>
-            <td>{{ fila.marca_nombre }} {{ fila.producto_codigo }} — {{ fila.producto_nombre }}</td>
-            <td>{{ fila.cantidad }}</td>
-        </tr>
+<section class="report-panel">
+    <div class="report-panel-header">
+        <div>
+            <h2>Material más utilizado</h2>
+            <p>Ranking por cantidad de salida registrada durante el período.</p>
+        </div>
+    </div>
+    {% if chart_material_uso %}
+    <div class="report-bar-chart">
+        {% for fila in chart_material_uso %}
+        <div class="report-bar-row">
+            <div class="report-bar-meta">
+                <span>{{ fila.marca_nombre }} {{ fila.producto_codigo }} · {{ fila.producto_nombre }}</span>
+                <strong>{{ fila.cantidad }}</strong>
+            </div>
+            <div class="report-bar-track" role="img" aria-label="{{ fila.producto_nombre }}: {{ fila.cantidad }} unidades de salida">
+                <span class="report-bar-fill report-bar-brand" style="--report-width: {{ fila.chart_width }}"></span>
+            </div>
+        </div>
         {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">Sin salidas de stock en el período.</p>
-{% endif %}
+    </div>
+    {% else %}
+    <div class="report-empty">Sin salidas de stock en el período.</div>
+    {% endif %}
+</section>
 
-<h2 class="h5 mt-4">Diferencia enviado/usado <span class="text-muted fw-normal">(actividad del período)</span></h2>
-{% if metricas.diferencia_enviado_utilizado %}
-<table class="table table-sm bg-white" style="max-width: 750px;">
-    <thead><tr><th>Trabajo</th><th>Material</th><th>Enviado</th><th>Usado</th><th>Diferencia</th></tr></thead>
-    <tbody>
-        {% for fila in metricas.diferencia_enviado_utilizado %}
-        <tr>
-            <td>{{ fila.material.trabajo }}</td>
-            <td>{{ fila.material }}</td>
-            <td>{{ fila.enviado }}</td>
-            <td>{{ fila.usado }}</td>
-            <td>{{ fila.diferencia }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">Sin diferencias entre enviado y usado en materiales con actividad en el período.</p>
-{% endif %}
+<div class="report-grid mt-3">
+    <section class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h2>Productos con poco stock</h2>
+                <p>Estado actual, independientemente del mes seleccionado.</p>
+            </div>
+        </div>
+        {% if metricas.productos_stock_bajo %}
+        <div class="table-responsive">
+            <table class="table data-table">
+                <thead><tr><th>Producto</th><th>Depósito</th><th>Cantidad actual</th></tr></thead>
+                <tbody>
+                {% for producto, deposito, cantidad in metricas.productos_stock_bajo %}
+                    <tr>
+                        <td><span class="table-primary-text">{{ producto }}</span></td>
+                        <td>{{ deposito.label }}</td>
+                        <td><span class="stock-value is-low">{{ cantidad }}</span></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="report-empty report-empty-success"><i class="bi bi-check-circle"></i> Ningún producto está por debajo de su stock mínimo.</div>
+        {% endif %}
+    </section>
+
+    <section class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h2>Diferencia enviado / usado</h2>
+                <p>Materiales de trabajos con diferencia durante el período.</p>
+            </div>
+        </div>
+        {% if metricas.diferencia_enviado_utilizado %}
+        <div class="table-responsive">
+            <table class="table data-table">
+                <thead><tr><th>Trabajo</th><th>Material</th><th>Enviado</th><th>Usado</th><th>Diferencia</th></tr></thead>
+                <tbody>
+                    {% for fila in metricas.diferencia_enviado_utilizado %}
+                    <tr>
+                        <td>#{{ fila.material.trabajo.pk }}</td>
+                        <td>{{ fila.material }}</td>
+                        <td>{{ fila.enviado }}</td>
+                        <td>{{ fila.usado }}</td>
+                        <td><strong>{{ fila.diferencia }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="report-empty report-empty-success"><i class="bi bi-check-circle"></i> Sin diferencias entre enviado y utilizado.</div>
+        {% endif %}
+    </section>
+</div>
 
 {% if montos %}
-<h2 class="h5 mt-4">Stock valorizado <span class="badge bg-warning text-dark">Confidencial — solo Administrador</span> <span class="text-muted fw-normal">(estado actual)</span></h2>
-{% if montos.detalle %}
-<table class="table table-sm bg-white" style="max-width: 700px;">
-    <thead><tr><th>Producto</th><th>Depósito</th><th>Cantidad</th><th>Costo unitario</th><th>Valor</th></tr></thead>
-    <tbody>
-        {% for fila in montos.detalle %}
-        <tr>
-            <td>{{ fila.producto }}</td>
-            <td>{{ fila.deposito.label }}</td>
-            <td>{{ fila.cantidad }}</td>
-            <td>${{ fila.costo_unitario }}</td>
-            <td>${{ fila.valor }}</td>
-        </tr>
-        {% endfor %}
-        <tr class="fw-semibold">
-            <td colspan="4">Total</td>
-            <td>${{ montos.total }}</td>
-        </tr>
-    </tbody>
-</table>
-{% else %}
-<p class="text-muted">Sin stock valorizable (sin costo cargado o sin stock).</p>
-{% endif %}
+<section class="report-panel report-confidential mt-3">
+    <div class="report-panel-header">
+        <div>
+            <h2>Stock valorizado <span class="status-pill status-pill-warning ms-1">Solo Administrador</span></h2>
+            <p>Valor estimado del stock actual según el último costo disponible por producto.</p>
+        </div>
+    </div>
+    {% if montos.detalle %}
+    <div class="table-responsive">
+        <table class="table data-table">
+            <thead><tr><th>Producto</th><th>Depósito</th><th>Cantidad</th><th>Costo unitario</th><th>Valor</th></tr></thead>
+            <tbody>
+                {% for fila in montos.detalle %}
+                <tr>
+                    <td>{{ fila.producto }}</td>
+                    <td>{{ fila.deposito.label }}</td>
+                    <td>{{ fila.cantidad }}</td>
+                    <td>$ {{ fila.costo_unitario|floatformat:2 }}</td>
+                    <td><strong>$ {{ fila.valor|floatformat:2 }}</strong></td>
+                </tr>
+                {% endfor %}
+                <tr class="fw-semibold">
+                    <td colspan="4">Total valorizado</td>
+                    <td>$ {{ montos.total|floatformat:2 }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="report-empty">Sin stock valorizable: no hay stock o faltan costos.</div>
+    {% endif %}
+</section>
 {% endif %}
 {% endblock %}
