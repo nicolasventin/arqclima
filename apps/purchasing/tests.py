@@ -1,6 +1,8 @@
+import tempfile
 from decimal import Decimal
 
 from django.contrib.auth.models import Group, Permission
+from django.core import mail
 from django.db import connection, transaction
 from django.db.utils import DatabaseError
 from django.test import TestCase
@@ -32,8 +34,8 @@ def _crear_usuario(username, rol):
     return user
 
 
-def _proveedor(nombre="Proveedor Test"):
-    return Proveedor.objects.create(nombre_comercial=nombre)
+def _proveedor(nombre="Proveedor Test", email=""):
+    return Proveedor.objects.create(nombre_comercial=nombre, email=email)
 
 
 def _producto_proveedor(proveedor, codigo="COD-1"):
@@ -363,7 +365,9 @@ class ViewsTests(TestCase):
             Decimal("80"),
         )
 
-    def test_rodrigo_emite_y_envia_sin_aprobacion(self):
+    def test_rodrigo_emite_y_envia_por_email_sin_aprobacion(self):
+        self.proveedor.email = "compras@proveedor.test"
+        self.proveedor.save(update_fields=["email"])
         self.client.login(username="rodrigo_views", password="clave12345")
         orden = crear_orden(self.proveedor, Deposito.GENERAL, self.rodrigo)
         _agregar_linea(orden, self.pp, costo="80")
@@ -373,10 +377,28 @@ class ViewsTests(TestCase):
         orden.refresh_from_db()
         self.assertEqual(orden.estado, EstadoOrdenCompra.EMITIDA)
 
-        response = self.client.post(reverse("purchasing:marcar_enviada", args=[orden.pk]))
+        with tempfile.TemporaryDirectory() as media_root:
+            with self.settings(
+                EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+                MEDIA_ROOT=media_root,
+            ):
+                response = self.client.post(
+                    reverse("purchasing:enviar_email", args=[orden.pk])
+                )
+
         self.assertEqual(response.status_code, 302)
         orden.refresh_from_db()
         self.assertEqual(orden.estado, EstadoOrdenCompra.ENVIADA)
+        self.assertEqual(orden.enviada_a, "compras@proveedor.test")
+        self.assertTrue(orden.pdf_generado.name)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["compras@proveedor.test"])
+        self.assertTrue(
+            any(
+                attachment[2] == "application/pdf"
+                for attachment in mail.outbox[0].attachments
+            )
+        )
 
     def test_emitir_sin_lineas_muestra_error_y_no_rompe(self):
         self.client.login(username="diego_views", password="clave12345")
@@ -387,7 +409,7 @@ class ViewsTests(TestCase):
         self.assertEqual(orden.estado, EstadoOrdenCompra.BORRADOR)
 
     def test_rutas_de_aprobacion_desaparecieron(self):
-        for nombre in ("aprobar", "rechazar", "enviar_a_aprobacion"):
+        for nombre in ("aprobar", "rechazar", "enviar_a_aprobacion", "marcar_enviada"):
             with self.subTest(nombre=nombre):
                 with self.assertRaises(NoReverseMatch):
                     reverse(f"purchasing:{nombre}", args=[1])
