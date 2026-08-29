@@ -60,7 +60,7 @@
             </thead>
             <tbody>
                 {% for tarea in tareas %}
-                <tr class="{% if tarea.esta_vencida %}table-danger-soft{% endif %}">
+                <tr class="{% if tarea.esta_vencida %}table-danger-soft{% endif %}" {% if puede_gestionar %}data-row-href="{% url 'tasks:editar' tarea.pk %}" tabindex="0" role="link" aria-label="Editar tarea {{ tarea.titulo }}"{% endif %}>
                     <td>
                         <span class="table-primary-text">{{ tarea.titulo }}</span>
                         {% if tarea.descripcion %}<span class="table-secondary-text">{{ tarea.descripcion|truncatechars:80 }}</span>{% endif %}
