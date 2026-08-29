@@ -729,6 +729,7 @@ class EnviarYConsumoMaterialTests(TestCase):
         presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
         self.trabajo = crear_trabajo(presupuesto, self.diego, tecnico_asignado=self.andres)
         generar_listado_materiales(self.trabajo, self.diego)
+        _cargar_stock_trabajo(self.trabajo, self.diego)
         self.material = self.trabajo.materiales.get(producto__codigo="MAT-A", etapa__titulo="1era etapa")
 
     def test_cantidad_pendiente_envio_antes_de_enviar(self):
@@ -772,11 +773,15 @@ class EnviarYConsumoMaterialTests(TestCase):
         self.assertEqual(materiales_pendientes_de_envio(self.trabajo), [])
 
     def test_registrar_sobrante_crea_entrada_y_reduce_neto(self):
+        stock_inicial = stock_actual(self.material.producto, Deposito.GENERAL)
         enviar_material(self.material, self.diego)
         registrar_sobrante(self.material, Decimal("1"), self.andres)
         self.assertEqual(cantidad_usada_neta(self.material), self.material.cantidad_necesaria - Decimal("1"))
         stock = stock_actual(self.material.producto, Deposito.GENERAL)
-        self.assertEqual(stock, -(self.material.cantidad_necesaria - Decimal("1")))
+        self.assertEqual(
+            stock,
+            stock_inicial - self.material.cantidad_necesaria + Decimal("1"),
+        )
 
     def test_no_se_puede_devolver_mas_de_lo_enviado(self):
         enviar_material(self.material, self.diego)
@@ -813,6 +818,7 @@ class MarcarListoConPendientesTests(TestCase):
         presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
         self.trabajo = crear_trabajo(presupuesto, self.diego)
         generar_listado_materiales(self.trabajo, self.diego)
+        _cargar_stock_trabajo(self.trabajo, self.diego)
 
     def test_marcar_listo_con_pendientes_audita_accion_especifica(self):
         from apps.audit.models import AuditLog
@@ -885,6 +891,7 @@ class RegistrarConsumoViewTests(TestCase):
         presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
         self.trabajo = crear_trabajo(presupuesto, self.diego, tecnico_asignado=self.andres)
         generar_listado_materiales(self.trabajo, self.diego)
+        _cargar_stock_trabajo(self.trabajo, self.diego)
         self.material = self.trabajo.materiales.first()
         enviar_material(self.material, self.diego)
 
@@ -929,6 +936,7 @@ class EnviarMaterialViewTests(TestCase):
         presupuesto = _presupuesto_con_secciones_y_productos(cliente, self.diego)
         self.trabajo = crear_trabajo(presupuesto, self.diego)
         generar_listado_materiales(self.trabajo, self.diego)
+        _cargar_stock_trabajo(self.trabajo, self.diego)
         self.material = self.trabajo.materiales.first()
 
     def test_contri_puede_enviar_un_material(self):
