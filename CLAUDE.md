@@ -261,6 +261,21 @@ La Etapa 11 se continúa en bloques pequeños y verificables, sin agrupar cambio
 - Los gráficos son server-rendered con HTML/CSS y anchos calculados en la vista; no se agregó Chart.js ni otra dependencia JavaScript. Esto mantiene el frontend simple y hace que la información siga disponible aunque falle JavaScript.
 - La capa de negocio de `reports.services` no se duplicó: 11I transforma las métricas existentes únicamente para presentación y mantiene intacto el gating de `reports.view_montos_confidenciales`.
 - **11H — Importación masiva de productos**: Excel/CSV primero y luego PDF/Word, siempre con análisis, vista previa, validación y confirmación antes de modificar la base.
+
+**11H — Importación multiformato segura (implementado):**
+- Formatos soportados: `.xlsx`, `.xls`, `.csv`, `.pdf` y `.docx`; `.doc`/formatos con macros quedan fuera para mantener el parser mantenible y seguro.
+- Flujo obligatorio: archivo → análisis → vista previa → corrección/revisión → selección → confirmación. Ningún parser escribe en `Producto`, `ProductoProveedor` o `HistorialCosto`.
+- Código, Nombre/Descripción y Costo son columnas mínimas; Marca puede faltar para permitir listas identificables por código propio del proveedor. Una fila nueva sin marca queda `PARA_REVISAR`, nunca se crea por inferencia.
+- Excel/CSV se consideran confianza alta; tablas Word alta; texto tabulado Word y tablas extraídas de PDF se consideran confianza media y nacen destildadas aunque la clasificación sea válida.
+- PDF escaneado sin texto NO usa OCR automático. Se conservan imágenes detectables y se muestra advertencia: es preferible pedir Excel/CSV o revisar a mano antes que convertir una lectura dudosa en precios reales.
+- Se extraen y normalizan imágenes embebidas de XLSX/DOCX/PDF con límites de tamaño/resolución y deduplicación SHA-256. Son evidencia visual de la importación; no se asignan automáticamente a productos porque el catálogo no tiene imagen y una foto no identifica de forma segura un artículo.
+- Seguridad de archivos: límite 30 MB, máximo 10.000 filas, 250 páginas PDF, 60 imágenes, control de zip bomb para XLSX/DOCX y normalización de imágenes con Pillow.
+- Matching conserva la regla de negocio: primero código del proveedor cuando ya existe ese vínculo; luego Marca+Código oficial. Conflictos entre ambos caminos pasan a revisión.
+- Duplicados internos: duplicados idénticos se aplican una sola vez; el mismo producto con valores distintos bloquea todas las filas implicadas hasta corregir.
+- Unidad y categoría son opcionales. Unidad desconocida bloquea la fila; una categoría del proveedor solo se vincula si ya existe en ARQCLIMA y nunca se crea automáticamente.
+- La pantalla permite editar una fila y reclasificarla sin tocar catálogo. Las filas `ERROR` y `PARA_REVISAR` nunca pueden aplicarse por manipulación del POST.
+- Al confirmar se vuelve a clasificar contra el estado actual de la base y se vuelven a validar permisos para evitar condiciones de carrera o cambios ocurridos entre preview y confirmación.
+- El archivo original y las imágenes se sirven por vistas protegidas con los mismos permisos de la importación, no mediante enlaces públicos directos de MEDIA.
 - **11M — Auditoría de roles**: revisar la matriz real de permisos de Administrador, Ventas y Presupuestos, Service y Repuestos, Depósito y Técnico de Campo contra el trabajo real de la empresa.
 - **11N — Rediseño de permisos**: mostrar permisos en español y con lenguaje de negocio, diferenciando claramente permisos heredados por rol y permisos individuales extra.
 
