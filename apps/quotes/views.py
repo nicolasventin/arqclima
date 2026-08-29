@@ -2,6 +2,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -42,8 +43,14 @@ class PresupuestoListView(PermisoRequeridoMixin, ListView):
     def get_queryset(self):
         qs = Presupuesto.objects.select_related("cliente")
         estado = self.request.GET.get("estado")
+        q = (self.request.GET.get("q") or "").strip()
         if estado:
             qs = qs.filter(estado=estado)
+        if q:
+            qs = qs.filter(
+                Q(cliente__nombre__icontains=q)
+                | Q(direccion__icontains=q)
+            )
         return qs
 
     def get_context_data(self, **kwargs):
