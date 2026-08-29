@@ -43,8 +43,22 @@ class AsignarTecnicoForm(forms.Form):
 
 class CancelarTrabajoForm(forms.Form):
     motivo = forms.CharField(
+        required=True,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Motivo obligatorio de la cancelación"}),
+    )
+
+
+class FinalizarTrabajoForm(forms.Form):
+    observaciones = forms.CharField(
         required=False,
-        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Motivo de la cancelación"}),
+        label="Observaciones de cierre",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 2,
+                "placeholder": "Observaciones finales (opcional)",
+            }
+        ),
     )
 
 
