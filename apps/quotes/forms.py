@@ -4,6 +4,7 @@ from django import forms
 from django.core.validators import MaxValueValidator, MinValueValidator
 
 from apps.catalog.models import ProductoProveedor
+from apps.clients.models import Cliente
 
 from .models import (
     ItemPresupuesto,
@@ -23,16 +24,20 @@ class PresupuestoForm(forms.ModelForm):
             "notas_generales", "plantilla_condiciones",
         ]
         widgets = {
+            "cliente": forms.HiddenInput(),
             "fecha_vencimiento": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for name, field in self.fields.items():
-            if name in ("cliente", "descuento_general_tipo", "plantilla_condiciones"):
+            if name in ("descuento_general_tipo", "plantilla_condiciones"):
                 field.widget.attrs["class"] = "form-select"
-            else:
+            elif name != "cliente":
                 field.widget.attrs.setdefault("class", "form-control")
+
+        self.fields["cliente"].queryset = Cliente.objects.filter(activo=True)
+        self.fields["cliente"].error_messages["required"] = "Seleccioná un cliente."
 
         self.fields["cantidad_unidades"].validators.append(MinValueValidator(1))
         self.fields["cantidad_unidades"].widget.attrs["min"] = "1"
