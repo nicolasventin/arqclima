@@ -2,6 +2,7 @@ import threading
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib.auth.models import Group
 from django.db import close_old_connections
 from django.db.models import Sum
 from django.test import TestCase, TransactionTestCase
