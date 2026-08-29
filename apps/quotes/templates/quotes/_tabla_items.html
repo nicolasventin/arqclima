@@ -1,46 +1,28 @@
-<table class="table table-sm bg-white">
+<div class="data-panel">
+<div class="table-responsive">
+<table class="table data-table">
     <thead>
         <tr>
-            <th>Ítem</th>
-            <th>Cant.</th>
-            <th>P. unitario</th>
-            <th>Desc. %</th>
-            <th>IVA</th>
-            <th>Opcional</th>
-            <th>Incluido</th>
-            <th>Margen</th>
-            {% if puede_editar_estructura %}<th></th>{% endif %}
+            <th>Ítem</th><th>Cant.</th><th>P. unitario</th><th>Desc.</th><th>IVA</th><th>Opcional</th><th>Incluido</th><th>Margen</th>{% if puede_editar_estructura %}<th class="text-end">Acciones</th>{% endif %}
         </tr>
     </thead>
     <tbody>
         {% for fila in filas %}
-        <tr class="{% if fila.bajo_margen %}table-warning{% endif %}">
-            <td>{{ fila.item.producto|default:fila.item.descripcion_manual }}</td>
+        <tr {% if fila.bajo_margen %}class="table-warning"{% endif %}>
+            <td><span class="table-primary-text">{{ fila.item.producto|default:fila.item.descripcion_manual }}</span></td>
             <td>{{ fila.item.cantidad }}</td>
-            <td>${{ fila.item.precio_unitario }}</td>
+            <td>&#36;{{ fila.item.precio_unitario }}</td>
             <td>{{ fila.item.descuento_pct }}%</td>
             <td>{{ fila.item.get_tipo_iva_display }}</td>
-            <td>{% if fila.item.opcional %}Sí{% else %}No{% endif %}</td>
-            <td>{% if fila.item.incluido %}Sí{% else %}No{% endif %}</td>
-            <td>
-                {% if fila.margen is not None %}
-                    {{ fila.margen|floatformat:1 }}%
-                    {% if fila.bajo_margen %}<span title="Margen por debajo del mínimo configurado">⚠️</span>{% endif %}
-                {% else %}
-                    <span class="text-muted">—</span>
-                {% endif %}
-            </td>
-            {% if puede_editar_estructura %}
-            <td>
-                <form method="post" action="{% url 'quotes:eliminar_item' fila.item.pk %}">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Quitar</button>
-                </form>
-            </td>
-            {% endif %}
+            <td>{% if fila.item.opcional %}<span class="status-pill status-pill-info">Sí</span>{% else %}<span class="text-muted">No</span>{% endif %}</td>
+            <td>{% if fila.item.incluido %}<span class="status-pill status-pill-success">Sí</span>{% else %}<span class="status-pill status-pill-neutral">No</span>{% endif %}</td>
+            <td>{% if fila.margen is not None %}{{ fila.margen|floatformat:1 }}% {% if fila.bajo_margen %}<span class="status-pill status-pill-warning ms-1">Bajo mínimo</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            {% if puede_editar_estructura %}<td><div class="row-actions"><form method="post" action="{% url 'quotes:eliminar_item' fila.item.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Quitar</button></form></div></td>{% endif %}
         </tr>
         {% empty %}
-        <tr><td colspan="9" class="text-muted">Sin ítems.</td></tr>
+        <tr><td colspan="9" class="empty-table">Sin ítems.</td></tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
+</div>
