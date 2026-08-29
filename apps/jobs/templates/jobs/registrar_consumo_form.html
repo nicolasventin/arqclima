@@ -1,28 +1,8 @@
 {% extends "base.html" %}
-
 {% block title %}Registrar consumo — ARQCLIMA{% endblock %}
-
+{% block page_heading %}Registrar consumo real{% endblock %}
+{% block page_subheading %}Material enviado vs. utilizado{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">Registrar consumo real</h1>
-
-<p>
-    <strong>{{ material.producto|default:material.descripcion_manual }}</strong> —
-    enviado (neto): <strong>{{ neto }}</strong>
-</p>
-
-<form method="post" class="row g-3" style="max-width: 400px;">
-    {% csrf_token %}
-    <div class="col-12">
-        <label class="form-label">Cantidad realmente utilizada</label>
-        {{ form.cantidad_usada }}
-        {% if form.cantidad_usada.errors %}<div class="text-danger small">{{ form.cantidad_usada.errors }}</div>{% endif %}
-        <div class="form-text">
-            Se precarga con lo enviado (se asume que se usó todo). Si sobró material,
-            bajá el número — el sobrante vuelve a stock automáticamente.
-        </div>
-    </div>
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-    </div>
-</form>
+<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Trabajo #{{ material.trabajo_id }}</div><h1>Registrar consumo real</h1><div class="detail-subtitle">{{ material.producto|default:material.descripcion_manual }} · enviado neto: {{ neto }}</div></div><div class="detail-actions"><a href="{% url 'jobs:detalle' material.trabajo_id %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a></div></div>
+<form method="post" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Cantidad utilizada</h2><p>Si sobró material, la diferencia vuelve a stock automáticamente.</p></div><div class="form-card-body"><div class="form-grid"><div class="form-field form-field-half"><label>Cantidad realmente utilizada</label>{{ form.cantidad_usada }}{{ form.cantidad_usada.errors }}<div class="field-help">Se precarga con lo enviado porque el sistema asume uso completo salvo corrección.</div></div></div><div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Guardar consumo</button><a href="{% url 'jobs:detalle' material.trabajo_id %}" class="btn btn-outline-secondary">Cancelar</a></div></div></div></form>
 {% endblock %}

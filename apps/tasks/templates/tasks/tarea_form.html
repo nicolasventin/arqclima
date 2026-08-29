@@ -1,34 +1,12 @@
 {% extends "base.html" %}
-
 {% block title %}{% if object %}Editar tarea{% else %}Nueva tarea{% endif %} — ARQCLIMA{% endblock %}
-
+{% block page_heading %}{% if object %}Editar tarea{% else %}Nueva tarea{% endif %}{% endblock %}
+{% block page_subheading %}Responsable, prioridad y fecha límite{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">{% if object %}Editar tarea{% else %}Nueva tarea{% endif %}</h1>
-
-<form method="post" class="row g-3" style="max-width: 600px;">
-    {% csrf_token %}
-    <div class="col-12">
-        <label class="form-label">Título</label>
-        {{ form.titulo }}
-    </div>
-    <div class="col-12">
-        <label class="form-label">Descripción</label>
-        {{ form.descripcion }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Asignado a</label>
-        {{ form.asignado_a }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Prioridad</label>
-        {{ form.prioridad }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Fecha límite (opcional)</label>
-        {{ form.fecha_limite }}
-    </div>
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-    </div>
-</form>
+<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Operación</div><h1>{% if object %}Editar tarea{% else %}Nueva tarea{% endif %}</h1><div class="detail-subtitle">Cada tarea mantiene un responsable claro.</div></div><div class="detail-actions"><a href="{% url 'tasks:lista' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a></div></div>
+<form method="post" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Datos de la tarea</h2><p>Definí qué hay que hacer y quién lo toma.</p></div><div class="form-card-body">
+{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+<div class="form-grid"><div class="form-field"><label>Título</label>{{ form.titulo }}{{ form.titulo.errors }}</div><div class="form-field"><label>Descripción</label>{{ form.descripcion }}{{ form.descripcion.errors }}</div><div class="form-field form-field-half"><label>Asignado a</label>{{ form.asignado_a }}{{ form.asignado_a.errors }}</div><div class="form-field form-field-half"><label>Prioridad</label>{{ form.prioridad }}{{ form.prioridad.errors }}</div><div class="form-field form-field-half"><label>Fecha límite (opcional)</label>{{ form.fecha_limite }}{{ form.fecha_limite.errors }}</div></div>
+<div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Guardar</button><a href="{% url 'tasks:lista' %}" class="btn btn-outline-secondary">Cancelar</a></div>
+</div></div></form>
 {% endblock %}

@@ -1,45 +1,13 @@
 {% extends "base.html" %}
-
 {% block title %}Ajuste de stock — ARQCLIMA{% endblock %}
-
+{% block page_heading %}Ajuste de stock{% endblock %}
+{% block page_subheading %}Corrección manual auditada del stock general{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">Ajuste manual de stock (general)</h1>
-
-<form method="post" class="row g-3" style="max-width: 600px;">
-    {% csrf_token %}
-    {% if form.non_field_errors %}
-    <div class="col-12"><div class="alert alert-danger mb-0">{{ form.non_field_errors }}</div></div>
-    {% endif %}
-    <div class="col-12">
-        <label class="form-label">Producto</label>
-        {{ form.producto }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Cantidad (con signo)</label>
-        {{ form.cantidad }}
-        {% if form.cantidad.errors %}<div class="text-danger small">{{ form.cantidad.errors }}</div>{% endif %}
-    </div>
-    <div class="col-12">
-        <label class="form-label">Motivo</label>
-        {{ form.referencia_libre }}
-    </div>
-    {% if form.forzar_stock_negativo %}
-    <div class="col-12">
-        <div class="alert alert-warning mb-2">
-            <strong>Excepción de stock:</strong> un ajuste negativo que deje saldo
-            por debajo de cero requiere autorización explícita y quedará auditado.
-        </div>
-        <div class="form-check mb-2">
-            {{ form.forzar_stock_negativo }}
-            <label class="form-check-label">{{ form.forzar_stock_negativo.label }}</label>
-        </div>
-        <label class="form-label">{{ form.motivo_forzado.label }}</label>
-        {{ form.motivo_forzado }}
-        {% if form.motivo_forzado.errors %}<div class="text-danger small">{{ form.motivo_forzado.errors }}</div>{% endif %}
-    </div>
-    {% endif %}
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-    </div>
-</form>
+<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Inventario</div><h1>Ajuste manual de stock</h1><div class="detail-subtitle">Usá cantidades con signo para corregir diferencias del stock general.</div></div><div class="detail-actions"><a href="{% url 'stock:lista' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a></div></div>
+<form method="post" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Ajuste</h2><p>El motivo es obligatorio para mantener trazabilidad.</p></div><div class="form-card-body">
+{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+<div class="form-grid"><div class="form-field"><label>Producto</label>{{ form.producto }}{{ form.producto.errors }}</div><div class="form-field form-field-half"><label>Cantidad (con signo)</label>{{ form.cantidad }}{{ form.cantidad.errors }}</div><div class="form-field"><label>Motivo</label>{{ form.referencia_libre }}{{ form.referencia_libre.errors }}</div>
+{% if form.forzar_stock_negativo %}<div class="form-field form-section"><div class="alert alert-warning"><strong>Excepción de stock:</strong> si el ajuste deja saldo negativo requiere autorización explícita y motivo especial.</div><div class="form-check-row mb-3">{{ form.forzar_stock_negativo }}<div><label>{{ form.forzar_stock_negativo.label }}</label></div></div><label>{{ form.motivo_forzado.label }}</label>{{ form.motivo_forzado }}{{ form.motivo_forzado.errors }}</div>{% endif %}
+</div><div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Guardar ajuste</button><a href="{% url 'stock:lista' %}" class="btn btn-outline-secondary">Cancelar</a></div>
+</div></div></form>
 {% endblock %}

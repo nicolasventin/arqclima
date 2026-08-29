@@ -1,63 +1,12 @@
 {% extends "base.html" %}
-
 {% block title %}Agregar ítem manual — ARQCLIMA{% endblock %}
-
+{% block page_heading %}Ítem manual{% endblock %}
+{% block page_subheading %}Presupuesto #{{ presupuesto.numero }}{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">Agregar ítem manual al presupuesto #{{ presupuesto.numero }}</h1>
-
-<form method="post" class="row g-3" style="max-width: 700px;">
-    {% csrf_token %}
-    <div class="col-12">
-        <label class="form-label">Descripción</label>
-        {{ form.descripcion_manual }}
-        <div class="form-text">Ej. "Mano de obra", "Instalación", "Flete".</div>
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">Sección (opcional)</label>
-        {{ form.seccion }}
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">Cantidad</label>
-        {{ form.cantidad }}
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">Descuento (%)</label>
-        {{ form.descuento_pct }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Precio unitario</label>
-        {{ form.precio_unitario }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Costo unitario (opcional)</label>
-        {{ form.costo_unitario }}
-        <div class="form-text">
-            Sin costo cargado, este ítem queda fuera del chequeo de margen bajo.
-        </div>
-    </div>
-    <div class="col-12">
-        <button type="submit" name="sugerir_costo" class="btn btn-sm btn-outline-secondary">
-            Sugerir costo (mano de obra)
-        </button>
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">IVA</label>
-        {{ form.tipo_iva }}
-    </div>
-    <div class="col-md-4 form-check mt-4">
-        {{ form.opcional }}
-        <label class="form-check-label">Opcional (mejora recomendada)</label>
-    </div>
-    <div class="col-md-4 form-check mt-4">
-        {{ form.incluido }}
-        <label class="form-check-label">Incluido en el total</label>
-    </div>
-    {% if form.non_field_errors %}
-    <div class="col-12 text-danger">{{ form.non_field_errors }}</div>
-    {% endif %}
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Agregar ítem</button>
-        <a href="{% url 'quotes:detalle' presupuesto.pk %}" class="btn btn-outline-secondary">Cancelar</a>
-    </div>
-</form>
+<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Presupuesto #{{ presupuesto.numero }}</div><h1>Agregar ítem manual</h1><div class="detail-subtitle">Para mano de obra, instalación, flete u otros conceptos sin producto de catálogo.</div></div><div class="detail-actions"><a href="{% url 'quotes:detalle' presupuesto.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a></div></div>
+<form method="post" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Concepto manual</h2><p>Precio y costo quedan congelados en este presupuesto.</p></div><div class="form-card-body">
+{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+<div class="form-grid"><div class="form-field"><label>Descripción</label>{{ form.descripcion_manual }}{{ form.descripcion_manual.errors }}<div class="field-help">Ej. “Mano de obra”, “Instalación”, “Flete”.</div></div><div class="form-field form-field-third"><label>Sección (opcional)</label>{{ form.seccion }}{{ form.seccion.errors }}</div><div class="form-field form-field-third"><label>Cantidad</label>{{ form.cantidad }}{{ form.cantidad.errors }}</div><div class="form-field form-field-third"><label>Descuento (%)</label>{{ form.descuento_pct }}{{ form.descuento_pct.errors }}</div><div class="form-field form-field-half"><label>Precio unitario</label>{{ form.precio_unitario }}{{ form.precio_unitario.errors }}</div><div class="form-field form-field-half"><label>Costo unitario (opcional)</label>{{ form.costo_unitario }}{{ form.costo_unitario.errors }}<div class="field-help">Sin costo cargado queda fuera del chequeo de margen bajo.</div></div><div class="form-field"><button type="submit" name="sugerir_costo" class="btn btn-outline-secondary btn-sm">Sugerir costo (mano de obra)</button></div><div class="form-field form-field-third"><label>IVA</label>{{ form.tipo_iva }}{{ form.tipo_iva.errors }}</div><div class="form-field form-field-third"><div class="form-check-row">{{ form.opcional }}<div><label>Opcional</label><div class="field-help">Mejora recomendada.</div></div></div></div><div class="form-field form-field-third"><div class="form-check-row">{{ form.incluido }}<div><label>Incluido en el total</label></div></div></div></div>
+<div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Agregar ítem</button><a href="{% url 'quotes:detalle' presupuesto.pk %}" class="btn btn-outline-secondary">Cancelar</a></div>
+</div></div></form>
 {% endblock %}

@@ -1,161 +1,112 @@
 {% extends "base.html" %}
-
 {% block title %}{{ producto }} — ARQCLIMA{% endblock %}
+{% block page_heading %}{{ producto.marca.nombre }} {{ producto.codigo }}{% endblock %}
+{% block page_subheading %}{{ producto.nombre }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start">
-    <div>
-        <h1 class="h4 mb-0">{{ producto.marca.nombre }} {{ producto.codigo }}</h1>
-        <p class="text-muted mb-2">{{ producto.nombre }}</p>
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Producto</div>
+        <h1>{{ producto.marca.nombre }} {{ producto.codigo }}</h1>
+        <div class="detail-subtitle">{{ producto.nombre }}</div>
     </div>
-    {% if puede_editar %}
-    <a href="{% url 'catalog:producto_editar' producto.pk %}" class="btn btn-outline-primary btn-sm">Editar</a>
-    {% endif %}
+    <div class="detail-actions">
+        {% if producto.activo %}<span class="status-pill status-pill-success">Activo</span>{% else %}<span class="status-pill status-pill-neutral">Inactivo</span>{% endif %}
+        {% if producto.es_repuesto %}<span class="status-pill status-pill-info"><i class="bi bi-wrench-adjustable"></i>Repuesto</span>{% endif %}
+        {% if puede_editar %}<a href="{% url 'catalog:producto_editar' producto.pk %}" class="btn btn-sm btn-primary"><i class="bi bi-pencil me-1"></i>Editar</a>{% endif %}
+        <a href="{% url 'catalog:producto_lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a>
+    </div>
 </div>
 
-<dl class="row mt-3">
-    <dt class="col-sm-3">Categoría</dt>
-    <dd class="col-sm-9">{{ producto.categoria|default:"—" }}</dd>
-    <dt class="col-sm-3">Unidad de medida</dt>
-    <dd class="col-sm-9">{{ producto.get_unidad_medida_display }}</dd>
-    <dt class="col-sm-3">Línea de repuestos</dt>
-    <dd class="col-sm-9">{% if producto.es_repuesto %}Sí{% else %}No{% endif %}</dd>
-    <dt class="col-sm-3">Activo</dt>
-    <dd class="col-sm-9">{% if producto.activo %}Sí{% else %}No{% endif %}</dd>
-    {% if producto.descripcion %}
-    <dt class="col-sm-3">Descripción</dt>
-    <dd class="col-sm-9">{{ producto.descripcion }}</dd>
+<div class="detail-grid">
+    <section class="detail-card detail-card-half">
+        <div class="detail-card-title"><h2>Información</h2><span>Catálogo</span></div>
+        <dl class="detail-kv">
+            <div class="detail-kv-row"><dt>Marca</dt><dd>{{ producto.marca.nombre }}</dd></div>
+            <div class="detail-kv-row"><dt>Código oficial</dt><dd>{{ producto.codigo }}</dd></div>
+            <div class="detail-kv-row"><dt>Categoría</dt><dd>{{ producto.categoria|default:"—" }}</dd></div>
+            <div class="detail-kv-row"><dt>Unidad de medida</dt><dd>{{ producto.get_unidad_medida_display }}</dd></div>
+            {% if producto.descripcion %}<div class="detail-kv-row"><dt>Descripción</dt><dd>{{ producto.descripcion }}</dd></div>{% endif %}
+        </dl>
+    </section>
+
+    {% if stock_general is not None %}
+    <section class="detail-card detail-card-half">
+        <div class="detail-card-title"><h2>Stock</h2><span>Saldo actual</span></div>
+        <dl class="detail-kv">
+            <div class="detail-kv-row"><dt>Stock general</dt><dd><strong>{{ stock_general }}</strong></dd></div>
+            {% if stock_repuestos is not None %}<div class="detail-kv-row"><dt>Stock de repuestos</dt><dd><strong>{{ stock_repuestos }}</strong></dd></div>{% endif %}
+        </dl>
+        {% if puede_configurar_stock_minimo %}
+        <div class="form-section">
+            <div class="form-section-title">Alertas de mínimo</div>
+            <form method="post" action="{% url 'stock:actualizar_stock_minimo' producto.pk %}" class="inline-form-card">
+                {% csrf_token %}
+                <div class="form-grid">
+                    <div class="form-field form-field-half"><label>Stock mínimo general</label>{{ stock_minimo_form.stock_minimo_general }}</div>
+                    <div class="form-field form-field-half"><label>Stock mínimo repuestos</label>{{ stock_minimo_form.stock_minimo_repuestos }}</div>
+                </div>
+                <div class="form-actions"><button type="submit" class="btn btn-sm btn-primary">Guardar mínimos</button></div>
+            </form>
+        </div>
+        {% endif %}
+    </section>
     {% endif %}
-</dl>
 
-<h2 class="h5 mt-4">Proveedores</h2>
-<table class="table table-sm bg-white">
-    <thead>
-        <tr>
-            <th>Proveedor</th>
-            <th>Código del proveedor</th>
-            <th>Activo</th>
-            {% if puede_editar %}<th></th>{% endif %}
-        </tr>
-    </thead>
-    <tbody>
-        {% for relacion in producto.productoproveedor_set.all %}
-        <tr>
-            <td>{{ relacion.proveedor.nombre_comercial }}</td>
-            <td>{{ relacion.codigo_proveedor|default:"—" }}</td>
-            <td>{% if relacion.activo %}Sí{% else %}No{% endif %}</td>
-            {% if puede_editar %}
-            <td>
-                <form method="post" action="{% url 'catalog:producto_quitar_proveedor' producto.pk relacion.pk %}">
-                    {% csrf_token %}
-                    <button class="btn btn-sm btn-outline-danger" type="submit">Quitar</button>
-                </form>
-            </td>
-            {% endif %}
-        </tr>
-        {% empty %}
-        <tr><td colspan="4" class="text-muted">Todavía no tiene proveedores cargados.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+    <section class="detail-card">
+        <div class="detail-card-title"><h2>Proveedores</h2><span>{{ producto.productoproveedor_set.count }} vinculados</span></div>
+        <div class="table-responsive">
+            <table class="table data-table">
+                <thead><tr><th>Proveedor</th><th>Código del proveedor</th><th>Estado</th>{% if puede_editar %}<th class="text-end">Acciones</th>{% endif %}</tr></thead>
+                <tbody>
+                {% for relacion in producto.productoproveedor_set.all %}
+                <tr>
+                    <td><span class="table-primary-text">{{ relacion.proveedor.nombre_comercial }}</span></td>
+                    <td>{{ relacion.codigo_proveedor|default:"—" }}</td>
+                    <td>{% if relacion.activo %}<span class="status-pill status-pill-success">Activo</span>{% else %}<span class="status-pill status-pill-neutral">Inactivo</span>{% endif %}</td>
+                    {% if puede_editar %}<td><div class="row-actions"><form method="post" action="{% url 'catalog:producto_quitar_proveedor' producto.pk relacion.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit">Quitar</button></form></div></td>{% endif %}
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="empty-table">Todavía no tiene proveedores cargados.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if puede_editar and proveedor_form %}
+        <div class="form-section">
+            <div class="form-section-title">Vincular proveedor</div>
+            <form method="post" action="{% url 'catalog:producto_agregar_proveedor' producto.pk %}" class="inline-form-card">
+                {% csrf_token %}
+                <div class="form-grid"><div class="form-field form-field-half"><label>Proveedor</label>{{ proveedor_form.proveedor }}</div><div class="form-field form-field-half"><label>Código del proveedor</label>{{ proveedor_form.codigo_proveedor }}</div></div>
+                <div class="form-actions"><button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-link-45deg me-1"></i>Agregar proveedor</button></div>
+            </form>
+        </div>
+        {% endif %}
+    </section>
 
-{% if puede_editar and proveedor_form %}
-<form method="post" action="{% url 'catalog:producto_agregar_proveedor' producto.pk %}" class="row g-2 align-items-end" style="max-width: 600px;">
-    {% csrf_token %}
-    <div class="col-auto">
-        <label class="form-label">Agregar proveedor</label>
-        {{ proveedor_form.proveedor }}
-    </div>
-    <div class="col-auto">
-        <label class="form-label">Código del proveedor</label>
-        {{ proveedor_form.codigo_proveedor }}
-    </div>
-    <div class="col-auto">
-        <button type="submit" class="btn btn-sm btn-secondary">Agregar</button>
-    </div>
-</form>
-{% endif %}
-
-{% if puede_ver_precio %}
-<h2 class="h5 mt-4">Precios</h2>
-<p>Margen aplicado: <strong>{{ margen_actual }}%</strong> <span class="text-muted">(nivel: {{ margen_origen }})</span></p>
-
-<table class="table table-sm bg-white">
-    <thead>
-        <tr>
-            <th>Proveedor</th>
-            <th>Costo actual</th>
-            <th>Fecha</th>
-            <th>Precio de venta</th>
-            {% if puede_registrar_costo %}<th>Cargar costo nuevo</th>{% endif %}
-        </tr>
-    </thead>
-    <tbody>
-        {% for fila in filas_precio %}
-        <tr class="{% if fila.es_mas_conveniente %}table-success{% endif %}">
-            <td>
-                {{ fila.relacion.proveedor.nombre_comercial }}
-                {% if fila.es_mas_conveniente %}<span class="badge bg-success">más conveniente</span>{% endif %}
-            </td>
-            <td>{% if fila.costo %}${{ fila.costo }}{% else %}<span class="text-muted">sin costo cargado</span>{% endif %}</td>
-            <td>{{ fila.fecha|date:"d/m/Y"|default:"—" }}</td>
-            <td>{% if fila.precio_venta %}${{ fila.precio_venta }}{% else %}—{% endif %}</td>
-            {% if puede_registrar_costo %}
-            <td>
-                <form method="post" action="{% url 'pricing:registrar_costo' producto.pk fila.relacion.pk %}" class="d-flex gap-1">
-                    {% csrf_token %}
-                    {{ costo_form.costo }}
-                    <button type="submit" class="btn btn-sm btn-outline-secondary">Cargar</button>
-                </form>
-            </td>
-            {% endif %}
-        </tr>
-        {% empty %}
-        <tr><td colspan="5" class="text-muted">Todavía no tiene proveedores para cotizar.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
-
-{% if puede_gestionar_margenes %}
-<form method="post" action="{% url 'pricing:actualizar_margen_producto' producto.pk %}" class="row g-2 align-items-end" style="max-width: 400px;">
-    {% csrf_token %}
-    <div class="col-auto">
-        <label class="form-label">Margen propio de este producto (%)</label>
-        {{ margen_form.margen }}
-    </div>
-    <div class="col-auto">
-        <button type="submit" class="btn btn-sm btn-secondary">Guardar margen</button>
-    </div>
-</form>
-{% endif %}
-{% endif %}
-
-{% if stock_general is not None %}
-<h2 class="h5 mt-4">Stock</h2>
-<dl class="row">
-    <dt class="col-sm-3">Stock general</dt>
-    <dd class="col-sm-9">{{ stock_general }}</dd>
-    {% if stock_repuestos is not None %}
-    <dt class="col-sm-3">Stock de repuestos</dt>
-    <dd class="col-sm-9">{{ stock_repuestos }}</dd>
+    {% if puede_ver_precio %}
+    <section class="detail-card">
+        <div class="detail-card-title"><h2>Costos y precios</h2><span>Margen {{ margen_actual }}% · {{ margen_origen }}</span></div>
+        <div class="table-responsive">
+            <table class="table data-table">
+                <thead><tr><th>Proveedor</th><th>Costo actual</th><th>Vigente desde</th><th>Precio de venta</th>{% if puede_registrar_costo %}<th>Cargar costo</th>{% endif %}</tr></thead>
+                <tbody>
+                {% for fila in filas_precio %}
+                <tr>
+                    <td>{{ fila.relacion.proveedor.nombre_comercial }} {% if fila.es_mas_conveniente %}<span class="status-pill status-pill-success ms-1">Más conveniente</span>{% endif %}</td>
+                    <td>{% if fila.costo %}&#36;{{ fila.costo }}{% else %}<span class="text-muted">Sin costo</span>{% endif %}</td>
+                    <td>{{ fila.fecha|date:"d/m/Y"|default:"—" }}</td>
+                    <td>{% if fila.precio_venta %}<strong>&#36;{{ fila.precio_venta }}</strong>{% else %}—{% endif %}</td>
+                    {% if puede_registrar_costo %}<td><form method="post" action="{% url 'pricing:registrar_costo' producto.pk fila.relacion.pk %}" class="d-flex gap-1">{% csrf_token %}{{ costo_form.costo }}<button type="submit" class="btn btn-sm btn-outline-primary">Cargar</button></form></td>{% endif %}
+                </tr>
+                {% empty %}<tr><td colspan="5" class="empty-table">Todavía no tiene proveedores para cotizar.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if puede_gestionar_margenes %}
+        <div class="form-section"><div class="form-section-title">Margen propio del producto</div><form method="post" action="{% url 'pricing:actualizar_margen_producto' producto.pk %}" class="inline-form-card">{% csrf_token %}<div class="form-grid"><div class="form-field form-field-half"><label>Margen (%)</label>{{ margen_form.margen }}</div></div><div class="form-actions"><button type="submit" class="btn btn-sm btn-primary">Guardar margen</button></div></form></div>
+        {% endif %}
+    </section>
     {% endif %}
-</dl>
-
-{% if puede_configurar_stock_minimo %}
-<form method="post" action="{% url 'stock:actualizar_stock_minimo' producto.pk %}" class="row g-2 align-items-end" style="max-width: 500px;">
-    {% csrf_token %}
-    <div class="col-auto">
-        <label class="form-label">Stock mínimo general</label>
-        {{ stock_minimo_form.stock_minimo_general }}
-    </div>
-    <div class="col-auto">
-        <label class="form-label">Stock mínimo repuestos</label>
-        {{ stock_minimo_form.stock_minimo_repuestos }}
-    </div>
-    <div class="col-auto">
-        <button type="submit" class="btn btn-sm btn-secondary">Guardar</button>
-    </div>
-</form>
-{% endif %}
-{% endif %}
+</div>
 {% endblock %}

@@ -1,42 +1,33 @@
 {% extends "base.html" %}
-
 {% block title %}{% if object %}Editar cliente{% else %}Nuevo cliente{% endif %} — ARQCLIMA{% endblock %}
-
+{% block page_heading %}{% if object %}Editar cliente{% else %}Nuevo cliente{% endif %}{% endblock %}
+{% block page_subheading %}Datos comerciales y de contacto{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">{% if object %}Editar cliente{% else %}Nuevo cliente{% endif %}</h1>
-
-<form method="post" class="row g-3" style="max-width: 600px;">
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Comercial</div>
+        <h1>{% if object %}Editar cliente{% else %}Nuevo cliente{% endif %}</h1>
+        <div class="detail-subtitle">Información principal para presupuestos, trabajos y seguimiento.</div>
+    </div>
+    <div class="detail-actions"><a href="{% url 'clients:lista' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a></div>
+</div>
+<form method="post" class="form-shell">
     {% csrf_token %}
-    <div class="col-12">
-        <label class="form-label">Nombre / Razón social</label>
-        {{ form.nombre }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Tipo</label>
-        {{ form.tipo }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">CUIT/DNI</label>
-        {{ form.cuit_dni }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Teléfono</label>
-        {{ form.telefono }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Email</label>
-        {{ form.email }}
-    </div>
-    <div class="col-md-6 form-check">
-        {{ form.activo }}
-        <label class="form-check-label">Activo</label>
-    </div>
-    <div class="col-12">
-        <label class="form-label">Notas</label>
-        {{ form.notas }}
-    </div>
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Guardar</button>
+    <div class="form-card">
+        <div class="form-card-header"><h2>Datos del cliente</h2><p>Completá la identificación y medios de contacto.</p></div>
+        <div class="form-card-body">
+            {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+            <div class="form-grid">
+                <div class="form-field"><label>Nombre / Razón social</label>{{ form.nombre }}{{ form.nombre.errors }}</div>
+                <div class="form-field form-field-half"><label>Tipo</label>{{ form.tipo }}{{ form.tipo.errors }}</div>
+                <div class="form-field form-field-half"><label>CUIT/DNI</label>{{ form.cuit_dni }}{{ form.cuit_dni.errors }}</div>
+                <div class="form-field form-field-half"><label>Teléfono</label>{{ form.telefono }}{{ form.telefono.errors }}</div>
+                <div class="form-field form-field-half"><label>Email</label>{{ form.email }}{{ form.email.errors }}</div>
+                <div class="form-field"><div class="form-check-row">{{ form.activo }}<div><label>Activo</label><div class="field-help">Los clientes inactivos se conservan para mantener el histórico.</div></div></div></div>
+                <div class="form-field"><label>Notas</label>{{ form.notas }}{{ form.notas.errors }}</div>
+            </div>
+            <div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Guardar</button><a href="{% url 'clients:lista' %}" class="btn btn-outline-secondary">Cancelar</a></div>
+        </div>
     </div>
 </form>
 {% endblock %}
