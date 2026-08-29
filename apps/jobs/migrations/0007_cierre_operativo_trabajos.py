@@ -98,7 +98,8 @@ BEGIN
     IF TG_OP IN ('UPDATE', 'DELETE') THEN
         SELECT estado INTO estado_trabajo
         FROM jobs_trabajo
-        WHERE id = OLD.trabajo_id;
+        WHERE id = OLD.trabajo_id
+        FOR UPDATE;
 
         IF estado_trabajo IN ('terminado', 'cancelado') THEN
             RAISE EXCEPTION 'No se puede modificar el detalle operativo de un trabajo cerrado';
@@ -108,7 +109,8 @@ BEGIN
     IF TG_OP IN ('INSERT', 'UPDATE') THEN
         SELECT estado INTO estado_trabajo
         FROM jobs_trabajo
-        WHERE id = NEW.trabajo_id;
+        WHERE id = NEW.trabajo_id
+        FOR UPDATE;
 
         IF estado_trabajo IN ('terminado', 'cancelado') THEN
             RAISE EXCEPTION 'No se puede modificar el detalle operativo de un trabajo cerrado';
@@ -148,7 +150,8 @@ BEGIN
 
     SELECT estado INTO estado_trabajo
     FROM jobs_trabajo
-    WHERE id = NEW.trabajo_id;
+    WHERE id = NEW.trabajo_id
+    FOR UPDATE;
 
     IF estado_trabajo IN ('terminado', 'cancelado') THEN
         RAISE EXCEPTION 'No se puede registrar stock contra un trabajo cerrado';
