@@ -486,8 +486,8 @@ class VistasMultiformatoTests(TestCase):
     def test_usuario_sin_add_proveedor_no_ve_ni_usa_alta_rapida(self):
         grupo, _ = Group.objects.get_or_create(name="Importador sin alta proveedor")
         permiso_importar = Permission.objects.get(
-            codename="add_importacionlistaprecios",
-            content_type__app_label="imports",
+            codename="add_historialcosto",
+            content_type__app_label="pricing",
         )
         grupo.permissions.add(permiso_importar)
         usuario = User.objects.create_user(
