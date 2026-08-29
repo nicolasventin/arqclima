@@ -112,6 +112,22 @@ class ReportesVisualesViewTests(TestCase):
         self.assertIn("resumen_empleados", response.context)
         self.assertContains(response, "Actividad del período")
 
+
+
+    def test_periodo_invalido_vuelve_al_periodo_actual(self):
+        from django.utils import timezone
+
+        self.client.login(username=self.diego.username, password="clave12345")
+        response = self.client.get(
+            reverse("reports:comercial"),
+            {"anio": "abc", "mes": "99"},
+        )
+
+        hoy = timezone.localdate()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["anio"], hoy.year)
+        self.assertEqual(response.context["mes"], hoy.month)
+
     def test_rodrigo_no_recibe_montos_confidenciales_en_comercial(self):
         self.client.login(username=self.rodrigo.username, password="clave12345")
 
