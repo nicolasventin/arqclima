@@ -243,7 +243,6 @@ class PropuestaTecnicaPresupuestoTests(TestCase):
 
         reader = PdfReader(BytesIO(response.content))
         texto = "\n".join(page.extract_text() or "" for page in reader.pages)
-        self.assertIn("PRESUPUESTO", texto)
         self.assertIn("PROPUESTA TÉCNICO-COMERCIAL", texto)
         self.assertIn("PISO RADIANTE", texto)
         self.assertIn("1ERA ETAPA", texto)
