@@ -1,8 +1,14 @@
+from io import BytesIO
 from pathlib import Path
 
 from django.conf import settings
 from django.contrib.staticfiles import finders
 from django.template.loader import render_to_string
+from pypdf import PdfReader, PdfWriter
+from reportlab.graphics import renderPDF
+from reportlab.lib.colors import HexColor
+from reportlab.pdfgen import canvas
+from svglib.svglib import svg2rlg
 from xhtml2pdf import pisa
 
 from .services import calcular_totales
@@ -42,6 +48,82 @@ def _lineas_texto(texto):
         for linea in (texto or "").splitlines()
         if linea.strip()
     ]
+
+
+def _overlay_encabezado(presupuesto, ancho, alto):
+    """Genera un encabezado ReportLab para no depender del soporte de imágenes de xhtml2pdf."""
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=(ancho, alto))
+
+    margen_x = 42.52  # 15 mm
+    margen_superior = 11.34  # 4 mm
+    linea_y = alto - 65.20  # ~23 mm desde arriba
+
+    logo = finders.find("img/arqclima-logo-oficial.svg")
+    if logo:
+        dibujo_logo = svg2rlg(logo)
+        if not dibujo_logo or not dibujo_logo.width or not dibujo_logo.height:
+            raise PDFPresupuestoError("No se pudo interpretar el logo oficial de ARQCLIMA.")
+        ancho_logo = 113.39  # 40 mm
+        escala = ancho_logo / float(dibujo_logo.width)
+        alto_logo = float(dibujo_logo.height) * escala
+        pdf.saveState()
+        pdf.translate(margen_x, alto - margen_superior - alto_logo)
+        pdf.scale(escala, escala)
+        renderPDF.draw(dibujo_logo, pdf, 0, 0)
+        pdf.restoreState()
+    else:
+        pdf.setFillColor(HexColor("#075b9b"))
+        pdf.setFont("Helvetica-Bold", 13)
+        pdf.drawString(margen_x, alto - 31, "ARQCLIMA")
+
+    empresa = settings.ARQCLIMA_COMPANY
+    x_derecha = ancho - margen_x
+    y = alto - 20
+
+    pdf.setFillColor(HexColor("#075b9b"))
+    pdf.setFont("Helvetica-Bold", 7.3)
+    pdf.drawRightString(x_derecha, y, f"Presupuesto Nº {presupuesto.numero}")
+
+    pdf.setFillColor(HexColor("#547080"))
+    pdf.setFont("Helvetica", 6.3)
+    y -= 8
+    pdf.drawRightString(x_derecha, y, presupuesto.fecha.strftime("%d/%m/%Y"))
+
+    for dato in (
+        empresa.get("direccion"),
+        f"Tel/Wapp {empresa.get('telefono')}" if empresa.get("telefono") else "",
+        empresa.get("email"),
+    ):
+        if dato:
+            y -= 7
+            pdf.drawRightString(x_derecha, y, str(dato))
+
+    pdf.setStrokeColor(HexColor("#d7e1e7"))
+    pdf.setLineWidth(0.7)
+    pdf.line(margen_x, linea_y, ancho - margen_x, linea_y)
+
+    pdf.save()
+    buffer.seek(0)
+    return buffer
+
+
+def _aplicar_encabezado(pdf_base, presupuesto):
+    lector = PdfReader(pdf_base)
+    escritor = PdfWriter()
+
+    for pagina in lector.pages:
+        ancho = float(pagina.mediabox.width)
+        alto = float(pagina.mediabox.height)
+        overlay = _overlay_encabezado(presupuesto, ancho, alto)
+        pagina_overlay = PdfReader(overlay).pages[0]
+        pagina.merge_page(pagina_overlay)
+        escritor.add_page(pagina)
+
+    salida = BytesIO()
+    escritor.write(salida)
+    salida.seek(0)
+    return salida
 
 
 def contexto_pdf_presupuesto(presupuesto):
@@ -107,12 +189,18 @@ def generar_pdf_presupuesto(presupuesto, dest):
         "quotes/presupuesto_pdf.html",
         contexto_pdf_presupuesto(presupuesto),
     )
+
+    base = BytesIO()
     resultado = pisa.CreatePDF(
         html,
-        dest=dest,
+        dest=base,
         encoding="utf-8",
         link_callback=_resolver_recurso,
     )
     if resultado.err:
         raise PDFPresupuestoError("No se pudo generar el PDF del presupuesto.")
+
+    base.seek(0)
+    final = _aplicar_encabezado(base, presupuesto)
+    dest.write(final.getvalue())
     return resultado
