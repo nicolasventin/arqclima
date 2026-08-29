@@ -6,10 +6,10 @@
     --app-border: #e5e9ed;
     --app-text: #1b232b;
     --app-muted: #697681;
-    --app-brand: #123447;
-    --app-brand-strong: #0b2737;
-    --app-accent: #1677a8;
-    --app-accent-soft: #e8f3f8;
+    --app-brand: #075f98;
+    --app-brand-strong: #064c7a;
+    --app-accent: #0a6ca9;
+    --app-accent-soft: #e7f3fa;
     --app-danger: #b42318;
     --app-radius: 14px;
     --app-shadow: 0 8px 30px rgba(18, 52, 71, 0.06);
@@ -41,7 +41,7 @@ a {
     width: var(--app-sidebar-width);
     display: flex;
     flex-direction: column;
-    background: var(--app-brand-strong);
+    background: #043c62;
     color: #fff;
     border-right: 1px solid rgba(255,255,255,.07);
     z-index: 1030;
@@ -399,5 +399,56 @@ a {
     .app-content {
         padding-left: .75rem;
         padding-right: .75rem;
+    }
+}
+
+
+/* Identidad visual ARQCLIMA */
+.app-brand-desktop {
+    min-height: 128px;
+    justify-content: center;
+    padding: 1rem 1.25rem;
+}
+
+.app-brand-desktop img {
+    display: block;
+    width: 178px;
+    max-width: 100%;
+    height: auto;
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+}
+
+.app-brand-mobile {
+    gap: .75rem;
+}
+
+.app-brand-mobile img {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    flex: 0 0 auto;
+}
+
+.auth-brand img {
+    display: block;
+    width: min(250px, 72vw);
+    height: auto;
+    border-radius: 18px;
+    box-shadow: 0 10px 32px rgba(7,95,152,.18);
+}
+
+.app-topbar {
+    border-top: 3px solid var(--app-brand);
+}
+
+.app-nav-link.active {
+    background: rgba(255,255,255,.14);
+    box-shadow: inset 3px 0 0 #7ec8ee;
+}
+
+@media (max-width: 991.98px) {
+    .app-mobile-nav.offcanvas {
+        background: #043c62;
     }
 }
