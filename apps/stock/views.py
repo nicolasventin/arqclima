@@ -15,6 +15,7 @@ from .permissions import puede_ajustar_stock, puede_configurar_stock_minimo, pue
 from .services import (
     bajo_minimo,
     cantidad_pendiente_devolucion,
+    registrar_devolucion,
     registrar_movimiento,
     salidas_repuestos_pendientes,
     stock_actual,
@@ -194,23 +195,18 @@ class RegistrarDevolucionView(UserPassesTestMixin, View):
         )
 
     def post(self, request, salida_pk):
-        pendiente = cantidad_pendiente_devolucion(self.salida)
         form = DevolucionForm(request.POST)
         if form.is_valid():
             cantidad = form.cleaned_data["cantidad"]
-            if cantidad > pendiente:
-                form.add_error("cantidad", f"No puede superar lo pendiente ({pendiente}).")
+            try:
+                registrar_devolucion(self.salida, cantidad, request.user)
+            except ValueError as exc:
+                form.add_error("cantidad", str(exc))
             else:
-                registrar_movimiento(
-                    producto=self.salida.producto,
-                    deposito=Deposito.REPUESTOS,
-                    tipo=TipoMovimiento.DEVOLUCION,
-                    cantidad=cantidad,
-                    usuario=request.user,
-                    salida_relacionada=self.salida,
-                )
                 messages.success(request, "Devolución registrada.")
                 return redirect("stock:pendientes_devolucion")
+
+        pendiente = cantidad_pendiente_devolucion(self.salida)
         return render(
             request, self.template_name,
             {"form": form, "salida": self.salida, "pendiente": pendiente},

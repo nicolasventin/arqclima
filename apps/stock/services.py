@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Sum
 
 from apps.audit.services import log_action
@@ -52,6 +53,7 @@ def productos_con_stock_bajo():
     return resultado
 
 
+@transaction.atomic
 def registrar_movimiento(
     *,
     producto,
@@ -72,6 +74,9 @@ def registrar_movimiento(
     Único punto de entrada para crear un MovimientoStock — nunca se
     inserta directo con .create() fuera de acá, para que la validación
     de signo/tipo y la auditoría sean parejas en todos los flujos.
+
+    La creación del movimiento y su AuditLog comparten transacción:
+    si la auditoría falla, el movimiento tampoco queda persistido.
 
     `trabajo`/`material_trabajo`/`orden_compra`/`linea_orden_compra`
     (Etapa 8): se pasan en el mismo INSERT porque MovimientoStock es
@@ -121,6 +126,45 @@ def cantidad_pendiente_devolucion(salida):
     enviado = abs(salida.cantidad)
     devuelto = salida.devoluciones.aggregate(total=Sum("cantidad"))["total"] or Decimal("0")
     return enviado - devuelto
+
+
+@transaction.atomic
+def registrar_devolucion(salida, cantidad, usuario):
+    """
+    Registra una devolución de repuestos de forma segura ante doble clic
+    o dos usuarios operando la misma salida.
+
+    La fila padre (la Salida original) se bloquea antes de recalcular lo
+    pendiente. Todas las devoluciones soportadas pasan por esta función,
+    por lo que dos requests concurrentes se serializan sobre esa fila.
+    """
+    if cantidad <= 0:
+        raise ValueError("La cantidad devuelta tiene que ser mayor a cero.")
+
+    salida_bloqueada = (
+        MovimientoStock.objects.select_for_update()
+        .select_related("producto")
+        .get(pk=salida.pk)
+    )
+    if not (
+        salida_bloqueada.tipo == TipoMovimiento.SALIDA
+        and salida_bloqueada.deposito == Deposito.REPUESTOS
+        and salida_bloqueada.requiere_devolucion
+    ):
+        raise ValueError("El movimiento indicado no admite devoluciones de repuestos.")
+
+    pendiente = cantidad_pendiente_devolucion(salida_bloqueada)
+    if cantidad > pendiente:
+        raise ValueError(f"No puede superar lo pendiente ({pendiente}).")
+
+    return registrar_movimiento(
+        producto=salida_bloqueada.producto,
+        deposito=Deposito.REPUESTOS,
+        tipo=TipoMovimiento.DEVOLUCION,
+        cantidad=cantidad,
+        usuario=usuario,
+        salida_relacionada=salida_bloqueada,
+    )
 
 
 def salidas_repuestos_pendientes():
