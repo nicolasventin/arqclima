@@ -23,8 +23,8 @@ class NavegacionVisualTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'class="app-sidebar d-none d-lg-flex"')
         self.assertContains(response, 'id="appMobileNav"')
-        self.assertContains(response, "img/arqclima-logo.svg")
-        self.assertContains(response, "img/arqclima-mark.svg")
+        self.assertContains(response, "img/arqclima-logo.svg", count=2)
+        self.assertNotContains(response, "img/arqclima-mark.svg")
 
     def test_inicio_queda_marcado_como_activo(self):
         response = self.client.get(reverse("dashboard:home"))
