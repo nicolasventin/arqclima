@@ -21,5 +21,6 @@ urlpatterns = [
     ),
     path("proveedores/", views.ProveedorListView.as_view(), name="proveedor_lista"),
     path("proveedores/nuevo/", views.ProveedorCreateView.as_view(), name="proveedor_nuevo"),
+    path("proveedores/nuevo-rapido/", views.ProveedorQuickCreateView.as_view(), name="proveedor_nuevo_rapido"),
     path("proveedores/<int:pk>/editar/", views.ProveedorUpdateView.as_view(), name="proveedor_editar"),
 ]
