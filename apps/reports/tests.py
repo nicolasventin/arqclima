@@ -371,6 +371,13 @@ class GananciaTrabajoTests(TestCase):
         enviar_presupuesto(presupuesto, self.diego)
         cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, self.diego)
         trabajo = crear_trabajo(presupuesto, self.diego)
+        registrar_movimiento(
+            producto=producto,
+            deposito=Deposito.GENERAL,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("100"),
+            usuario=self.diego,
+        )
         return trabajo, item_catalogo, item_mano_obra
 
     def test_material_enviado_completo_usa_cantidad_usada_neta_para_el_catalogo(self):
@@ -538,6 +545,13 @@ class MontosRentabilidadTests(TestCase):
         cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, self.diego)
         trabajo = crear_trabajo(presupuesto, self.diego)
         generar_listado_materiales(trabajo, self.diego)
+        registrar_movimiento(
+            producto=producto,
+            deposito=Deposito.GENERAL,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("2"),
+            usuario=self.diego,
+        )
         enviar_materiales_pendientes(trabajo, self.diego)
         cambiar_estado_trabajo(trabajo, EstadoTrabajo.TERMINADO, self.diego)
 
@@ -622,6 +636,14 @@ class MaterialMasUtilizadoTests(TestCase):
         producto_a = Producto.objects.create(marca=self.marca, codigo="MU1", nombre="Producto MU1")
         producto_b = Producto.objects.create(marca=self.marca, codigo="MU2", nombre="Producto MU2")
         registrar_movimiento(
+            producto=producto_a, deposito=Deposito.GENERAL, tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("5"), usuario=self.diego,
+        )
+        registrar_movimiento(
+            producto=producto_b, deposito=Deposito.GENERAL, tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("8"), usuario=self.diego,
+        )
+        registrar_movimiento(
             producto=producto_a, deposito=Deposito.GENERAL, tipo=TipoMovimiento.SALIDA,
             cantidad=Decimal("-5"), usuario=self.diego,
         )
@@ -663,6 +685,13 @@ class DiferenciaEnviadoUtilizadoTests(TestCase):
         cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, self.diego)
         trabajo = crear_trabajo(presupuesto, self.diego)
         generar_listado_materiales(trabajo, self.diego)
+        registrar_movimiento(
+            producto=producto,
+            deposito=Deposito.GENERAL,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("2"),
+            usuario=self.diego,
+        )
         enviar_materiales_pendientes(trabajo, self.diego)
         return trabajo
 
@@ -923,6 +952,11 @@ class ActividadAdministrativaPorEmpleadoTests(TestCase):
             marca=marca, codigo="AG1", nombre="Repuesto AG1", es_repuesto=True
         )
         proveedor = Proveedor.objects.create(nombre_comercial="Proveedor AG")
+        diego = _crear_usuario("diego_stock_actividad_gabriel", "Administrador")
+        registrar_movimiento(
+            producto=repuesto, deposito=Deposito.REPUESTOS, tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("3"), usuario=diego,
+        )
 
         registrar_movimiento(
             producto=repuesto, deposito=Deposito.REPUESTOS, tipo=TipoMovimiento.SALIDA,
@@ -978,6 +1012,13 @@ class ActividadAdministrativaPorEmpleadoTests(TestCase):
         cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, diego)
         trabajo = crear_trabajo(presupuesto, diego, tecnico_asignado=andres)
         generar_listado_materiales(trabajo, diego)
+        registrar_movimiento(
+            producto=producto,
+            deposito=Deposito.GENERAL,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("1"),
+            usuario=diego,
+        )
         cambiar_estado_trabajo(trabajo, EstadoTrabajo.EN_EJECUCION, andres)
         enviar_materiales_pendientes(trabajo, andres)
 
