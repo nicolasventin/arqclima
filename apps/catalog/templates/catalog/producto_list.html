@@ -75,7 +75,7 @@
             </thead>
             <tbody>
                 {% for producto in productos %}
-                <tr>
+                <tr data-row-href="{% url 'catalog:producto_detalle' producto.pk %}" tabindex="0" role="link" aria-label="Abrir producto {{ producto.nombre }}">
                     <td>
                         <a class="table-link" href="{% url 'catalog:producto_detalle' producto.pk %}">{{ producto.nombre }}</a>
                     </td>
