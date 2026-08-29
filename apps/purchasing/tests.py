@@ -13,12 +13,18 @@ from apps.stock.models import Deposito
 from apps.stock.services import stock_actual
 
 from .models import EstadoOrdenCompra, LineaOrdenCompra, OrdenDeCompra
-from .permissions import puede_aprobar_orden, puede_cancelar_orden, puede_gestionar_orden
+from .permissions import (
+    puede_aprobar_orden,
+    puede_cancelar_orden,
+    puede_cerrar_orden,
+    puede_gestionar_orden,
+)
 from .services import (
     TransicionInvalidaError,
     cambiar_estado_orden,
     cantidad_pendiente_recepcion,
     cantidad_recibida,
+    cerrar_orden,
     crear_orden,
     recibir_linea,
 )
@@ -82,8 +88,11 @@ class ModelConstraintTests(TestCase):
             orden=self.orden, producto_proveedor=self.pp_a,
             cantidad=Decimal("1"), costo_esperado=Decimal("100"),
         )
-        self.orden.estado = EstadoOrdenCompra.PENDIENTE_APROBACION
-        self.orden.save()
+        cambiar_estado_orden(
+            self.orden,
+            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            self.diego,
+        )
 
         with self.assertRaises(DatabaseError):
             with transaction.atomic():
@@ -91,8 +100,11 @@ class ModelConstraintTests(TestCase):
                 linea.save()
 
     def test_trigger_bloquea_insert_fuera_de_borrador(self):
-        self.orden.estado = EstadoOrdenCompra.PENDIENTE_APROBACION
-        self.orden.save()
+        cambiar_estado_orden(
+            self.orden,
+            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            self.diego,
+        )
         with self.assertRaises(DatabaseError):
             with transaction.atomic():
                 LineaOrdenCompra.objects.create(
@@ -105,8 +117,16 @@ class ModelConstraintTests(TestCase):
             orden=self.orden, producto_proveedor=self.pp_a,
             cantidad=Decimal("1"), costo_esperado=Decimal("100"),
         )
-        self.orden.estado = EstadoOrdenCompra.APROBADA
-        self.orden.save()
+        cambiar_estado_orden(
+            self.orden,
+            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            self.diego,
+        )
+        cambiar_estado_orden(
+            self.orden,
+            EstadoOrdenCompra.APROBADA,
+            self.diego,
+        )
         with self.assertRaises(DatabaseError):
             with transaction.atomic():
                 linea.delete()
@@ -132,7 +152,15 @@ class ModelConstraintTests(TestCase):
 class TransicionesEstadoTests(TestCase):
     def setUp(self):
         self.diego = _crear_usuario("diego_transiciones", "Administrador")
-        self.orden = crear_orden(_proveedor(), Deposito.GENERAL, self.diego)
+        self.proveedor = _proveedor()
+        self.pp = _producto_proveedor(self.proveedor, "TR-1")
+        self.orden = crear_orden(self.proveedor, Deposito.GENERAL, self.diego)
+        LineaOrdenCompra.objects.create(
+            orden=self.orden,
+            producto_proveedor=self.pp,
+            cantidad=Decimal("2"),
+            costo_esperado=Decimal("50"),
+        )
 
     def test_grafo_completo_de_transiciones_validas(self):
         casos = [
@@ -143,13 +171,23 @@ class TransicionesEstadoTests(TestCase):
         ]
         orden = self.orden
         for _, destino in casos:
-            cambiar_estado_orden(orden, destino, self.diego)
+            cambiar_estado_orden(
+                orden,
+                destino,
+                self.diego,
+                motivo="Cancelación de prueba" if destino == EstadoOrdenCompra.CANCELADA else "",
+            )
             orden.refresh_from_db()
             self.assertEqual(orden.estado, destino)
 
     def test_rechazada_vuelve_a_borrador(self):
         cambiar_estado_orden(self.orden, EstadoOrdenCompra.PENDIENTE_APROBACION, self.diego)
-        cambiar_estado_orden(self.orden, EstadoOrdenCompra.RECHAZADA, self.diego)
+        cambiar_estado_orden(
+            self.orden,
+            EstadoOrdenCompra.RECHAZADA,
+            self.diego,
+            motivo="Corregir cantidades",
+        )
         cambiar_estado_orden(self.orden, EstadoOrdenCompra.BORRADOR, self.diego)
         self.orden.refresh_from_db()
         self.assertEqual(self.orden.estado, EstadoOrdenCompra.BORRADOR)
@@ -162,7 +200,12 @@ class TransicionesEstadoTests(TestCase):
 
     def test_cancelada_es_terminal(self):
         cambiar_estado_orden(self.orden, EstadoOrdenCompra.PENDIENTE_APROBACION, self.diego)
-        cambiar_estado_orden(self.orden, EstadoOrdenCompra.CANCELADA, self.diego)
+        cambiar_estado_orden(
+            self.orden,
+            EstadoOrdenCompra.CANCELADA,
+            self.diego,
+            motivo="Cancelación de prueba",
+        )
         with self.assertRaises(TransicionInvalidaError):
             cambiar_estado_orden(self.orden, EstadoOrdenCompra.BORRADOR, self.diego)
 
@@ -180,7 +223,12 @@ class TransicionesEstadoTests(TestCase):
     def test_aprobada_puede_cancelarse(self):
         cambiar_estado_orden(self.orden, EstadoOrdenCompra.PENDIENTE_APROBACION, self.diego)
         cambiar_estado_orden(self.orden, EstadoOrdenCompra.APROBADA, self.diego)
-        cambiar_estado_orden(self.orden, EstadoOrdenCompra.CANCELADA, self.diego)
+        cambiar_estado_orden(
+            self.orden,
+            EstadoOrdenCompra.CANCELADA,
+            self.diego,
+            motivo="Cancelación aprobada",
+        )
         self.orden.refresh_from_db()
         self.assertEqual(self.orden.estado, EstadoOrdenCompra.CANCELADA)
 
@@ -197,6 +245,7 @@ class RecibirLineaTests(TestCase):
         )
         cambiar_estado_orden(self.orden, EstadoOrdenCompra.PENDIENTE_APROBACION, self.diego)
         cambiar_estado_orden(self.orden, EstadoOrdenCompra.APROBADA, self.diego)
+        cambiar_estado_orden(self.orden, EstadoOrdenCompra.ENVIADA, self.diego)
 
     def test_no_se_puede_recibir_orden_en_borrador(self):
         otra_orden = crear_orden(self.proveedor, Deposito.GENERAL, self.diego)
@@ -251,10 +300,21 @@ class RecibirLineaTests(TestCase):
         self.assertEqual(movimiento.orden_compra, self.orden)
         self.assertEqual(movimiento.linea_orden_compra, self.linea)
 
-    def test_recepcion_permitida_tambien_en_enviada(self):
-        cambiar_estado_orden(self.orden, EstadoOrdenCompra.ENVIADA, self.diego)
-        recibir_linea(self.linea, Decimal("2"), Decimal("50"), self.diego)
-        self.assertEqual(cantidad_recibida(self.linea), Decimal("2"))
+    def test_no_se_puede_recibir_orden_solo_aprobada(self):
+        otra = crear_orden(self.proveedor, Deposito.GENERAL, self.diego)
+        linea = LineaOrdenCompra.objects.create(
+            orden=otra,
+            producto_proveedor=self.pp,
+            cantidad=Decimal("2"),
+            costo_esperado=Decimal("50"),
+        )
+        cambiar_estado_orden(otra, EstadoOrdenCompra.PENDIENTE_APROBACION, self.diego)
+        cambiar_estado_orden(otra, EstadoOrdenCompra.APROBADA, self.diego)
+
+        with self.assertRaisesMessage(ValueError, "Enviada"):
+            recibir_linea(linea, Decimal("1"), Decimal("50"), self.diego)
+
+        self.assertEqual(cantidad_recibida(linea), Decimal("0"))
 
 
 class PermisosTests(TestCase):
@@ -275,10 +335,12 @@ class PermisosTests(TestCase):
             self.assertTrue(puede_gestionar_orden(user))
         self.assertFalse(puede_gestionar_orden(self.contri))
 
-    def test_solo_diego_puede_cancelar(self):
+    def test_solo_diego_puede_cancelar_y_cerrar(self):
         self.assertTrue(puede_cancelar_orden(self.diego))
+        self.assertTrue(puede_cerrar_orden(self.diego))
         for user in (self.rodrigo, self.gabriel, self.andres, self.contri):
             self.assertFalse(puede_cancelar_orden(user))
+            self.assertFalse(puede_cerrar_orden(user))
 
 
 class ViewsTests(TestCase):
@@ -324,6 +386,12 @@ class ViewsTests(TestCase):
     def test_rodrigo_no_puede_aprobar(self):
         self.client.login(username="rodrigo_views", password="clave12345")
         orden = crear_orden(self.proveedor, Deposito.GENERAL, self.rodrigo)
+        LineaOrdenCompra.objects.create(
+            orden=orden,
+            producto_proveedor=self.pp,
+            cantidad=Decimal("1"),
+            costo_esperado=Decimal("80"),
+        )
         cambiar_estado_orden(orden, EstadoOrdenCompra.PENDIENTE_APROBACION, self.rodrigo)
         response = self.client.post(reverse("purchasing:aprobar", args=[orden.pk]))
         self.assertEqual(response.status_code, 403)
@@ -331,6 +399,12 @@ class ViewsTests(TestCase):
     def test_diego_aprueba_orden(self):
         self.client.login(username="diego_views", password="clave12345")
         orden = crear_orden(self.proveedor, Deposito.GENERAL, self.diego)
+        LineaOrdenCompra.objects.create(
+            orden=orden,
+            producto_proveedor=self.pp,
+            cantidad=Decimal("1"),
+            costo_esperado=Decimal("80"),
+        )
         cambiar_estado_orden(orden, EstadoOrdenCompra.PENDIENTE_APROBACION, self.diego)
         response = self.client.post(reverse("purchasing:aprobar", args=[orden.pk]))
         self.assertEqual(response.status_code, 302)
@@ -353,6 +427,7 @@ class ViewsTests(TestCase):
         )
         cambiar_estado_orden(orden, EstadoOrdenCompra.PENDIENTE_APROBACION, self.diego)
         cambiar_estado_orden(orden, EstadoOrdenCompra.APROBADA, self.diego)
+        cambiar_estado_orden(orden, EstadoOrdenCompra.ENVIADA, self.diego)
 
         self.client.login(username="contri_views", password="clave12345")
         response = self.client.get(reverse("purchasing:recibir_linea", args=[linea.pk]))
@@ -365,6 +440,7 @@ class ViewsTests(TestCase):
         )
         cambiar_estado_orden(orden, EstadoOrdenCompra.PENDIENTE_APROBACION, self.diego)
         cambiar_estado_orden(orden, EstadoOrdenCompra.APROBADA, self.diego)
+        cambiar_estado_orden(orden, EstadoOrdenCompra.ENVIADA, self.diego)
 
         self.client.login(username="contri_views", password="clave12345")
         response = self.client.post(
@@ -381,6 +457,7 @@ class ViewsTests(TestCase):
         )
         cambiar_estado_orden(orden, EstadoOrdenCompra.PENDIENTE_APROBACION, self.diego)
         cambiar_estado_orden(orden, EstadoOrdenCompra.APROBADA, self.diego)
+        cambiar_estado_orden(orden, EstadoOrdenCompra.ENVIADA, self.diego)
 
         self.client.login(username="diego_views", password="clave12345")
         response = self.client.post(
