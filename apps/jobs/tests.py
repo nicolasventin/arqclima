@@ -10,8 +10,8 @@ from apps.catalog.models import Marca, Producto
 from apps.clients.models import Cliente
 from apps.quotes.models import EstadoPresupuesto, ItemPresupuesto, Presupuesto, SeccionPresupuesto
 from apps.quotes.services import cambiar_estado, enviar_presupuesto
-from apps.stock.models import Deposito
-from apps.stock.services import stock_actual
+from apps.stock.models import Deposito, TipoMovimiento
+from apps.stock.services import registrar_movimiento, stock_actual
 
 from .models import EstadoTrabajo, EtapaTrabajo, MaterialTrabajo, ORDEN_ESTADOS, Trabajo
 from .permissions import (
@@ -44,6 +44,23 @@ def _crear_usuario(username, rol):
     user = User.objects.create_user(username=username, password="clave12345")
     user.groups.add(grupo)
     return user
+
+
+def _cargar_stock_trabajo(trabajo, usuario, cantidad=Decimal("100")):
+    productos = (
+        Producto.objects.filter(materiales_trabajo__trabajo=trabajo)
+        .distinct()
+        .order_by("pk")
+    )
+    for producto in productos:
+        registrar_movimiento(
+            producto=producto,
+            deposito=Deposito.GENERAL,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=cantidad,
+            usuario=usuario,
+            referencia_libre="Stock inicial de prueba",
+        )
 
 
 def _presupuesto_aceptado(cliente, usuario):
