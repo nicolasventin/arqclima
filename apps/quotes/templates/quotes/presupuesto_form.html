@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Nuevo presupuesto — ARQCLIMA{% endblock %}
+{% block title %}{% if modo_edicion %}Editar presupuesto{% else %}Nuevo presupuesto{% endif %} — ARQCLIMA{% endblock %}
 {% block page_heading %}Nuevo presupuesto{% endblock %}
 {% block page_subheading %}Datos comerciales y condiciones de la propuesta{% endblock %}
 
@@ -7,8 +7,8 @@
 <div class="detail-header">
     <div class="detail-header-copy">
         <div class="detail-kicker">Comercial</div>
-        <h1>Nuevo presupuesto</h1>
-        <div class="detail-subtitle">Creá la cabecera y después agregá secciones e ítems.</div>
+        <h1>{% if modo_edicion %}Editar propuesta{% else %}Nuevo presupuesto{% endif %}</h1>
+        <div class="detail-subtitle">Armá la propuesta técnico-comercial que después recibe el cliente en PDF.</div>
     </div>
     <div class="detail-actions">
         <a href="{% url 'quotes:lista' %}" class="btn btn-sm btn-outline-secondary">
@@ -104,10 +104,27 @@
                     {{ form.cliente.errors }}
                 </div>
 
+                <div class="form-field form-field-half">
+                    <label>{{ form.obra.label }}</label>
+                    {{ form.obra }}{{ form.obra.errors }}
+                </div>
+                <div class="form-field form-field-half">
+                    <label>{{ form.direccion.label }}</label>
+                    {{ form.direccion }}{{ form.direccion.errors }}
+                </div>
                 <div class="form-field">
-                    <label>Dirección de la obra</label>
-                    {{ form.direccion }}
-                    {{ form.direccion.errors }}
+                    <label>{{ form.referencia.label }}</label>
+                    {{ form.referencia }}{{ form.referencia.errors }}
+                    <div class="field-help">Resumen de lo cotizado, como la línea “Ref:” del presupuesto tradicional.</div>
+                </div>
+                <div class="form-field form-field-half">
+                    <label>{{ form.titulo_propuesta.label }}</label>
+                    {{ form.titulo_propuesta }}{{ form.titulo_propuesta.errors }}
+                </div>
+                <div class="form-field">
+                    <label>{{ form.alcance_tecnico.label }}</label>
+                    {{ form.alcance_tecnico }}{{ form.alcance_tecnico.errors }}
+                    <div class="field-help">Un punto por línea. En el PDF se presenta como alcance técnico.</div>
                 </div>
 
                 <div class="form-field form-field-half">
@@ -135,6 +152,13 @@
                     {{ form.descuento_general_valor.errors }}
                 </div>
 
+                <div class="form-field form-field-half">
+                    <div class="form-check mt-4">{{ form.importes_por_unidad }} <label class="form-check-label" for="{{ form.importes_por_unidad.id_for_label }}">Importes expresados por unidad/casa</label></div>
+                </div>
+                <div class="form-field form-field-half">
+                    <div class="form-check mt-4">{{ form.mostrar_total_general }} <label class="form-check-label" for="{{ form.mostrar_total_general.id_for_label }}">Mostrar total general en PDF</label></div>
+                </div>
+
                 <div class="form-field">
                     <label>Plantilla de condiciones</label>
                     {{ form.plantilla_condiciones }}
@@ -142,16 +166,17 @@
                     <div class="field-help">El texto se copia al presupuesto y luego queda congelado/editable ahí.</div>
                 </div>
 
-                <div class="form-field">
-                    <label>Notas generales</label>
-                    {{ form.notas_generales }}
-                    {{ form.notas_generales.errors }}
-                </div>
+                <div class="form-field"><label>{{ form.notas_cliente.label }}</label>{{ form.notas_cliente }}{{ form.notas_cliente.errors }}</div>
+                <div class="form-field"><label>{{ form.forma_pago.label }}</label>{{ form.forma_pago }}{{ form.forma_pago.errors }}</div>
+                <div class="form-field"><label>{{ form.garantia.label }}</label>{{ form.garantia }}{{ form.garantia.errors }}</div>
+                <div class="form-field"><label>{{ form.exclusiones.label }}</label>{{ form.exclusiones }}{{ form.exclusiones.errors }}</div>
+                <div class="form-field form-field-half"><label>{{ form.firma_texto.label }}</label>{{ form.firma_texto }}{{ form.firma_texto.errors }}</div>
+                <div class="form-field"><label>{{ form.notas_generales.label }}</label>{{ form.notas_generales }}{{ form.notas_generales.errors }}<div class="field-help">Solo para uso interno; no aparece en el PDF nuevo.</div></div>
             </div>
 
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-file-earmark-plus me-1"></i>Crear presupuesto
+                    <i class="bi bi-file-earmark-plus me-1"></i>{% if modo_edicion %}Guardar propuesta{% else %}Crear presupuesto{% endif %}
                 </button>
                 <a href="{% url 'quotes:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
             </div>

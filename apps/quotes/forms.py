@@ -8,6 +8,7 @@ from apps.clients.models import Cliente
 
 from .models import (
     ItemPresupuesto,
+    LineaComercialPresupuesto,
     PlantillaCondiciones,
     Presupuesto,
     SeccionPresupuesto,
@@ -19,13 +20,36 @@ class PresupuestoForm(forms.ModelForm):
     class Meta:
         model = Presupuesto
         fields = [
-            "cliente", "direccion", "fecha_vencimiento", "cantidad_unidades",
-            "descuento_general_tipo", "descuento_general_valor",
-            "notas_generales", "plantilla_condiciones",
+            "cliente",
+            "obra",
+            "direccion",
+            "referencia",
+            "titulo_propuesta",
+            "alcance_tecnico",
+            "fecha_vencimiento",
+            "cantidad_unidades",
+            "importes_por_unidad",
+            "mostrar_total_general",
+            "descuento_general_tipo",
+            "descuento_general_valor",
+            "plantilla_condiciones",
+            "notas_cliente",
+            "forma_pago",
+            "garantia",
+            "exclusiones",
+            "firma_texto",
+            "notas_generales",
         ]
         widgets = {
             "cliente": forms.HiddenInput(),
             "fecha_vencimiento": forms.DateInput(attrs={"type": "date"}),
+            "referencia": forms.Textarea(attrs={"rows": 3}),
+            "alcance_tecnico": forms.Textarea(attrs={"rows": 7}),
+            "notas_cliente": forms.Textarea(attrs={"rows": 5}),
+            "forma_pago": forms.Textarea(attrs={"rows": 4}),
+            "garantia": forms.Textarea(attrs={"rows": 4}),
+            "exclusiones": forms.Textarea(attrs={"rows": 6}),
+            "notas_generales": forms.Textarea(attrs={"rows": 3}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -33,6 +57,8 @@ class PresupuestoForm(forms.ModelForm):
         for name, field in self.fields.items():
             if name in ("descuento_general_tipo", "plantilla_condiciones"):
                 field.widget.attrs["class"] = "form-select"
+            elif name in ("importes_por_unidad", "mostrar_total_general"):
+                field.widget.attrs["class"] = "form-check-input"
             elif name != "cliente":
                 field.widget.attrs.setdefault("class", "form-control")
 
@@ -48,6 +74,17 @@ class PresupuestoForm(forms.ModelForm):
 
         self.fields["plantilla_condiciones"].queryset = PlantillaCondiciones.objects.filter(activa=True)
         self.fields["plantilla_condiciones"].required = False
+        self.fields["obra"].label = "Obra / proyecto"
+        self.fields["direccion"].label = "Ubicación de la obra"
+        self.fields["referencia"].label = "Referencia"
+        self.fields["titulo_propuesta"].label = "Título de la propuesta"
+        self.fields["alcance_tecnico"].label = "Alcance técnico general"
+        self.fields["notas_cliente"].label = "Notas para el cliente"
+        self.fields["forma_pago"].label = "Forma de pago"
+        self.fields["garantia"].label = "Garantía"
+        self.fields["exclusiones"].label = "Exclusiones"
+        self.fields["firma_texto"].label = "Firma / responsable visible"
+        self.fields["notas_generales"].label = "Notas internas"
         if not self.instance.pk:
             predeterminada = PlantillaCondiciones.objects.filter(
                 activa=True, predeterminada=True
@@ -74,12 +111,68 @@ class PresupuestoForm(forms.ModelForm):
 class SeccionPresupuestoForm(forms.ModelForm):
     class Meta:
         model = SeccionPresupuesto
-        fields = ["titulo"]
+        fields = ["titulo", "descripcion_publica"]
         widgets = {
             "titulo": forms.TextInput(
-                attrs={"class": "form-control form-control-sm", "placeholder": "Título de la sección"}
+                attrs={"class": "form-control", "placeholder": "Ej. 1ERA ETAPA CALEFACCIÓN"}
+            ),
+            "descripcion_publica": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 7,
+                    "placeholder": "Un punto técnico por línea. Ej.\nColector de bronce de 6 circuitos...\nCañería PEX 20 mm...",
+                }
             ),
         }
+
+
+class LineaComercialPresupuestoForm(forms.ModelForm):
+    class Meta:
+        model = LineaComercialPresupuesto
+        fields = [
+            "seccion",
+            "etiqueta",
+            "descripcion",
+            "monto",
+            "tipo_iva",
+            "opcional",
+            "incluido",
+            "recomendado",
+        ]
+        widgets = {
+            "seccion": forms.Select(attrs={"class": "form-select"}),
+            "etiqueta": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Ej. Materiales"}
+            ),
+            "descripcion": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "Detalle opcional"}
+            ),
+            "monto": forms.NumberInput(
+                attrs={"class": "form-control", "min": "0", "step": "0.01"}
+            ),
+            "tipo_iva": forms.Select(attrs={"class": "form-select"}),
+            "opcional": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "incluido": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "recomendado": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def __init__(self, *args, presupuesto=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if presupuesto is not None:
+            self.fields["seccion"].queryset = presupuesto.secciones.all()
+        self.fields["seccion"].required = False
+        self.fields["monto"].validators.append(MinValueValidator(Decimal("0")))
+
+    def clean(self):
+        cleaned = super().clean()
+        opcional = cleaned.get("opcional")
+        incluido = cleaned.get("incluido")
+        recomendado = cleaned.get("recomendado")
+        if not opcional and incluido is False:
+            self.add_error("incluido", "Un concepto obligatorio debe estar incluido.")
+        if recomendado and not opcional:
+            self.add_error("recomendado", "Solo un concepto opcional puede marcarse como recomendado.")
+        return cleaned
 
 
 def _estilar_campos(fields):

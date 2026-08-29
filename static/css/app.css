@@ -2516,3 +2516,104 @@ a {
         flex-wrap: wrap;
     }
 }
+
+
+/* Presupuestos · constructor técnico-comercial */
+.quote-builder-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 1rem;
+    align-items: start;
+}
+
+.quote-builder-main,
+.quote-builder-sidebar {
+    display: grid;
+    gap: 1rem;
+}
+
+.quote-summary-sticky {
+    position: sticky;
+    top: 1rem;
+}
+
+.quote-public-copy {
+    padding: .8rem .9rem;
+    border: 1px solid var(--app-border);
+    border-radius: 12px;
+    background: var(--app-surface-soft);
+    color: #394854;
+    font-size: .76rem;
+    line-height: 1.55;
+}
+
+.quote-stage-card {
+    border-left: 3px solid var(--app-accent);
+}
+
+.quote-commercial-block {
+    margin-top: .4rem;
+}
+
+.quote-commercial-table {
+    margin-bottom: 0;
+}
+
+.quote-commercial-table td {
+    vertical-align: top;
+}
+
+.quote-internal-details {
+    padding: .7rem .8rem;
+    border: 1px dashed var(--app-border);
+    border-radius: 12px;
+    background: #fbfcfd;
+}
+
+.quote-internal-details summary {
+    cursor: pointer;
+    color: var(--app-muted);
+    font-size: .72rem;
+    font-weight: 700;
+}
+
+.quote-add-stage {
+    border-style: dashed;
+}
+
+.quote-final-blocks {
+    display: grid;
+    gap: .7rem;
+}
+
+.quote-final-blocks > div {
+    padding: .75rem .85rem;
+    border: 1px solid var(--app-border);
+    border-radius: 11px;
+    background: var(--app-surface-soft);
+}
+
+.quote-final-blocks strong {
+    display: block;
+    margin-bottom: .25rem;
+    color: var(--app-brand);
+    font-size: .74rem;
+    text-transform: uppercase;
+}
+
+.quote-final-blocks p {
+    margin: 0;
+    color: var(--app-muted);
+    font-size: .72rem;
+    line-height: 1.5;
+}
+
+@media (max-width: 1099.98px) {
+    .quote-builder-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .quote-summary-sticky {
+        position: static;
+    }
+}

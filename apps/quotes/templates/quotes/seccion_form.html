@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Editar etapa — ARQCLIMA{% endblock %}
+{% block content %}
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Presupuesto #{{ object.presupuesto.numero }}</div>
+        <h1>Editar etapa</h1>
+        <div class="detail-subtitle">Texto técnico que verá el cliente en el PDF.</div>
+    </div>
+    <div class="detail-actions">
+        <a href="{% url 'quotes:detalle' object.presupuesto.pk %}" class="btn btn-sm btn-outline-secondary">Volver</a>
+    </div>
+</div>
+<form method="post" class="form-shell">
+    {% csrf_token %}
+    <div class="form-card">
+        <div class="form-card-header"><h2>Etapa / sección</h2><p>Un punto técnico por línea.</p></div>
+        <div class="form-card-body">
+            <div class="form-grid">
+                <div class="form-field"><label>Título</label>{{ form.titulo }}{{ form.titulo.errors }}</div>
+                <div class="form-field"><label>Descripción pública</label>{{ form.descripcion_publica }}{{ form.descripcion_publica.errors }}</div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Guardar etapa</button>
+                <a href="{% url 'quotes:detalle' object.presupuesto.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}

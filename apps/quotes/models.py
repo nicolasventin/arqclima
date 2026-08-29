@@ -75,10 +75,45 @@ class Presupuesto(models.Model):
     cliente = models.ForeignKey(
         "clients.Cliente", on_delete=models.PROTECT, related_name="presupuestos"
     )
+    obra = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Nombre del proyecto u obra, por ejemplo 'Proyecto 3 casas'.",
+    )
     direccion = models.CharField(
         max_length=255,
         blank=True,
-        help_text="Dirección de la obra para este presupuesto puntual.",
+        help_text="Ubicación/dirección de la obra para este presupuesto puntual.",
+    )
+    referencia = models.TextField(
+        blank=True,
+        help_text="Resumen comercial de lo que se está cotizando.",
+    )
+    titulo_propuesta = models.CharField(
+        max_length=180,
+        blank=True,
+        help_text="Título visible del alcance, por ejemplo 'PISO RADIANTE'.",
+    )
+    alcance_tecnico = models.TextField(
+        blank=True,
+        help_text="Descripción técnica general visible para el cliente.",
+    )
+    notas_cliente = models.TextField(blank=True)
+    forma_pago = models.TextField(blank=True)
+    garantia = models.TextField(blank=True)
+    exclusiones = models.TextField(blank=True)
+    firma_texto = models.CharField(
+        max_length=180,
+        blank=True,
+        help_text="Responsable visible al pie del PDF, por ejemplo 'Arq. Diego Ventin Ponte'.",
+    )
+    importes_por_unidad = models.BooleanField(
+        default=False,
+        help_text="Los importes comerciales se expresan por unidad/casa.",
+    )
+    mostrar_total_general = models.BooleanField(
+        default=True,
+        help_text="Mostrar o no un total general en el PDF del cliente.",
     )
     fecha = models.DateField(auto_now_add=True)
     fecha_vencimiento = models.DateField(null=True, blank=True)
@@ -154,6 +189,10 @@ class SeccionPresupuesto(models.Model):
         Presupuesto, on_delete=models.CASCADE, related_name="secciones"
     )
     titulo = models.CharField(max_length=150)
+    descripcion_publica = models.TextField(
+        blank=True,
+        help_text="Un punto técnico por línea. Se muestra en el PDF del cliente.",
+    )
     orden = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -168,6 +207,60 @@ class SeccionPresupuesto(models.Model):
 class TipoIVA(models.TextChoices):
     INCLUIDO = "incluido", "IVA incluido"
     MAS_IVA = "mas_iva", "+ IVA"
+
+
+
+class LineaComercialPresupuesto(models.Model):
+    """
+    Importe visible para el cliente, separado del detalle interno.
+
+    Permite conservar productos/costos/márgenes internamente mientras el
+    PDF muestra conceptos agrupados como Materiales, Equipamiento o Mano
+    de Obra.
+    """
+
+    presupuesto = models.ForeignKey(
+        Presupuesto,
+        on_delete=models.CASCADE,
+        related_name="lineas_comerciales",
+    )
+    seccion = models.ForeignKey(
+        SeccionPresupuesto,
+        on_delete=models.CASCADE,
+        related_name="lineas_comerciales",
+        null=True,
+        blank=True,
+    )
+    etiqueta = models.CharField(max_length=150)
+    descripcion = models.CharField(max_length=255, blank=True)
+    monto = models.DecimalField(max_digits=14, decimal_places=2)
+    tipo_iva = models.CharField(
+        max_length=20,
+        choices=TipoIVA.choices,
+        default=TipoIVA.INCLUIDO,
+    )
+    opcional = models.BooleanField(default=False)
+    incluido = models.BooleanField(default=True)
+    recomendado = models.BooleanField(default=False)
+    orden = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["presupuesto_id", "seccion_id", "orden", "pk"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(monto__gte=0),
+                name="lineacomercial_monto_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=models.Q(opcional=True) | models.Q(incluido=True),
+                name="lineacomercial_no_opcional_y_no_incluida",
+            ),
+        ]
+        verbose_name = "Línea comercial de presupuesto"
+        verbose_name_plural = "Líneas comerciales de presupuesto"
+
+    def __str__(self):
+        return f"{self.etiqueta}: {self.monto}"
 
 
 class ItemPresupuesto(models.Model):
