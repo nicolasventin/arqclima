@@ -2,6 +2,8 @@ import threading
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
 from django.db import close_old_connections
 from django.db.models import Sum
 from django.test import TestCase, TransactionTestCase
@@ -41,6 +43,28 @@ from apps.stock.services import (
     registrar_devolucion,
     registrar_movimiento,
 )
+
+
+def _otorgar_permisos_compras(user):
+    """
+    TransactionTestCase hace flush entre pruebas y no conserva filas
+    creadas por migraciones de datos. Las pruebas de concurrencia crean
+    explícitamente los permisos que necesitan.
+    """
+    content_type = ContentType.objects.get_for_model(OrdenDeCompra)
+    permisos = []
+    for codename, nombre in [
+        ("add_ordendecompra", "Puede agregar orden de compra"),
+        ("change_ordendecompra", "Puede modificar orden de compra"),
+        ("approve_ordendecompra", "Puede aprobar o rechazar una orden de compra"),
+    ]:
+        permiso, _ = Permission.objects.get_or_create(
+            content_type=content_type,
+            codename=codename,
+            defaults={"name": nombre},
+        )
+        permisos.append(permiso)
+    user.user_permissions.add(*permisos)
 
 
 class _ConcurrenteMixin:
@@ -88,6 +112,7 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             username=f"concurrencia_{self._testMethodName}",
             password="clave12345",
         )
+        _otorgar_permisos_compras(self.usuario)
         self.marca = Marca.objects.create(nombre=f"Marca {self._testMethodName}")
         self.proveedor = Proveedor.objects.create(
             nombre_comercial=f"Proveedor {self._testMethodName}"
@@ -115,8 +140,20 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             cantidad=Decimal("10"),
             costo_esperado=Decimal("100"),
         )
-        OrdenDeCompra.objects.filter(pk=orden.pk).update(
-            estado=EstadoOrdenCompra.APROBADA
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            self.usuario,
+        )
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.APROBADA,
+            self.usuario,
+        )
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.ENVIADA,
+            self.usuario,
         )
         orden.refresh_from_db()
 
@@ -261,6 +298,12 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             estado=EstadoOrdenCompra.BORRADOR,
             creado_por=self.usuario,
         )
+        LineaOrdenCompra.objects.create(
+            orden=orden,
+            producto_proveedor=self.producto_proveedor,
+            cantidad=Decimal("1"),
+            costo_esperado=Decimal("100"),
+        )
 
         def preparar():
             orden_local = OrdenDeCompra.objects.get(pk=orden.pk)
@@ -279,7 +322,7 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
         self.assertEqual(orden.estado, EstadoOrdenCompra.PENDIENTE_APROBACION)
         self.assertEqual(
             AuditLog.objects.filter(
-                accion="cambiar_estado_orden_compra",
+                accion="solicitar_aprobacion_orden_compra",
                 object_id=str(orden.pk),
             ).count(),
             1,
@@ -292,6 +335,7 @@ class AtomicidadOperacionesCriticasTests(TestCase):
             username=f"atomicidad_{self._testMethodName}",
             password="clave12345",
         )
+        _otorgar_permisos_compras(self.usuario)
         self.marca = Marca.objects.create(nombre=f"Marca A {self._testMethodName}")
         self.proveedor = Proveedor.objects.create(
             nombre_comercial=f"Proveedor A {self._testMethodName}"
@@ -334,8 +378,20 @@ class AtomicidadOperacionesCriticasTests(TestCase):
             cantidad=Decimal("5"),
             costo_esperado=Decimal("100"),
         )
-        OrdenDeCompra.objects.filter(pk=orden.pk).update(
-            estado=EstadoOrdenCompra.APROBADA
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            self.usuario,
+        )
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.APROBADA,
+            self.usuario,
+        )
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.ENVIADA,
+            self.usuario,
         )
         orden.refresh_from_db()
 

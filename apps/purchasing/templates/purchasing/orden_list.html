@@ -39,7 +39,7 @@
             <td>{{ orden.proveedor }}</td>
             <td>{{ orden.get_deposito_destino_display }}</td>
             <td>
-                <span class="badge {% if orden.estado == 'cancelada' or orden.estado == 'rechazada' %}bg-danger{% elif orden.estado == 'enviada' %}bg-success{% else %}bg-secondary{% endif %}">
+                <span class="badge {% if orden.estado == 'cancelada' or orden.estado == 'rechazada' %}bg-danger{% elif orden.estado == 'recepcion_parcial' %}bg-warning text-dark{% elif orden.estado == 'recibida' %}bg-success{% elif orden.estado == 'cerrada' %}bg-dark{% elif orden.estado == 'enviada' %}bg-primary{% else %}bg-secondary{% endif %}">
                     {{ orden.get_estado_display }}
                 </span>
             </td>

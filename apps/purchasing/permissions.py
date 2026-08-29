@@ -17,3 +17,9 @@ def puede_aprobar_orden(user):
 def puede_cancelar_orden(user):
     """Cancelar una orden ya en curso es una decisión de negocio — exclusivo de Diego."""
     return user.has_perm("purchasing.change_ordendecompra")
+
+
+
+def puede_cerrar_orden(user):
+    """Cerrar una recepción parcial/completa es decisión de negocio — exclusivo de Diego."""
+    return user.has_perm("purchasing.change_ordendecompra")
