@@ -161,6 +161,13 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             producto=self.producto,
             cantidad_necesaria=Decimal("5"),
         )
+        registrar_movimiento(
+            producto=self.producto,
+            deposito=Deposito.GENERAL,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("5"),
+            usuario=self.usuario,
+        )
 
         def preparar():
             material_local = MaterialTrabajo.objects.get(pk=material.pk)
@@ -179,6 +186,13 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
         )
 
     def test_dos_devoluciones_simultaneas_no_superan_lo_pendiente(self):
+        registrar_movimiento(
+            producto=self.producto,
+            deposito=Deposito.REPUESTOS,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("5"),
+            usuario=self.usuario,
+        )
         salida = registrar_movimiento(
             producto=self.producto,
             deposito=Deposito.REPUESTOS,
