@@ -121,6 +121,19 @@ class ReporteComercialView(_ReporteMensualView):
 
         if puede_ver_montos_confidenciales(self.request.user):
             context["montos"] = montos_comerciales(context["anio"], context["mes"])
+            context["chart_montos"] = _barras_relativas(
+                [
+                    {
+                        "label": "Facturación aceptada",
+                        "value": context["montos"]["facturacion_aceptada"],
+                    },
+                    {
+                        "label": "Facturación potencial",
+                        "value": context["montos"]["facturacion_potencial"],
+                    },
+                ],
+                "value",
+            )
 
         return context
 
