@@ -8,7 +8,11 @@
     <div class="detail-header-copy">
         <div class="detail-kicker">Presupuesto</div>
         <h1>Presupuesto #{{ presupuesto.numero }}</h1>
-        <div class="detail-subtitle">{{ presupuesto.cliente.nombre }} · {{ presupuesto.direccion|default:"sin dirección" }}</div>
+        <div class="detail-subtitle">
+            {{ presupuesto.cliente.nombre }}
+            {% if presupuesto.obra %} · {{ presupuesto.obra }}{% endif %}
+            {% if presupuesto.direccion %} · {{ presupuesto.direccion }}{% endif %}
+        </div>
     </div>
     <div class="detail-actions">
         {% if presupuesto.estado == "aceptado" %}<span class="status-pill status-pill-success">{{ presupuesto.get_estado_display }}</span>
@@ -16,7 +20,10 @@
         {% elif presupuesto.estado == "rechazado" or presupuesto.estado == "cancelado" %}<span class="status-pill status-pill-danger">{{ presupuesto.get_estado_display }}</span>
         {% elif presupuesto.estado == "vencido" %}<span class="status-pill status-pill-dark">{{ presupuesto.get_estado_display }}</span>
         {% else %}<span class="status-pill status-pill-neutral">{{ presupuesto.get_estado_display }}</span>{% endif %}
-        <a href="{% url 'quotes:pdf' presupuesto.pk %}" class="btn btn-sm btn-outline-secondary" target="_blank"><i class="bi bi-file-earmark-pdf me-1"></i>Exportar PDF</a>
+        {% if puede_editar_estructura %}
+        <a href="{% url 'quotes:editar' presupuesto.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil me-1"></i>Editar propuesta</a>
+        {% endif %}
+        <a href="{% url 'quotes:pdf' presupuesto.pk %}" class="btn btn-sm btn-outline-secondary" target="_blank"><i class="bi bi-file-earmark-pdf me-1"></i>Vista PDF</a>
         {% if perms.quotes.add_presupuesto %}<form method="post" action="{% url 'quotes:duplicar' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-copy me-1"></i>Duplicar</button></form>{% endif %}
         <a href="{% url 'quotes:lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a>
     </div>
@@ -41,46 +48,165 @@
 </div>
 {% endif %}
 
-<div class="detail-grid">
-    <section class="detail-card detail-card-wide">
-        <div class="detail-card-title"><h2>Ítems</h2><span>Precios congelados</span></div>
+<div class="quote-builder-grid">
+    <main class="quote-builder-main">
+        <section class="detail-card">
+            <div class="detail-card-title">
+                <h2>Propuesta al cliente</h2>
+                <span>Cabecera y alcance general</span>
+            </div>
+            <dl class="detail-kv">
+                <div class="detail-kv-row"><dt>Cliente</dt><dd>{{ presupuesto.cliente.nombre }}</dd></div>
+                {% if presupuesto.obra %}<div class="detail-kv-row"><dt>Obra</dt><dd>{{ presupuesto.obra }}</dd></div>{% endif %}
+                {% if presupuesto.direccion %}<div class="detail-kv-row"><dt>Ubicación</dt><dd>{{ presupuesto.direccion }}</dd></div>{% endif %}
+                {% if presupuesto.referencia %}<div class="detail-kv-row"><dt>Referencia</dt><dd>{{ presupuesto.referencia|linebreaksbr }}</dd></div>{% endif %}
+                {% if presupuesto.titulo_propuesta %}<div class="detail-kv-row"><dt>Título</dt><dd><strong>{{ presupuesto.titulo_propuesta }}</strong></dd></div>{% endif %}
+                <div class="detail-kv-row"><dt>Unidades</dt><dd>{{ presupuesto.cantidad_unidades }}{% if presupuesto.importes_por_unidad %} · importes expresados por unidad/casa{% endif %}</dd></div>
+            </dl>
+            {% if presupuesto.alcance_tecnico %}
+            <div class="quote-public-copy">
+                <strong>Alcance técnico general</strong>
+                <div>{{ presupuesto.alcance_tecnico|linebreaksbr }}</div>
+            </div>
+            {% endif %}
+        </section>
 
         {% for grupo in secciones %}
-        <div class="d-flex align-items-center justify-content-between gap-2 mt-3 mb-2">
-            <h3 class="h6 mb-0">{{ grupo.seccion.titulo }}</h3>
-            {% if puede_editar_estructura %}<form method="post" action="{% url 'quotes:eliminar_seccion' grupo.seccion.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Eliminar sección</button></form>{% endif %}
-        </div>
-        {% include "quotes/_tabla_items.html" with filas=grupo.filas %}
+        <section class="detail-card quote-stage-card">
+            <div class="detail-card-title">
+                <div>
+                    <div class="detail-kicker">Etapa {{ forloop.counter }}</div>
+                    <h2>{{ grupo.seccion.titulo }}</h2>
+                </div>
+                {% if puede_editar_estructura %}
+                <div class="d-flex gap-2">
+                    <a href="{% url 'quotes:editar_seccion' grupo.seccion.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> Editar texto</a>
+                    <form method="post" action="{% url 'quotes:eliminar_seccion' grupo.seccion.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button></form>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if grupo.seccion.descripcion_publica %}
+            <div class="quote-public-copy mb-3">{{ grupo.seccion.descripcion_publica|linebreaksbr }}</div>
+            {% endif %}
+
+            <div class="quote-commercial-block">
+                <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                    <div>
+                        <strong>Importes que verá el cliente</strong>
+                        <div class="field-help">Separados del detalle interno de productos y costos.</div>
+                    </div>
+                    {% if puede_editar_estructura %}
+                    <a href="{% url 'quotes:agregar_linea_comercial' presupuesto.pk %}?seccion={{ grupo.seccion.pk }}" class="btn btn-sm btn-primary">+ Importe comercial</a>
+                    {% endif %}
+                </div>
+
+                {% if grupo.lineas_comerciales %}
+                <div class="table-responsive">
+                    <table class="table data-table quote-commercial-table">
+                        <thead><tr><th>Concepto</th><th>IVA</th><th class="text-end">Monto</th>{% if puede_editar_estructura %}<th></th>{% endif %}</tr></thead>
+                        <tbody>
+                        {% for linea in grupo.lineas_comerciales %}
+                        <tr>
+                            <td>
+                                <span class="table-primary-text">{{ linea.etiqueta }}</span>
+                                {% if linea.descripcion %}<span class="table-secondary-text">{{ linea.descripcion }}</span>{% endif %}
+                                {% if linea.opcional %}<span class="status-pill status-pill-warning mt-1">Opcional{% if linea.recomendado %} · recomendado{% endif %}</span>{% endif %}
+                            </td>
+                            <td>{{ linea.get_tipo_iva_display }}</td>
+                            <td class="text-end"><strong>$ {{ linea.monto }}</strong>{% if linea.opcional and not linea.incluido %}<span class="table-secondary-text">No suma</span>{% endif %}</td>
+                            {% if puede_editar_estructura %}
+                            <td class="text-end"><form method="post" action="{% url 'quotes:eliminar_linea_comercial' linea.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit">Quitar</button></form></td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="report-empty">Todavía no hay importes comerciales en esta etapa.</div>
+                {% endif %}
+            </div>
+
+            <details class="quote-internal-details mt-3">
+                <summary>Detalle interno de cálculo ({{ grupo.filas|length }} ítems)</summary>
+                <div class="mt-2">
+                    {% include "quotes/_tabla_items.html" with filas=grupo.filas %}
+                    {% if puede_editar_estructura %}
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <a href="{% url 'quotes:agregar_item_catalogo' presupuesto.pk %}" class="btn btn-sm btn-outline-primary">+ Ítem de catálogo</a>
+                        <a href="{% url 'quotes:agregar_item_manual' presupuesto.pk %}" class="btn btn-sm btn-outline-secondary">+ Ítem manual</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </details>
+        </section>
         {% endfor %}
 
-        {% if filas_sin_seccion or not secciones %}
-        {% if secciones %}<h3 class="h6 mt-3">Sin sección</h3>{% endif %}
-        {% include "quotes/_tabla_items.html" with filas=filas_sin_seccion %}
+        {% if filas_sin_seccion or lineas_comerciales_sin_seccion %}
+        <section class="detail-card">
+            <div class="detail-card-title"><h2>Conceptos generales</h2><span>Fuera de etapas</span></div>
+            {% if lineas_comerciales_sin_seccion %}
+            <div class="table-responsive">
+                <table class="table data-table quote-commercial-table">
+                    <thead><tr><th>Concepto</th><th>IVA</th><th class="text-end">Monto</th>{% if puede_editar_estructura %}<th></th>{% endif %}</tr></thead>
+                    <tbody>{% for linea in lineas_comerciales_sin_seccion %}
+                    <tr><td>{{ linea.etiqueta }}{% if linea.descripcion %}<span class="table-secondary-text">{{ linea.descripcion }}</span>{% endif %}</td><td>{{ linea.get_tipo_iva_display }}</td><td class="text-end">$ {{ linea.monto }}</td>{% if puede_editar_estructura %}<td class="text-end"><form method="post" action="{% url 'quotes:eliminar_linea_comercial' linea.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-danger">Quitar</button></form></td>{% endif %}</tr>
+                    {% endfor %}</tbody>
+                </table>
+            </div>
+            {% endif %}
+            {% if filas_sin_seccion %}
+            <details class="quote-internal-details"><summary>Ítems internos sin etapa ({{ filas_sin_seccion|length }})</summary><div class="mt-2">{% include "quotes/_tabla_items.html" with filas=filas_sin_seccion %}</div></details>
+            {% endif %}
+        </section>
         {% endif %}
 
         {% if puede_editar_estructura %}
-        <div class="form-section">
-            <div class="form-section-title">Agregar contenido</div>
-            <div class="d-flex flex-wrap gap-2 align-items-end">
-                <form method="post" action="{% url 'quotes:agregar_seccion' presupuesto.pk %}" class="d-flex gap-2">{% csrf_token %}{{ seccion_form.titulo }}<button type="submit" class="btn btn-sm btn-outline-primary">+ Sección</button></form>
-                <a href="{% url 'quotes:agregar_item_catalogo' presupuesto.pk %}" class="btn btn-sm btn-primary">+ Ítem de catálogo</a>
-                <a href="{% url 'quotes:agregar_item_manual' presupuesto.pk %}" class="btn btn-sm btn-outline-primary">+ Ítem manual</a>
-            </div>
-        </div>
+        <section class="detail-card quote-add-stage">
+            <div class="detail-card-title"><h2>Agregar etapa</h2><span>Texto técnico + importes comerciales</span></div>
+            <form method="post" action="{% url 'quotes:agregar_seccion' presupuesto.pk %}">
+                {% csrf_token %}
+                <div class="form-grid">
+                    <div class="form-field"><label>Título</label>{{ seccion_form.titulo }}</div>
+                    <div class="form-field"><label>Descripción pública</label>{{ seccion_form.descripcion_publica }}<div class="field-help">Un punto por línea; esto aparece en el PDF.</div></div>
+                </div>
+                <div class="form-actions"><button type="submit" class="btn btn-primary">+ Agregar etapa</button><a href="{% url 'quotes:agregar_linea_comercial' presupuesto.pk %}" class="btn btn-outline-primary">+ Importe sin etapa</a></div>
+            </form>
+        </section>
         {% endif %}
-    </section>
 
-    <aside class="detail-card detail-card-third">
-        <div class="detail-card-title"><h2>Resumen</h2><span>Totales</span></div>
-        <table class="summary-table">
-            <tr><td>Subtotal</td><td class="text-end">&#36;{{ totales.subtotal_general }}</td></tr>
-            <tr><td>Descuento general {% if totales.descuento_general_tipo == "porcentaje" %}({{ totales.descuento_general_valor }}%){% else %}(monto fijo){% endif %}</td><td class="text-end">&#36;{{ totales.descuento_general_valor }}</td></tr>
-            <tr><td>Cantidad de unidades</td><td class="text-end">×{{ totales.cantidad_unidades }}</td></tr>
-            <tr class="summary-total"><td>Total</td><td class="text-end">&#36;{{ totales.total_final }}</td></tr>
-        </table>
+        {% if presupuesto.notas_cliente or presupuesto.forma_pago or presupuesto.garantia or presupuesto.exclusiones or presupuesto.condiciones %}
+        <section class="detail-card">
+            <div class="detail-card-title"><h2>Bloques finales del PDF</h2><span>Contenido visible al cliente</span></div>
+            <div class="quote-final-blocks">
+                {% if presupuesto.notas_cliente %}<div><strong>Nota</strong><p>{{ presupuesto.notas_cliente|linebreaksbr }}</p></div>{% endif %}
+                {% if presupuesto.forma_pago %}<div><strong>Forma de pago</strong><p>{{ presupuesto.forma_pago|linebreaksbr }}</p></div>{% endif %}
+                {% if presupuesto.garantia %}<div><strong>Garantía</strong><p>{{ presupuesto.garantia|linebreaksbr }}</p></div>{% endif %}
+                {% if presupuesto.exclusiones %}<div><strong>Exclusiones</strong><p>{{ presupuesto.exclusiones|linebreaksbr }}</p></div>{% endif %}
+                {% if presupuesto.condiciones %}<div><strong>Condiciones generales</strong><p>{{ presupuesto.condiciones|linebreaksbr }}</p></div>{% endif %}
+            </div>
+        </section>
+        {% endif %}
+    </main>
 
-        <div class="form-section">
-            <div class="form-section-title">Trabajo</div>
+    <aside class="quote-builder-sidebar">
+        <section class="detail-card quote-summary-sticky">
+            <div class="detail-card-title"><h2>Resumen comercial</h2><span>{% if totales.usa_lineas_comerciales %}Desde importes al cliente{% else %}Desde ítems internos{% endif %}</span></div>
+            <table class="summary-table">
+                <tr><td>Subtotal por propuesta</td><td class="text-end">$ {{ totales.subtotal_general }}</td></tr>
+                <tr><td>Descuento general {% if totales.descuento_general_tipo == "porcentaje" %}({{ totales.descuento_general_valor }}%){% endif %}</td><td class="text-end">{{ totales.descuento_general_valor }}</td></tr>
+                {% if presupuesto.importes_por_unidad %}<tr><td>Total por unidad</td><td class="text-end"><strong>$ {{ totales.total_por_unidad }}</strong></td></tr>{% endif %}
+                <tr><td>Cantidad de unidades</td><td class="text-end">×{{ totales.cantidad_unidades }}</td></tr>
+                <tr class="summary-total"><td>Total estimado</td><td class="text-end">$ {{ totales.total_final }}</td></tr>
+            </table>
+            <div class="field-help mt-2">
+                {% if presupuesto.mostrar_total_general %}El PDF mostrará total general.{% else %}El PDF no mostrará total general; solo los importes por etapa/concepto.{% endif %}
+            </div>
+        </section>
+
+        <section class="detail-card">
+            <div class="detail-card-title"><h2>Trabajo</h2><span>Después de aceptar</span></div>
             {% if presupuesto.trabajo %}
             <a href="{% url 'jobs:detalle' presupuesto.trabajo.pk %}" class="btn btn-outline-primary w-100">Ver trabajo #{{ presupuesto.trabajo.pk }} ({{ presupuesto.trabajo.get_estado_display }})</a>
             {% elif puede_crear_trabajo %}
@@ -88,14 +214,14 @@
             {% else %}
             <div class="text-muted small">Todavía no hay un trabajo asociado.</div>
             {% endif %}
-        </div>
-    </aside>
+        </section>
 
-    {% if presupuesto.condiciones %}
-    <section class="detail-card detail-card-half"><div class="detail-card-title"><h2>Condiciones</h2><span>Congeladas en esta propuesta</span></div><div class="detail-note">{{ presupuesto.condiciones }}</div></section>
-    {% endif %}
-    {% if presupuesto.notas_generales %}
-    <section class="detail-card detail-card-half"><div class="detail-card-title"><h2>Notas</h2><span>Internas / generales</span></div><div class="detail-note">{{ presupuesto.notas_generales }}</div></section>
-    {% endif %}
+        {% if presupuesto.notas_generales %}
+        <section class="detail-card">
+            <div class="detail-card-title"><h2>Notas internas</h2><span>No salen en PDF</span></div>
+            <div class="detail-note">{{ presupuesto.notas_generales|linebreaksbr }}</div>
+        </section>
+        {% endif %}
+    </aside>
 </div>
 {% endblock %}
