@@ -7,9 +7,7 @@ from apps.stock.models import Deposito
 
 class EstadoOrdenCompra(models.TextChoices):
     BORRADOR = "borrador", "Borrador"
-    PENDIENTE_APROBACION = "pendiente_aprobacion", "Pendiente de aprobación"
-    APROBADA = "aprobada", "Aprobada"
-    RECHAZADA = "rechazada", "Rechazada"
+    EMITIDA = "emitida", "Emitida"
     ENVIADA = "enviada", "Enviada"
     RECEPCION_PARCIAL = "recepcion_parcial", "Recepción parcial"
     RECIBIDA = "recibida", "Recibida"
@@ -17,19 +15,12 @@ class EstadoOrdenCompra(models.TextChoices):
     CANCELADA = "cancelada", "Cancelada"
 
 
-# Grafo de ciclo de vida. Las transiciones a RECEPCION_PARCIAL y
-# RECIBIDA son automáticas desde recibir_linea(); CERRADA se ejecuta
-# mediante cerrar_orden(). El resto son acciones explícitas del usuario.
+# Las transiciones a RECEPCION_PARCIAL y RECIBIDA son automáticas desde
+# recibir_linea(); CERRADA se ejecuta mediante cerrar_orden().
 TRANSICIONES_VALIDAS = {
-    EstadoOrdenCompra.BORRADOR: {EstadoOrdenCompra.PENDIENTE_APROBACION},
-    EstadoOrdenCompra.PENDIENTE_APROBACION: {
-        EstadoOrdenCompra.APROBADA,
-        EstadoOrdenCompra.RECHAZADA,
+    EstadoOrdenCompra.BORRADOR: {EstadoOrdenCompra.EMITIDA},
+    EstadoOrdenCompra.EMITIDA: {
         EstadoOrdenCompra.BORRADOR,
-        EstadoOrdenCompra.CANCELADA,
-    },
-    EstadoOrdenCompra.RECHAZADA: {EstadoOrdenCompra.BORRADOR},
-    EstadoOrdenCompra.APROBADA: {
         EstadoOrdenCompra.ENVIADA,
         EstadoOrdenCompra.CANCELADA,
     },
@@ -50,21 +41,22 @@ TRANSICIONES_VALIDAS = {
 
 class OrdenDeCompra(models.Model):
     """
-    Ciclo de compra:
-    Borrador → Pendiente de aprobación → Aprobada → Enviada →
-    Recepción parcial → Recibida → Cerrada.
+    Ciclo de compra simplificado desde la Etapa 11K:
 
-    Rechazada y Cancelada son ramas laterales. Diego debe aprobar antes
-    de que la orden pueda enviarse al proveedor. Una vez recibida
-    mercadería, la orden ya no se cancela: si el proveedor no entregará
-    el remanente, se cierra como recepción parcial dejando motivo.
+    Borrador → Emitida → Enviada → Recepción parcial → Recibida → Cerrada.
 
-    Las líneas solo son editables en Borrador (trigger de PostgreSQL).
-    Por eso una aprobación siempre corresponde exactamente al contenido
-    que Diego revisó.
+    Ya no existe aprobación obligatoria. Emitir congela el contenido
+    porque las líneas solo son editables en Borrador (trigger PostgreSQL).
+    Antes de enviarla todavía puede volver a Borrador para corregirse,
+    quedando esa reapertura registrada en AuditLog.
 
-    Los campos de usuario/fecha guardan el hito operativo actual de
-    manera consultable. El historial completo sigue viviendo en AuditLog.
+    Cancelada es una rama lateral válida antes de cualquier recepción.
+    Una vez recibida mercadería, si el proveedor no entregará el remanente,
+    la orden se cierra como recepción parcial dejando motivo.
+
+    Los campos legacy de aprobación se conservan por compatibilidad
+    histórica: no participan del flujo nuevo y permiten no destruir
+    trazabilidad de órdenes creadas antes de 11K.
     """
 
     numero = models.PositiveIntegerField(
@@ -88,6 +80,16 @@ class OrdenDeCompra(models.Model):
     )
     creado_en = models.DateTimeField(auto_now_add=True)
 
+    emitida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ordenes_compra_emitidas",
+    )
+    emitida_en = models.DateTimeField(null=True, blank=True)
+
+    # Legacy pre-11K. Se mantienen para conservar historial previo.
     solicitud_aprobacion_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -152,9 +154,6 @@ class OrdenDeCompra(models.Model):
         ordering = ["-numero"]
         verbose_name = "Orden de compra"
         verbose_name_plural = "Órdenes de compra"
-        permissions = [
-            ("approve_ordendecompra", "Puede aprobar o rechazar una orden de compra"),
-        ]
 
     def __str__(self):
         return f"OC #{self.numero} — {self.proveedor}"

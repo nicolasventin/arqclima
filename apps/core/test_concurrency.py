@@ -56,7 +56,6 @@ def _otorgar_permisos_compras(user):
     for codename, nombre in [
         ("add_ordendecompra", "Puede agregar orden de compra"),
         ("change_ordendecompra", "Puede modificar orden de compra"),
-        ("approve_ordendecompra", "Puede aprobar o rechazar una orden de compra"),
     ]:
         permiso, _ = Permission.objects.get_or_create(
             content_type=content_type,
@@ -142,12 +141,7 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
         )
         cambiar_estado_orden(
             orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
-            self.usuario,
-        )
-        cambiar_estado_orden(
-            orden,
-            EstadoOrdenCompra.APROBADA,
+            EstadoOrdenCompra.EMITIDA,
             self.usuario,
         )
         cambiar_estado_orden(
@@ -310,7 +304,7 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             usuario_local = User.objects.get(pk=self.usuario.pk)
             return lambda: cambiar_estado_orden(
                 orden_local,
-                EstadoOrdenCompra.PENDIENTE_APROBACION,
+                EstadoOrdenCompra.EMITIDA,
                 usuario_local,
             )
 
@@ -319,10 +313,10 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
         self.assertEqual(sum(resultado is None for resultado in resultados), 1)
         self.assertEqual(sum(isinstance(resultado, ValueError) for resultado in resultados), 1)
         orden.refresh_from_db()
-        self.assertEqual(orden.estado, EstadoOrdenCompra.PENDIENTE_APROBACION)
+        self.assertEqual(orden.estado, EstadoOrdenCompra.EMITIDA)
         self.assertEqual(
             AuditLog.objects.filter(
-                accion="solicitar_aprobacion_orden_compra",
+                accion="emitir_orden_compra",
                 object_id=str(orden.pk),
             ).count(),
             1,
@@ -380,12 +374,7 @@ class AtomicidadOperacionesCriticasTests(TestCase):
         )
         cambiar_estado_orden(
             orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
-            self.usuario,
-        )
-        cambiar_estado_orden(
-            orden,
-            EstadoOrdenCompra.APROBADA,
+            EstadoOrdenCompra.EMITIDA,
             self.usuario,
         )
         cambiar_estado_orden(

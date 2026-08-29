@@ -16,7 +16,6 @@ from apps.stock.permissions import puede_registrar_entrada_salida
 from .forms import CrearOrdenForm, LineaOrdenCompraForm, RecibirLineaForm
 from .models import EstadoOrdenCompra, LineaOrdenCompra, OrdenDeCompra
 from .permissions import (
-    puede_aprobar_orden,
     puede_cancelar_orden,
     puede_cerrar_orden,
     puede_gestionar_orden,
@@ -70,9 +69,7 @@ class OrdenDetailView(PermisoRequeridoMixin, DetailView):
         return OrdenDeCompra.objects.select_related(
             "proveedor",
             "creado_por",
-            "solicitud_aprobacion_por",
-            "aprobada_por",
-            "rechazada_por",
+            "emitida_por",
             "enviada_por",
             "cerrada_por",
             "cancelada_por",
@@ -118,33 +115,20 @@ class OrdenDetailView(PermisoRequeridoMixin, DetailView):
 
         context["puede_gestionar"] = puede_gestionar_orden(user)
         context["puede_editar_lineas"] = es_borrador and puede_gestionar_orden(user)
-        context["puede_aprobar"] = (
-            puede_aprobar_orden(user)
-            and orden.estado == EstadoOrdenCompra.PENDIENTE_APROBACION
-        )
-        context["puede_enviar_a_aprobacion"] = (
+        context["puede_emitir"] = (
             puede_gestionar_orden(user) and es_borrador and tiene_lineas
         )
         context["puede_reabrir"] = (
             puede_gestionar_orden(user)
-            and orden.estado
-            in (
-                EstadoOrdenCompra.PENDIENTE_APROBACION,
-                EstadoOrdenCompra.RECHAZADA,
-            )
+            and orden.estado == EstadoOrdenCompra.EMITIDA
         )
         context["puede_marcar_enviada"] = (
             puede_gestionar_orden(user)
-            and orden.estado == EstadoOrdenCompra.APROBADA
+            and orden.estado == EstadoOrdenCompra.EMITIDA
         )
         context["puede_cancelar"] = (
             puede_cancelar_orden(user)
-            and orden.estado
-            in (
-                EstadoOrdenCompra.PENDIENTE_APROBACION,
-                EstadoOrdenCompra.APROBADA,
-                EstadoOrdenCompra.ENVIADA,
-            )
+            and orden.estado in (EstadoOrdenCompra.EMITIDA, EstadoOrdenCompra.ENVIADA)
             and not tiene_recepciones
         )
         context["puede_cerrar"] = (
@@ -402,8 +386,8 @@ class _TransicionOrdenView(UserPassesTestMixin, View):
         return redirect("purchasing:detalle", pk=pk)
 
 
-class EnviarAAprobacionView(_TransicionOrdenView):
-    nuevo_estado = EstadoOrdenCompra.PENDIENTE_APROBACION
+class EmitirOrdenView(_TransicionOrdenView):
+    nuevo_estado = EstadoOrdenCompra.EMITIDA
 
 
 class ReabrirOrdenView(_TransicionOrdenView):
@@ -412,16 +396,6 @@ class ReabrirOrdenView(_TransicionOrdenView):
 
 class MarcarEnviadaView(_TransicionOrdenView):
     nuevo_estado = EstadoOrdenCompra.ENVIADA
-
-
-class AprobarOrdenView(_TransicionOrdenView):
-    nuevo_estado = EstadoOrdenCompra.APROBADA
-    permiso_check = staticmethod(puede_aprobar_orden)
-
-
-class RechazarOrdenView(_TransicionOrdenView):
-    nuevo_estado = EstadoOrdenCompra.RECHAZADA
-    permiso_check = staticmethod(puede_aprobar_orden)
 
 
 class CancelarOrdenView(_TransicionOrdenView):

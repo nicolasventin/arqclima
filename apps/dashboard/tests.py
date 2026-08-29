@@ -145,7 +145,7 @@ class DashboardPorRolTests(HomeViewWidgetsTests):
         self._login("diego_dashboard")
         response = self.client.get(reverse("dashboard:home"))
 
-        self.assertContains(response, "Compras por aprobar")
+        self.assertContains(response, "Órdenes para enviar")
         self.assertContains(response, "Trabajos activos")
         self.assertContains(response, "Alertas de stock")
         self.assertContains(response, "Presupuestos pendientes")
@@ -158,7 +158,7 @@ class DashboardPorRolTests(HomeViewWidgetsTests):
         self.assertContains(response, "Nuevo presupuesto")
         self.assertContains(response, "Nuevo cliente")
         self.assertContains(response, "Aceptados por iniciar")
-        self.assertNotContains(response, "Compras por aprobar")
+        self.assertNotContains(response, "Órdenes para enviar")
 
     def test_gabriel_ve_devoluciones_y_repuestos(self):
         self._login("gabriel_dashboard")

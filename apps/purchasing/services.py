@@ -10,12 +10,7 @@ from apps.stock.models import TipoMovimiento
 from apps.stock.services import registrar_movimiento
 
 from .models import EstadoOrdenCompra, LineaOrdenCompra, OrdenDeCompra, TRANSICIONES_VALIDAS
-from .permissions import (
-    puede_aprobar_orden,
-    puede_cancelar_orden,
-    puede_cerrar_orden,
-    puede_gestionar_orden,
-)
+from .permissions import puede_cancelar_orden, puede_cerrar_orden, puede_gestionar_orden
 
 
 class TransicionInvalidaError(ValueError):
@@ -70,11 +65,6 @@ def orden_completamente_recibida(orden):
 
 
 def _validar_permiso_transicion(nuevo_estado, usuario):
-    if nuevo_estado in (EstadoOrdenCompra.APROBADA, EstadoOrdenCompra.RECHAZADA):
-        if not puede_aprobar_orden(usuario):
-            raise PermissionError("No tiene permiso para aprobar o rechazar órdenes de compra.")
-        return
-
     if nuevo_estado == EstadoOrdenCompra.CANCELADA:
         if not puede_cancelar_orden(usuario):
             raise PermissionError("No tiene permiso para cancelar órdenes de compra.")
@@ -89,9 +79,9 @@ def cambiar_estado_orden(orden, nuevo_estado, usuario, detalle="", motivo=""):
     """
     Transiciones manuales del ciclo de compra.
 
-    Las transiciones derivadas de recepción (Recepción parcial / Recibida)
-    y el cierre administrativo tienen servicios dedicados para que no se
-    puedan producir estados inconsistentes sin una recepción real.
+    Emitir reemplaza a la antigua aprobación obligatoria y congela las
+    líneas. Las transiciones derivadas de recepción y el cierre tienen
+    servicios dedicados para no producir estados inconsistentes.
     """
     if nuevo_estado in (
         EstadoOrdenCompra.RECEPCION_PARCIAL,
@@ -116,27 +106,19 @@ def cambiar_estado_orden(orden, nuevo_estado, usuario, detalle="", motivo=""):
     ahora = timezone.now()
     update_fields = ["estado"]
 
-    if nuevo_estado == EstadoOrdenCompra.PENDIENTE_APROBACION:
+    if nuevo_estado == EstadoOrdenCompra.EMITIDA:
         if not orden_bloqueada.lineas.exists():
-            raise ValueError("No se puede enviar a aprobación una orden sin líneas.")
-        orden_bloqueada.solicitud_aprobacion_por = usuario
-        orden_bloqueada.solicitud_aprobacion_en = ahora
-        update_fields += ["solicitud_aprobacion_por", "solicitud_aprobacion_en"]
+            raise ValueError("No se puede emitir una orden sin líneas.")
+        orden_bloqueada.emitida_por = usuario
+        orden_bloqueada.emitida_en = ahora
+        update_fields += ["emitida_por", "emitida_en"]
 
-    elif nuevo_estado == EstadoOrdenCompra.APROBADA:
-        if not orden_bloqueada.lineas.exists():
-            raise ValueError("No se puede aprobar una orden sin líneas.")
-        orden_bloqueada.aprobada_por = usuario
-        orden_bloqueada.aprobada_en = ahora
-        update_fields += ["aprobada_por", "aprobada_en"]
-
-    elif nuevo_estado == EstadoOrdenCompra.RECHAZADA:
-        if not motivo_limpio:
-            raise ValueError("Debe indicar el motivo del rechazo.")
-        orden_bloqueada.rechazada_por = usuario
-        orden_bloqueada.rechazada_en = ahora
-        orden_bloqueada.motivo_rechazo = motivo_limpio
-        update_fields += ["rechazada_por", "rechazada_en", "motivo_rechazo"]
+    elif nuevo_estado == EstadoOrdenCompra.BORRADOR:
+        # Volver a borrador invalida la emisión vigente. El evento anterior
+        # sigue quedando en AuditLog y una nueva emisión tendrá su propio hito.
+        orden_bloqueada.emitida_por = None
+        orden_bloqueada.emitida_en = None
+        update_fields += ["emitida_por", "emitida_en"]
 
     elif nuevo_estado == EstadoOrdenCompra.ENVIADA:
         orden_bloqueada.enviada_por = usuario
@@ -159,9 +141,7 @@ def cambiar_estado_orden(orden, nuevo_estado, usuario, detalle="", motivo=""):
     orden_bloqueada.save(update_fields=update_fields)
 
     accion_por_estado = {
-        EstadoOrdenCompra.PENDIENTE_APROBACION: "solicitar_aprobacion_orden_compra",
-        EstadoOrdenCompra.APROBADA: "aprobar_orden_compra",
-        EstadoOrdenCompra.RECHAZADA: "rechazar_orden_compra",
+        EstadoOrdenCompra.EMITIDA: "emitir_orden_compra",
         EstadoOrdenCompra.BORRADOR: "reabrir_orden_compra",
         EstadoOrdenCompra.ENVIADA: "enviar_orden_compra_proveedor",
         EstadoOrdenCompra.CANCELADA: "cancelar_orden_compra",
@@ -179,13 +159,8 @@ def cambiar_estado_orden(orden, nuevo_estado, usuario, detalle="", motivo=""):
 
     orden.estado = nuevo_estado
     for campo in (
-        "solicitud_aprobacion_por",
-        "solicitud_aprobacion_en",
-        "aprobada_por",
-        "aprobada_en",
-        "rechazada_por",
-        "rechazada_en",
-        "motivo_rechazo",
+        "emitida_por",
+        "emitida_en",
         "enviada_por",
         "enviada_en",
         "cancelada_por",
@@ -201,10 +176,9 @@ def recibir_linea(linea, cantidad, costo_real, usuario):
     """
     Registra una recepción física.
 
-    10E endurece la semántica: una orden debe haber sido marcada Enviada
-    antes de recibir. La primera recepción mueve automáticamente a
-    Recepción parcial, y la última unidad pendiente de todas las líneas
-    mueve automáticamente a Recibida.
+    Una orden debe haber sido marcada Enviada antes de recibir. La primera
+    recepción mueve automáticamente a Recepción parcial, y la última unidad
+    pendiente de todas las líneas mueve automáticamente a Recibida.
     """
     if cantidad <= 0:
         raise ValueError("La cantidad recibida tiene que ser mayor a cero.")

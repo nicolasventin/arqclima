@@ -133,18 +133,18 @@ class HomeView(LoginRequiredMixin, TemplateView):
         acciones = context["dashboard_acciones"]
 
         if rol == "Administrador":
-            if user.has_perm("purchasing.approve_ordendecompra"):
-                pendientes_aprobacion = OrdenDeCompra.objects.filter(
-                    estado=EstadoOrdenCompra.PENDIENTE_APROBACION
+            if user.has_perm("purchasing.view_ordendecompra"):
+                emitidas_pendientes_envio = OrdenDeCompra.objects.filter(
+                    estado=EstadoOrdenCompra.EMITIDA
                 ).count()
                 metricas.append(
                     self._metrica(
-                        label="Compras por aprobar",
-                        value=pendientes_aprobacion,
-                        hint="Órdenes esperando decisión",
-                        icon="bi-cart-check",
-                        url=f"{reverse('purchasing:lista')}?estado={EstadoOrdenCompra.PENDIENTE_APROBACION}",
-                        tone="warning",
+                        label="Órdenes para enviar",
+                        value=emitidas_pendientes_envio,
+                        hint="Emitidas, todavía no enviadas",
+                        icon="bi-send-check",
+                        url=f"{reverse('purchasing:lista')}?estado={EstadoOrdenCompra.EMITIDA}",
+                        tone="warning" if emitidas_pendientes_envio else "success",
                     )
                 )
             if user.has_perm("jobs.view_trabajo"):
