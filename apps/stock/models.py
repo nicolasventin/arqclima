@@ -142,7 +142,8 @@ class MovimientoStock(models.Model):
                     models.Q(tipo=TipoMovimiento.ENTRADA, cantidad__gt=0)
                     | models.Q(tipo=TipoMovimiento.SALIDA, cantidad__lt=0)
                     | models.Q(tipo=TipoMovimiento.DEVOLUCION, cantidad__gt=0)
-                    | models.Q(tipo=TipoMovimiento.AJUSTE)
+                    | models.Q(tipo=TipoMovimiento.AJUSTE, cantidad__gt=0)
+                    | models.Q(tipo=TipoMovimiento.AJUSTE, cantidad__lt=0)
                 ),
                 name="movimientostock_signo_coherente_con_tipo",
             ),
