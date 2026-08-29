@@ -1,103 +1,187 @@
 {% extends "base.html" %}
 
 {% block title %}Inicio — ARQCLIMA{% endblock %}
+{% block page_heading %}{{ dashboard_perfil.titulo }}{% endblock %}
+{% block page_subheading %}{{ dashboard_perfil.descripcion }}{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-4">Hola, {{ user.get_full_name|default:user.username }}</h1>
-
-<div class="row g-3">
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <h5 class="card-title">Tu rol</h5>
-                <p class="card-text">{{ user_role|default:"Sin rol asignado" }}</p>
-            </div>
+<section class="dashboard-hero mb-4">
+    <div class="dashboard-hero-copy">
+        <div class="dashboard-eyebrow">{{ dashboard_perfil.eyebrow }}</div>
+        <h1>Hola, {{ user.get_full_name|default:user.username }}</h1>
+        <p>{{ dashboard_perfil.descripcion }}</p>
+        <div class="dashboard-role-chip">
+            <i class="bi {{ dashboard_perfil.icono }}"></i>
+            <span>{{ dashboard_rol|default:"Sin rol asignado" }}</span>
         </div>
     </div>
-
-    {% if puede_gestionar_permisos %}
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <h5 class="card-title">Usuarios y permisos</h5>
-                <p class="card-text">Gestioná el rol y los permisos individuales de cada usuario.</p>
-                <a href="{% url 'accounts:permisos' %}" class="btn btn-sm btn-primary">Administrar</a>
-            </div>
-        </div>
+    <div class="dashboard-hero-mark" aria-hidden="true">
+        <i class="bi {{ dashboard_perfil.icono }}"></i>
     </div>
-    {% endif %}
+</section>
 
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <h5 class="card-title">Mis tareas</h5>
-                {% if mis_tareas %}
-                <ul class="list-unstyled mb-2">
-                    {% for tarea in mis_tareas %}
-                    <li class="{% if tarea.esta_vencida %}text-danger{% endif %}">
-                        {{ tarea.titulo }}
-                        {% if tarea.fecha_limite %}<span class="text-muted small">({{ tarea.fecha_limite|date:"d/m" }})</span>{% endif %}
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <p class="card-text text-muted">No tenés tareas pendientes.</p>
-                {% endif %}
-                <a href="{% url 'tasks:mis_tareas' %}" class="btn btn-sm btn-primary">Ver todas</a>
-                {% if puede_gestionar_tareas %}
-                <a href="{% url 'tasks:lista' %}" class="btn btn-sm btn-outline-secondary">Tareas del equipo</a>
-                {% endif %}
-            </div>
+{% if dashboard_metricas %}
+<div class="dashboard-metrics mb-4">
+    {% for metrica in dashboard_metricas %}
+    <article class="dashboard-metric dashboard-metric-{{ metrica.tone }}">
+        <div class="dashboard-metric-icon">
+            <i class="bi {{ metrica.icon }}"></i>
         </div>
-    </div>
-
-    {% if presupuestos_pendientes is not None %}
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <h5 class="card-title">Presupuestos pendientes</h5>
-                <p class="card-text display-6 mb-1">{{ presupuestos_pendientes }}</p>
-                <p class="card-text text-muted small">Enviados sin resolver</p>
-                <a href="{% url 'quotes:lista' %}?estado=enviado" class="btn btn-sm btn-primary">Ver</a>
-            </div>
+        <div class="dashboard-metric-copy">
+            <div class="dashboard-metric-label">{{ metrica.label }}</div>
+            <div class="dashboard-metric-value">{{ metrica.value }}</div>
+            <div class="dashboard-metric-hint">{{ metrica.hint }}</div>
         </div>
-    </div>
-    {% endif %}
-
-    {% if stock_bajo_total is not None %}
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <h5 class="card-title">Stock bajo</h5>
-                {% if stock_bajo %}
-                <ul class="list-unstyled mb-2">
-                    {% for producto, deposito, cantidad in stock_bajo %}
-                    <li>{{ producto }} <span class="text-muted small">({{ deposito.label }})</span></li>
-                    {% endfor %}
-                </ul>
-                {% if stock_bajo_total > 5 %}
-                <p class="text-muted small">y {{ stock_bajo_total|add:"-5" }} más…</p>
-                {% endif %}
-                {% else %}
-                <p class="card-text text-muted">Ningún producto por debajo del mínimo.</p>
-                {% endif %}
-                <a href="{% url 'stock:lista' %}" class="btn btn-sm btn-primary">Ver stock</a>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    {% if mis_trabajos_activos is not None %}
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <h5 class="card-title">Mis trabajos activos</h5>
-                <p class="card-text display-6 mb-1">{{ mis_trabajos_activos }}</p>
-                <p class="card-text text-muted small">Asignados, sin terminar ni cancelar</p>
-                <a href="{% url 'jobs:lista' %}" class="btn btn-sm btn-primary">Ver trabajos</a>
-            </div>
-        </div>
-    </div>
-    {% endif %}
+        {% if metrica.url %}
+        <a href="{{ metrica.url }}" class="dashboard-metric-link" aria-label="Abrir {{ metrica.label }}">
+            <i class="bi bi-arrow-up-right"></i>
+        </a>
+        {% endif %}
+    </article>
+    {% endfor %}
 </div>
+{% endif %}
+
+<div class="row g-4">
+    <div class="col-xl-8">
+        <section class="dashboard-panel h-100">
+            <div class="dashboard-panel-header">
+                <div>
+                    <div class="dashboard-panel-kicker">Pendientes</div>
+                    <h2>Mis tareas</h2>
+                </div>
+                <a href="{% url 'tasks:mis_tareas' %}" class="btn btn-sm btn-outline-secondary">
+                    Ver todas
+                </a>
+            </div>
+
+            {% if mis_tareas %}
+            <div class="dashboard-task-list">
+                {% for tarea in mis_tareas %}
+                <div class="dashboard-task-row {% if tarea.esta_vencida %}is-overdue{% endif %}">
+                    <div class="dashboard-task-state">
+                        <i class="bi {% if tarea.estado == 'en_proceso' %}bi-hourglass-split{% else %}bi-circle{% endif %}"></i>
+                    </div>
+                    <div class="dashboard-task-copy">
+                        <strong>{{ tarea.titulo }}</strong>
+                        <span>
+                            {{ tarea.get_prioridad_display }}
+                            {% if tarea.fecha_limite %}
+                                · vence {{ tarea.fecha_limite|date:"d/m/Y" }}
+                            {% endif %}
+                            {% if tarea.esta_vencida %}· vencida{% endif %}
+                        </span>
+                    </div>
+                    <span class="dashboard-task-status">{{ tarea.get_estado_display }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="dashboard-empty">
+                <i class="bi bi-check-circle"></i>
+                <strong>Sin tareas pendientes</strong>
+                <span>No tenés tareas abiertas asignadas.</span>
+            </div>
+            {% endif %}
+        </section>
+    </div>
+
+    <div class="col-xl-4">
+        <section class="dashboard-panel h-100">
+            <div class="dashboard-panel-header">
+                <div>
+                    <div class="dashboard-panel-kicker">Accesos</div>
+                    <h2>Acciones rápidas</h2>
+                </div>
+            </div>
+
+            {% if dashboard_acciones %}
+            <div class="dashboard-actions">
+                {% for accion in dashboard_acciones %}
+                <a href="{{ accion.url }}"
+                   class="dashboard-action {% if accion.style == 'outline' %}is-outline{% endif %}">
+                    <span class="dashboard-action-icon"><i class="bi {{ accion.icon }}"></i></span>
+                    <span>{{ accion.label }}</span>
+                    <i class="bi bi-chevron-right ms-auto"></i>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="dashboard-empty compact">
+                <i class="bi bi-grid"></i>
+                <span>Usá el menú lateral para acceder a tus módulos.</span>
+            </div>
+            {% endif %}
+
+            {% if puede_gestionar_tareas %}
+            <div class="dashboard-team-link">
+                <a href="{% url 'tasks:lista' %}">
+                    <i class="bi bi-list-check"></i>
+                    Ver tareas del equipo
+                </a>
+            </div>
+            {% endif %}
+        </section>
+    </div>
+</div>
+
+{% if dashboard_rol == "Técnico de Campo" and mis_trabajos_recientes %}
+<section class="dashboard-panel mt-4">
+    <div class="dashboard-panel-header">
+        <div>
+            <div class="dashboard-panel-kicker">Campo</div>
+            <h2>Trabajos activos</h2>
+        </div>
+        <a href="{% url 'jobs:lista' %}" class="btn btn-sm btn-outline-secondary">Ver todos</a>
+    </div>
+    <div class="dashboard-jobs">
+        {% for trabajo in mis_trabajos_recientes %}
+        <a href="{% url 'jobs:detalle' trabajo.pk %}" class="dashboard-job-row">
+            <div>
+                <strong>#{{ trabajo.pk }} · {{ trabajo.presupuesto.cliente.nombre }}</strong>
+                <span>{{ trabajo.direccion|default:"Sin dirección cargada" }}</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-secondary">{{ trabajo.get_estado_display }}</span>
+                <i class="bi bi-chevron-right"></i>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% if stock_bajo_total is not None and dashboard_rol != "Técnico de Campo" %}
+<section class="dashboard-panel mt-4">
+    <div class="dashboard-panel-header">
+        <div>
+            <div class="dashboard-panel-kicker">Alertas</div>
+            <h2>Stock bajo</h2>
+        </div>
+        <a href="{% url 'stock:lista' %}" class="btn btn-sm btn-outline-secondary">Ver stock</a>
+    </div>
+
+    {% if stock_bajo %}
+    <div class="dashboard-alert-list">
+        {% for producto, deposito, cantidad in stock_bajo %}
+        <div class="dashboard-alert-row">
+            <span class="dashboard-alert-icon"><i class="bi bi-exclamation-triangle"></i></span>
+            <div>
+                <strong>{{ producto }}</strong>
+                <span>{{ deposito.label }} · disponible {{ cantidad }}</span>
+            </div>
+        </div>
+        {% endfor %}
+        {% if stock_bajo_total > 5 %}
+        <div class="text-muted small mt-2">Hay {{ stock_bajo_total|add:"-5" }} alerta(s) adicional(es).</div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="dashboard-empty compact">
+        <i class="bi bi-check-circle"></i>
+        <span>No hay productos debajo del mínimo.</span>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
 {% endblock %}
