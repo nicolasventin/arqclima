@@ -106,7 +106,6 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
         orden = OrdenDeCompra.objects.create(
             proveedor=self.proveedor,
             deposito_destino=Deposito.GENERAL,
-            estado=EstadoOrdenCompra.APROBADA,
             creado_por=self.usuario,
         )
         linea = LineaOrdenCompra.objects.create(
@@ -115,6 +114,10 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             cantidad=Decimal("10"),
             costo_esperado=Decimal("100"),
         )
+        OrdenDeCompra.objects.filter(pk=orden.pk).update(
+            estado=EstadoOrdenCompra.APROBADA
+        )
+        orden.refresh_from_db()
 
         def preparar():
             linea_local = LineaOrdenCompra.objects.get(pk=linea.pk)
@@ -275,7 +278,6 @@ class AtomicidadOperacionesCriticasTests(TestCase):
         orden = OrdenDeCompra.objects.create(
             proveedor=self.proveedor,
             deposito_destino=Deposito.GENERAL,
-            estado=EstadoOrdenCompra.APROBADA,
             creado_por=self.usuario,
         )
         linea = LineaOrdenCompra.objects.create(
@@ -284,6 +286,10 @@ class AtomicidadOperacionesCriticasTests(TestCase):
             cantidad=Decimal("5"),
             costo_esperado=Decimal("100"),
         )
+        OrdenDeCompra.objects.filter(pk=orden.pk).update(
+            estado=EstadoOrdenCompra.APROBADA
+        )
+        orden.refresh_from_db()
 
         with patch(
             "apps.purchasing.services.registrar_movimiento",
@@ -311,10 +317,7 @@ class AtomicidadOperacionesCriticasTests(TestCase):
 
     def test_listado_materiales_no_queda_a_mitad_si_falla_auditoria(self):
         cliente = Cliente.objects.create(nombre="Cliente atomicidad listado")
-        presupuesto = Presupuesto.objects.create(
-            cliente=cliente,
-            estado=EstadoPresupuesto.ACEPTADO,
-        )
+        presupuesto = Presupuesto.objects.create(cliente=cliente)
         seccion = SeccionPresupuesto.objects.create(
             presupuesto=presupuesto,
             titulo="Etapa 1",
@@ -326,6 +329,10 @@ class AtomicidadOperacionesCriticasTests(TestCase):
             cantidad=Decimal("2"),
             precio_unitario=Decimal("100"),
         )
+        Presupuesto.objects.filter(pk=presupuesto.pk).update(
+            estado=EstadoPresupuesto.ACEPTADO
+        )
+        presupuesto.refresh_from_db()
         trabajo = Trabajo.objects.create(
             presupuesto=presupuesto,
             creado_por=self.usuario,
