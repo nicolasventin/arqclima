@@ -1,258 +1,114 @@
 {% extends "base.html" %}
-
 {% block title %}Trabajo #{{ trabajo.pk }} — ARQCLIMA{% endblock %}
+{% block page_heading %}Trabajo #{{ trabajo.pk }}{% endblock %}
+{% block page_subheading %}{{ trabajo.presupuesto.cliente.nombre }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-    <div>
-        <h1 class="h4 mb-0">Trabajo #{{ trabajo.pk }}</h1>
-        <p class="text-muted mb-0">
-            {{ trabajo.presupuesto.cliente.nombre }} — {{ trabajo.direccion|default:"sin dirección" }}
-        </p>
-        <a href="{% url 'quotes:detalle' trabajo.presupuesto.pk %}">Ver presupuesto de origen (#{{ trabajo.presupuesto.numero }})</a>
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Trabajo</div>
+        <h1>Trabajo #{{ trabajo.pk }}</h1>
+        <div class="detail-subtitle">{{ trabajo.presupuesto.cliente.nombre }} · {{ trabajo.direccion|default:"sin dirección" }}</div>
     </div>
-    <span class="badge {% if trabajo.estado == 'cancelado' %}bg-danger{% elif trabajo.estado == 'terminado' %}bg-success{% else %}bg-secondary{% endif %} fs-6">
-        {{ trabajo.get_estado_display }}
-    </span>
+    <div class="detail-actions">
+        {% if trabajo.estado == 'terminado' %}<span class="status-pill status-pill-success">{{ trabajo.get_estado_display }}</span>
+        {% elif trabajo.estado == 'cancelado' %}<span class="status-pill status-pill-danger">{{ trabajo.get_estado_display }}</span>
+        {% elif trabajo.estado == 'en_ejecucion' %}<span class="status-pill status-pill-warning">{{ trabajo.get_estado_display }}</span>
+        {% elif trabajo.estado == 'listo' %}<span class="status-pill status-pill-success">{{ trabajo.get_estado_display }}</span>
+        {% elif trabajo.estado == 'preparando_materiales' %}<span class="status-pill status-pill-info">{{ trabajo.get_estado_display }}</span>
+        {% else %}<span class="status-pill status-pill-neutral">{{ trabajo.get_estado_display }}</span>{% endif %}
+        <a href="{% url 'quotes:detalle' trabajo.presupuesto.pk %}" class="btn btn-sm btn-outline-primary">Presupuesto #{{ trabajo.presupuesto.numero }}</a>
+        <a href="{% url 'jobs:lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a>
+    </div>
 </div>
 
-<dl class="row">
-    <dt class="col-sm-3">Técnico asignado</dt>
-    <dd class="col-sm-9">{{ trabajo.tecnico_asignado|default:"Sin asignar" }}</dd>
-    {% if trabajo.observaciones %}
-    <dt class="col-sm-3">Observaciones</dt>
-    <dd class="col-sm-9" style="white-space: pre-line;">{{ trabajo.observaciones }}</dd>
-    {% endif %}
-    {% if trabajo.terminado_en %}
-    <dt class="col-sm-3">Finalizado</dt>
-    <dd class="col-sm-9">
-        {{ trabajo.terminado_en|date:"d/m/Y H:i" }}
-        {% if trabajo.terminado_por %}por {{ trabajo.terminado_por }}{% endif %}
-    </dd>
-    {% endif %}
-    {% if trabajo.observaciones_cierre %}
-    <dt class="col-sm-3">Observaciones de cierre</dt>
-    <dd class="col-sm-9" style="white-space: pre-line;">{{ trabajo.observaciones_cierre }}</dd>
-    {% endif %}
-    {% if trabajo.cancelado_en %}
-    <dt class="col-sm-3">Cancelado</dt>
-    <dd class="col-sm-9">
-        {{ trabajo.cancelado_en|date:"d/m/Y H:i" }}
-        {% if trabajo.cancelado_por %}por {{ trabajo.cancelado_por }}{% endif %}
-    </dd>
-    <dt class="col-sm-3">Motivo de cancelación</dt>
-    <dd class="col-sm-9">{{ trabajo.motivo_cancelacion }}</dd>
-    {% endif %}
-</dl>
+{% if trabajo_cerrado %}<div class="alert alert-secondary">Este trabajo está cerrado. Los materiales, consumos y asignaciones operativas quedaron bloqueados.</div>{% endif %}
+{% if mostrar_advertencia_pendientes %}<div class="alert alert-warning"><strong>Quedan materiales sin enviar</strong> con el trabajo ya en "{{ trabajo.get_estado_display }}": <ul class="mb-0">{% for material in materiales_pendientes_envio %}<li>{{ material.producto|default:material.descripcion_manual }}</li>{% endfor %}</ul></div>{% endif %}
+{% if puede_finalizar and not listo_para_finalizar and trabajo.estado == 'en_ejecucion' %}<div class="alert alert-warning"><strong>El trabajo todavía no se puede finalizar:</strong><ul class="mb-0">{% for motivo in motivos_bloqueo_finalizacion %}<li>{{ motivo }}</li>{% endfor %}</ul></div>{% endif %}
 
-{% if trabajo_cerrado %}
-<div class="alert alert-secondary py-2">
-    Este trabajo está cerrado. Los materiales, consumos y asignaciones operativas quedaron bloqueados.
+{% if estados_para_avanzar or estados_para_retroceder or puede_asignar_tecnico or puede_finalizar %}
+<div class="workflow-bar">
+    {% for estado in estados_para_avanzar %}<form method="post" action="{% url 'jobs:cambiar_estado' trabajo.pk %}">{% csrf_token %}<input type="hidden" name="estado" value="{{ estado.valor }}"><button type="submit" class="btn btn-sm btn-primary">Marcar {{ estado.etiqueta }}</button></form>{% endfor %}
+    {% for estado in estados_para_retroceder %}<form method="post" action="{% url 'jobs:cambiar_estado' trabajo.pk %}">{% csrf_token %}<input type="hidden" name="estado" value="{{ estado.valor }}"><button type="submit" class="btn btn-sm btn-outline-warning">Volver a {{ estado.etiqueta }}</button></form>{% endfor %}
+    {% if puede_asignar_tecnico %}<form method="post" action="{% url 'jobs:asignar_tecnico' trabajo.pk %}" class="d-flex gap-1 align-items-center">{% csrf_token %}{{ asignar_tecnico_form.tecnico_asignado }}<button type="submit" class="btn btn-sm btn-outline-secondary">Guardar técnico</button></form>{% endif %}
 </div>
 {% endif %}
 
-{% if puede_asignar_tecnico %}
-<form method="post" action="{% url 'jobs:asignar_tecnico' trabajo.pk %}" class="row g-2 align-items-end mb-3" style="max-width: 500px;">
-    {% csrf_token %}
-    <div class="col-auto">
-        <label class="form-label">Reasignar técnico</label>
-        {{ asignar_tecnico_form.tecnico_asignado }}
-    </div>
-    <div class="col-auto">
-        <button type="submit" class="btn btn-sm btn-secondary">Guardar</button>
-    </div>
-</form>
-{% endif %}
+<div class="detail-grid">
+    <section class="detail-card detail-card-third">
+        <div class="detail-card-title"><h2>Información</h2><span>Trabajo</span></div>
+        <dl class="detail-kv">
+            <div class="detail-kv-row"><dt>Cliente</dt><dd>{{ trabajo.presupuesto.cliente.nombre }}</dd></div>
+            <div class="detail-kv-row"><dt>Dirección</dt><dd>{{ trabajo.direccion|default:"—" }}</dd></div>
+            <div class="detail-kv-row"><dt>Técnico asignado</dt><dd>{{ trabajo.tecnico_asignado|default:"Sin asignar" }}</dd></div>
+            <div class="detail-kv-row"><dt>Presupuesto</dt><dd><a href="{% url 'quotes:detalle' trabajo.presupuesto.pk %}">#{{ trabajo.presupuesto.numero }}</a></dd></div>
+        </dl>
+        {% if trabajo.observaciones %}<div class="form-section"><div class="form-section-title">Observaciones</div><div class="detail-note">{{ trabajo.observaciones }}</div></div>{% endif %}
+    </section>
 
-{% if estados_para_avanzar %}
-<div class="d-flex gap-2 mb-2">
-    {% for estado in estados_para_avanzar %}
-    <form method="post" action="{% url 'jobs:cambiar_estado' trabajo.pk %}">
-        {% csrf_token %}
-        <input type="hidden" name="estado" value="{{ estado.valor }}">
-        <button type="submit" class="btn btn-sm btn-primary">Marcar {{ estado.etiqueta }}</button>
-    </form>
-    {% endfor %}
-</div>
-{% endif %}
+    <section class="detail-card detail-card-wide">
+        <div class="detail-card-title"><h2>Listado de materiales</h2><span>Necesario · enviado · pendiente</span></div>
 
-{% if estados_para_retroceder %}
-<div class="d-flex gap-2 align-items-center mb-3">
-    <span class="text-muted small">Corregir estado (retroceder):</span>
-    {% for estado in estados_para_retroceder %}
-    <form method="post" action="{% url 'jobs:cambiar_estado' trabajo.pk %}">
-        {% csrf_token %}
-        <input type="hidden" name="estado" value="{{ estado.valor }}">
-        <button type="submit" class="btn btn-sm btn-outline-warning">Volver a {{ estado.etiqueta }}</button>
-    </form>
-    {% endfor %}
-</div>
-{% endif %}
-
-{% if puede_finalizar %}
-    {% if listo_para_finalizar %}
-    <form method="post" action="{% url 'jobs:finalizar' trabajo.pk %}" class="row g-2 mb-3" style="max-width: 650px;">
-        {% csrf_token %}
-        <div class="col-12">
-            <label class="form-label">{{ finalizar_trabajo_form.observaciones.label }}</label>
-            {{ finalizar_trabajo_form.observaciones }}
-        </div>
-        <div class="col-12">
-            <button type="submit" class="btn btn-sm btn-success">Finalizar trabajo</button>
-        </div>
-    </form>
-    {% elif trabajo.estado == 'en_ejecucion' %}
-    <div class="alert alert-warning py-2">
-        <strong>El trabajo todavía no se puede finalizar:</strong>
-        <ul class="mb-0">
-            {% for motivo in motivos_bloqueo_finalizacion %}
-            <li>{{ motivo }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-{% endif %}
-
-{% if puede_cancelar %}
-<form method="post" action="{% url 'jobs:cancelar' trabajo.pk %}" class="row g-2 align-items-end mb-4" style="max-width: 500px;">
-    {% csrf_token %}
-    <div class="col-auto">
-        <label class="form-label">Motivo</label>
-        {{ cancelar_trabajo_form.motivo }}
-    </div>
-    <div class="col-auto">
-        <button type="submit" class="btn btn-sm btn-outline-danger">Cancelar trabajo</button>
-    </div>
-</form>
-{% endif %}
-
-{% if mostrar_advertencia_pendientes %}
-<div class="alert alert-warning">
-    <strong>⚠️ Quedan materiales sin enviar</strong> con el trabajo ya en "{{ trabajo.get_estado_display }}":
-    <ul class="mb-0">
-        {% for material in materiales_pendientes_envio %}
-        <li>{{ material.producto|default:material.descripcion_manual }}</li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
-
-<h2 class="h5 mt-4">Listado de materiales</h2>
-
-{% if not listado_generado %}
-    {% if puede_gestionar_materiales %}
-    <form method="post" action="{% url 'jobs:generar_materiales' trabajo.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-primary">Generar listado desde el presupuesto</button>
-    </form>
-    {% else %}
-    <p class="text-muted">Todavía no se generó el listado de materiales.</p>
-    {% endif %}
-{% else %}
-    {% if puede_enviar_pendientes %}
-        {% if batch_requiere_forzado %}
-            {% if puede_forzar_stock_negativo %}
-            <div class="alert alert-warning">
-                <strong>Stock insuficiente para el envío completo.</strong>
-                Como administrador podés forzarlo, pero el motivo es obligatorio y la acción queda auditada.
-                <form method="post" action="{% url 'jobs:enviar_materiales_pendientes' trabajo.pk %}" class="row g-2 mt-1">
-                    {% csrf_token %}
-                    <input type="hidden" name="forzar_stock_negativo" value="on">
-                    <div class="col-md-8">
-                        <input
-                            type="text"
-                            name="motivo_forzado"
-                            class="form-control form-control-sm"
-                            placeholder="Motivo obligatorio para forzar el envío"
-                            required
-                        >
-                    </div>
-                    <div class="col-auto">
-                        <button type="submit" class="btn btn-sm btn-danger">Forzar envío pendiente</button>
-                    </div>
-                </form>
-            </div>
-            {% else %}
-            <div class="alert alert-warning">
-                <strong>No se puede enviar todo lo pendiente:</strong>
-                el stock disponible no alcanza para uno o más productos.
-            </div>
-            {% endif %}
+        {% if not listado_generado %}
+            {% if puede_gestionar_materiales %}<div class="dashboard-empty compact"><i class="bi bi-box-seam"></i><span>Todavía no se generó el listado.</span><form method="post" action="{% url 'jobs:generar_materiales' trabajo.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-primary">Generar listado desde el presupuesto</button></form></div>
+            {% else %}<div class="dashboard-empty compact"><i class="bi bi-box-seam"></i><span>Todavía no se generó el listado de materiales.</span></div>{% endif %}
         {% else %}
-        <form method="post" action="{% url 'jobs:enviar_materiales_pendientes' trabajo.pk %}" class="mb-3">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm btn-primary">Enviar todo lo pendiente</button>
-        </form>
-        {% endif %}
-    {% endif %}
-
-    {% for grupo in etapas %}
-    <div class="card mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <div>
-                <strong>{{ grupo.etapa.titulo }}</strong>
-                {% if grupo.etapa.fecha_estimada %}
-                <span class="text-muted small">— desde {{ grupo.etapa.fecha_estimada|date:"d/m/Y" }}</span>
-                {% endif %}
-                {% if grupo.etapa.duracion_estimada_dias %}
-                <span class="text-muted small">({{ grupo.etapa.duracion_estimada_dias }} día{{ grupo.etapa.duracion_estimada_dias|pluralize }})</span>
-                {% endif %}
-            </div>
-            {% if puede_gestionar_materiales %}
-            <form method="post" action="{% url 'jobs:eliminar_etapa' grupo.etapa.pk %}">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar etapa</button>
-            </form>
+            {% if puede_enviar_pendientes %}
+                {% if batch_requiere_forzado %}
+                    {% if puede_forzar_stock_negativo %}
+                    <div class="alert alert-warning"><strong>Stock insuficiente para el envío completo.</strong> Como administrador podés forzarlo, pero el motivo es obligatorio y la acción queda auditada.
+                    <form method="post" action="{% url 'jobs:enviar_materiales_pendientes' trabajo.pk %}" class="d-flex flex-wrap gap-2 mt-2">{% csrf_token %}<input type="hidden" name="forzar_stock_negativo" value="on"><input type="text" name="motivo_forzado" class="form-control form-control-sm flex-grow-1" placeholder="Motivo obligatorio para forzar el envío" required><button type="submit" class="btn btn-sm btn-danger">Forzar envío pendiente</button></form></div>
+                    {% else %}<div class="alert alert-warning"><strong>No se puede enviar todo lo pendiente:</strong> el stock disponible no alcanza para uno o más productos.</div>{% endif %}
+                {% else %}<form method="post" action="{% url 'jobs:enviar_materiales_pendientes' trabajo.pk %}" class="mb-3">{% csrf_token %}<button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-up me-1"></i>Enviar todo lo pendiente</button></form>{% endif %}
             {% endif %}
-        </div>
-        <div class="card-body p-0">
-            {% include "jobs/_tabla_materiales.html" with filas=grupo.filas %}
-        </div>
-    </div>
-    {% endfor %}
 
-    {% if filas_sin_etapa or not etapas %}
-    <div class="card mb-3">
-        {% if etapas %}<div class="card-header"><strong>Sin etapa</strong></div>{% endif %}
-        <div class="card-body p-0">
-            {% include "jobs/_tabla_materiales.html" with filas=filas_sin_etapa %}
+            {% for grupo in etapas %}
+            <div class="inline-form-card mb-3">
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                    <div><strong>{{ grupo.etapa.titulo }}</strong>{% if grupo.etapa.fecha_estimada %}<span class="table-secondary-text">desde {{ grupo.etapa.fecha_estimada|date:"d/m/Y" }}{% if grupo.etapa.duracion_estimada_dias %} · {{ grupo.etapa.duracion_estimada_dias }} día{{ grupo.etapa.duracion_estimada_dias|pluralize }}{% endif %}</span>{% endif %}</div>
+                    {% if puede_gestionar_materiales %}<form method="post" action="{% url 'jobs:eliminar_etapa' grupo.etapa.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Eliminar etapa</button></form>{% endif %}
+                </div>
+                {% include "jobs/_tabla_materiales.html" with filas=grupo.filas %}
+            </div>
+            {% endfor %}
+            {% if filas_sin_etapa or not etapas %}<div class="inline-form-card mb-3">{% if etapas %}<div class="form-section-title">Sin etapa</div>{% endif %}{% include "jobs/_tabla_materiales.html" with filas=filas_sin_etapa %}</div>{% endif %}
+        {% endif %}
+    </section>
+
+    {% if puede_gestionar_materiales and listado_generado %}
+    <section class="detail-card">
+        <div class="detail-card-title"><h2>Agregar al listado</h2><span>Etapas y materiales</span></div>
+        <div class="detail-grid">
+            <div class="detail-card detail-card-third inline-form-card"><div class="form-section-title">Nueva etapa</div><form method="post" action="{% url 'jobs:agregar_etapa' trabajo.pk %}">{% csrf_token %}<div class="form-grid"><div class="form-field"><label>Título</label>{{ etapa_form.titulo }}</div><div class="form-field"><label>Fecha estimada</label>{{ etapa_form.fecha_estimada }}</div><div class="form-field"><label>Duración estimada</label>{{ etapa_form.duracion_estimada_dias }}</div></div><div class="form-actions"><button type="submit" class="btn btn-sm btn-primary">Agregar etapa</button></div></form></div>
+            <div class="detail-card detail-card-third inline-form-card"><div class="form-section-title">Material de catálogo</div><form method="post" action="{% url 'jobs:agregar_material_catalogo' trabajo.pk %}">{% csrf_token %}<div class="form-grid"><div class="form-field"><label>Etapa</label>{{ material_catalogo_form.etapa }}</div><div class="form-field"><label>Producto</label>{{ material_catalogo_form.producto }}</div><div class="form-field"><label>Cantidad necesaria</label>{{ material_catalogo_form.cantidad_necesaria }}</div></div><div class="form-actions"><button type="submit" class="btn btn-sm btn-primary">Agregar material</button></div></form></div>
+            <div class="detail-card detail-card-third inline-form-card"><div class="form-section-title">Material manual</div><form method="post" action="{% url 'jobs:agregar_material_manual' trabajo.pk %}">{% csrf_token %}<div class="form-grid"><div class="form-field"><label>Etapa</label>{{ material_manual_form.etapa }}</div><div class="form-field"><label>Descripción</label>{{ material_manual_form.descripcion_manual }}</div><div class="form-field"><label>Cantidad necesaria</label>{{ material_manual_form.cantidad_necesaria }}</div></div><div class="form-actions"><button type="submit" class="btn btn-sm btn-primary">Agregar material</button></div></form></div>
         </div>
-    </div>
+    </section>
     {% endif %}
 
-    {% if puede_gestionar_materiales %}
-    <div class="row g-4 mt-2">
-        <div class="col-md-4">
-            <h3 class="h6">Nueva etapa</h3>
-            <form method="post" action="{% url 'jobs:agregar_etapa' trabajo.pk %}" class="row g-2">
-                {% csrf_token %}
-                <div class="col-12">{{ etapa_form.titulo }}</div>
-                <div class="col-12">{{ etapa_form.fecha_estimada }}</div>
-                <div class="col-12">{{ etapa_form.duracion_estimada_dias }}</div>
-                <div class="col-12"><button type="submit" class="btn btn-sm btn-secondary">Agregar etapa</button></div>
-            </form>
-        </div>
-        <div class="col-md-4">
-            <h3 class="h6">Material de catálogo</h3>
-            <form method="post" action="{% url 'jobs:agregar_material_catalogo' trabajo.pk %}" class="row g-2">
-                {% csrf_token %}
-                <div class="col-12">{{ material_catalogo_form.etapa }}</div>
-                <div class="col-12">{{ material_catalogo_form.producto }}</div>
-                <div class="col-12">{{ material_catalogo_form.cantidad_necesaria }}</div>
-                <div class="col-12"><button type="submit" class="btn btn-sm btn-secondary">Agregar material</button></div>
-            </form>
-        </div>
-        <div class="col-md-4">
-            <h3 class="h6">Material manual</h3>
-            <form method="post" action="{% url 'jobs:agregar_material_manual' trabajo.pk %}" class="row g-2">
-                {% csrf_token %}
-                <div class="col-12">{{ material_manual_form.etapa }}</div>
-                <div class="col-12">{{ material_manual_form.descripcion_manual }}</div>
-                <div class="col-12">{{ material_manual_form.cantidad_necesaria }}</div>
-                <div class="col-12"><button type="submit" class="btn btn-sm btn-secondary">Agregar material</button></div>
-            </form>
-        </div>
-    </div>
+    {% if puede_finalizar and listo_para_finalizar %}
+    <section class="detail-card detail-card-half">
+        <div class="detail-card-title"><h2>Finalizar trabajo</h2><span>Cierre operativo</span></div>
+        <form method="post" action="{% url 'jobs:finalizar' trabajo.pk %}">{% csrf_token %}<div class="form-field"><label>{{ finalizar_trabajo_form.observaciones.label }}</label>{{ finalizar_trabajo_form.observaciones }}</div><div class="form-actions"><button type="submit" class="btn btn-success">Finalizar trabajo</button></div></form>
+    </section>
     {% endif %}
-{% endif %}
+
+    {% if puede_cancelar %}
+    <section class="detail-card detail-card-half danger-zone">
+        <div class="detail-card-title"><h2>Cancelar trabajo</h2><span>Acción excepcional</span></div>
+        <form method="post" action="{% url 'jobs:cancelar' trabajo.pk %}">{% csrf_token %}<div class="form-field"><label>Motivo</label>{{ cancelar_trabajo_form.motivo }}</div><div class="form-actions"><button type="submit" class="btn btn-outline-danger">Cancelar trabajo</button></div></form>
+    </section>
+    {% endif %}
+
+    {% if trabajo.terminado_en or trabajo.cancelado_en %}
+    <section class="detail-card">
+        <div class="detail-card-title"><h2>Cierre</h2><span>Histórico</span></div>
+        <dl class="detail-kv">
+            {% if trabajo.terminado_en %}<div class="detail-kv-row"><dt>Finalizado</dt><dd>{{ trabajo.terminado_en|date:"d/m/Y H:i" }}{% if trabajo.terminado_por %} por {{ trabajo.terminado_por }}{% endif %}</dd></div>{% endif %}
+            {% if trabajo.observaciones_cierre %}<div class="detail-kv-row"><dt>Observaciones de cierre</dt><dd>{{ trabajo.observaciones_cierre }}</dd></div>{% endif %}
+            {% if trabajo.cancelado_en %}<div class="detail-kv-row"><dt>Cancelado</dt><dd>{{ trabajo.cancelado_en|date:"d/m/Y H:i" }}{% if trabajo.cancelado_por %} por {{ trabajo.cancelado_por }}{% endif %}</dd></div><div class="detail-kv-row"><dt>Motivo de cancelación</dt><dd>{{ trabajo.motivo_cancelacion }}</dd></div>{% endif %}
+        </dl>
+    </section>
+    {% endif %}
+</div>
 {% endblock %}

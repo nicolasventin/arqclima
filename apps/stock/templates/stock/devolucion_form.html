@@ -1,24 +1,8 @@
 {% extends "base.html" %}
-
 {% block title %}Registrar devolución — ARQCLIMA{% endblock %}
-
+{% block page_heading %}Registrar devolución{% endblock %}
+{% block page_subheading %}Reingreso de repuesto pendiente{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">Registrar devolución</h1>
-
-<p>
-    <strong>{{ salida.producto }}</strong> — enviado el {{ salida.creado_en|date:"d/m/Y" }},
-    pendiente de devolución: <strong>{{ pendiente }}</strong>
-</p>
-
-<form method="post" class="row g-3" style="max-width: 400px;">
-    {% csrf_token %}
-    <div class="col-12">
-        <label class="form-label">Cantidad que vuelve a stock</label>
-        {{ form.cantidad }}
-        {% if form.cantidad.errors %}<div class="text-danger small">{{ form.cantidad.errors }}</div>{% endif %}
-    </div>
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Registrar</button>
-    </div>
-</form>
+<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Repuestos</div><h1>Registrar devolución</h1><div class="detail-subtitle">{{ salida.producto }} · enviado {{ salida.creado_en|date:"d/m/Y" }}</div></div><div class="detail-actions"><a href="{% url 'stock:pendientes_devolucion' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a></div></div>
+<form method="post" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Material que vuelve</h2><p>Pendiente actual de devolución: <strong>{{ pendiente }}</strong></p></div><div class="form-card-body"><div class="form-grid"><div class="form-field form-field-half"><label>Cantidad que vuelve a stock</label>{{ form.cantidad }}{{ form.cantidad.errors }}</div></div><div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-arrow-return-left me-1"></i>Registrar devolución</button><a href="{% url 'stock:pendientes_devolucion' %}" class="btn btn-outline-secondary">Cancelar</a></div></div></div></form>
 {% endblock %}

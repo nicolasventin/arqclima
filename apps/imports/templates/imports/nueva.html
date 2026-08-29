@@ -1,34 +1,12 @@
 {% extends "base.html" %}
-
 {% block title %}Nueva importación — ARQCLIMA{% endblock %}
-
+{% block page_heading %}Importar lista de precios{% endblock %}
+{% block page_subheading %}Carga asistida desde Excel{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">Importar lista de precios</h1>
-<p class="text-muted">Subí el Excel (.xlsx) que te mandó el proveedor. Antes de tocar nada del catálogo te vamos a mostrar una vista previa para que confirmes.</p>
-
-{% if form.non_field_errors %}
-<div class="alert alert-danger">{{ form.non_field_errors }}</div>
-{% endif %}
-{% if form.archivo.errors %}
-<div class="alert alert-danger">{{ form.archivo.errors|striptags }}</div>
-{% endif %}
-
-<form method="post" enctype="multipart/form-data" class="row g-3" style="max-width: 500px;">
-    {% csrf_token %}
-    <div class="col-12">
-        <label class="form-label">Proveedor</label>
-        {{ form.proveedor }}
-    </div>
-    <div class="col-12">
-        <label class="form-label">Archivo Excel (.xlsx)</label>
-        {{ form.archivo }}
-        <div class="form-text">
-            Columnas reconocidas: Marca, Código (o SKU/Cod. Fabricante), Nombre (o Descripción),
-            Costo (o Precio). Código de proveedor es opcional.
-        </div>
-    </div>
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Subir y ver vista previa</button>
-    </div>
-</form>
+<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Importaciones</div><h1>Importar lista de precios</h1><div class="detail-subtitle">Primero se genera una vista previa; el catálogo no cambia hasta confirmar.</div></div></div>
+<form method="post" enctype="multipart/form-data" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Archivo del proveedor</h2><p>Formato soportado actualmente: Excel .xlsx.</p></div><div class="form-card-body">
+{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}{% if form.archivo.errors %}<div class="alert alert-danger">{{ form.archivo.errors|striptags }}</div>{% endif %}
+<div class="form-grid"><div class="form-field"><label>Proveedor</label>{{ form.proveedor }}{{ form.proveedor.errors }}</div><div class="form-field"><label>Archivo Excel (.xlsx)</label>{{ form.archivo }}<div class="field-help">Columnas reconocidas: Marca, Código/SKU/Cod. Fabricante, Nombre/Descripción y Costo/Precio. Código de proveedor es opcional.</div></div></div>
+<div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-upload me-1"></i>Subir y ver vista previa</button><a href="{% url 'imports:lista' %}" class="btn btn-outline-secondary">Cancelar</a></div>
+</div></div></form>
 {% endblock %}

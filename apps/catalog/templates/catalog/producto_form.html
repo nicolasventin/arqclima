@@ -1,57 +1,21 @@
 {% extends "base.html" %}
-
 {% block title %}{% if object %}Editar producto{% else %}Nuevo producto{% endif %} — ARQCLIMA{% endblock %}
-
+{% block page_heading %}{% if object %}Editar producto{% else %}Nuevo producto{% endif %}{% endblock %}
+{% block page_subheading %}Identidad de catálogo por marca y código oficial{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">{% if object %}Editar producto{% else %}Nuevo producto{% endif %}</h1>
-
-{% if form.non_field_errors %}
-<div class="alert alert-danger">{{ form.non_field_errors }}</div>
-{% endif %}
-
-<form method="post" class="row g-3" style="max-width: 700px;">
-    {% csrf_token %}
-    <div class="col-md-6">
-        <label class="form-label">Marca</label>
-        {{ form.marca }}
-        {{ form.marca.errors }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Código oficial de marca</label>
-        {{ form.codigo }}
-        {{ form.codigo.errors }}
-    </div>
-    <div class="col-12">
-        <label class="form-label">Nombre</label>
-        {{ form.nombre }}
-    </div>
-    <div class="col-12">
-        <label class="form-label">Descripción</label>
-        {{ form.descripcion }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Categoría</label>
-        {{ form.categoria }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Unidad de medida</label>
-        {{ form.unidad_medida }}
-    </div>
-    <div class="col-md-6 form-check">
-        {{ form.es_repuesto }}
-        <label class="form-check-label">Es parte de la línea de repuestos</label>
-        {% if form.es_repuesto.help_text %}<div class="form-text">{{ form.es_repuesto.help_text }}</div>{% endif %}
-    </div>
-    <div class="col-md-6 form-check">
-        {{ form.activo }}
-        <label class="form-check-label">Activo</label>
-    </div>
-    <div class="col-12">
-        <label class="form-label">Notas</label>
-        {{ form.notas }}
-    </div>
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-    </div>
-</form>
+<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Catálogo</div><h1>{% if object %}Editar producto{% else %}Nuevo producto{% endif %}</h1><div class="detail-subtitle">La identidad del producto es Marca + código oficial de marca.</div></div><div class="detail-actions"><a href="{% url 'catalog:producto_lista' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a></div></div>
+<form method="post" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Información de catálogo</h2><p>Definí identidad, clasificación y disponibilidad.</p></div><div class="form-card-body">
+{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+<div class="form-grid">
+<div class="form-field form-field-half"><label>Marca</label>{{ form.marca }}{{ form.marca.errors }}</div>
+<div class="form-field form-field-half"><label>Código oficial de marca</label>{{ form.codigo }}{{ form.codigo.errors }}</div>
+<div class="form-field"><label>Nombre</label>{{ form.nombre }}{{ form.nombre.errors }}</div>
+<div class="form-field"><label>Descripción</label>{{ form.descripcion }}{{ form.descripcion.errors }}</div>
+<div class="form-field form-field-half"><label>Categoría</label>{{ form.categoria }}{{ form.categoria.errors }}</div>
+<div class="form-field form-field-half"><label>Unidad de medida</label>{{ form.unidad_medida }}{{ form.unidad_medida.errors }}</div>
+<div class="form-field form-field-half"><div class="form-check-row">{{ form.es_repuesto }}<div><label>Es parte de la línea de repuestos</label>{% if form.es_repuesto.help_text %}<div class="field-help">{{ form.es_repuesto.help_text }}</div>{% endif %}</div></div></div>
+<div class="form-field form-field-half"><div class="form-check-row">{{ form.activo }}<div><label>Activo</label><div class="field-help">Permite conservar productos históricos sin ofrecerlos como vigentes.</div></div></div></div>
+<div class="form-field"><label>Notas</label>{{ form.notas }}{{ form.notas.errors }}</div>
+</div><div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Guardar</button>{% if object %}<a href="{% url 'catalog:producto_detalle' object.pk %}" class="btn btn-outline-secondary">Cancelar</a>{% else %}<a href="{% url 'catalog:producto_lista' %}" class="btn btn-outline-secondary">Cancelar</a>{% endif %}</div>
+</div></div></form>
 {% endblock %}

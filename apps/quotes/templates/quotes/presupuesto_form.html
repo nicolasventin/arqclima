@@ -1,48 +1,12 @@
 {% extends "base.html" %}
-
 {% block title %}Nuevo presupuesto — ARQCLIMA{% endblock %}
-
+{% block page_heading %}Nuevo presupuesto{% endblock %}
+{% block page_subheading %}Datos comerciales y condiciones de la propuesta{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">Nuevo presupuesto</h1>
-
-<form method="post" class="row g-3" style="max-width: 700px;">
-    {% csrf_token %}
-    <div class="col-12">
-        <label class="form-label">Cliente</label>
-        {{ form.cliente }}
-    </div>
-    <div class="col-12">
-        <label class="form-label">Dirección de la obra</label>
-        {{ form.direccion }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Fecha de vencimiento</label>
-        {{ form.fecha_vencimiento }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Cantidad de unidades</label>
-        {{ form.cantidad_unidades }}
-        <div class="form-text">Para multiplicar el total cuando se cotiza por unidad habitacional.</div>
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Descuento general</label>
-        {{ form.descuento_general_tipo }}
-    </div>
-    <div class="col-md-6">
-        <label class="form-label">Valor del descuento</label>
-        {{ form.descuento_general_valor }}
-    </div>
-    <div class="col-12">
-        <label class="form-label">Plantilla de condiciones</label>
-        {{ form.plantilla_condiciones }}
-        <div class="form-text">Se copia el texto a este presupuesto; después se puede editar solo acá.</div>
-    </div>
-    <div class="col-12">
-        <label class="form-label">Notas generales</label>
-        {{ form.notas_generales }}
-    </div>
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Crear presupuesto</button>
-    </div>
-</form>
+<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Comercial</div><h1>Nuevo presupuesto</h1><div class="detail-subtitle">Creá la cabecera y después agregá secciones e ítems.</div></div><div class="detail-actions"><a href="{% url 'quotes:lista' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a></div></div>
+<form method="post" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Datos del presupuesto</h2><p>Cliente, obra, vigencia y reglas generales de la cotización.</p></div><div class="form-card-body">
+{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+<div class="form-grid"><div class="form-field"><label>Cliente</label>{{ form.cliente }}{{ form.cliente.errors }}</div><div class="form-field"><label>Dirección de la obra</label>{{ form.direccion }}{{ form.direccion.errors }}</div><div class="form-field form-field-half"><label>Fecha de vencimiento</label>{{ form.fecha_vencimiento }}{{ form.fecha_vencimiento.errors }}</div><div class="form-field form-field-half"><label>Cantidad de unidades</label>{{ form.cantidad_unidades }}{{ form.cantidad_unidades.errors }}<div class="field-help">Multiplica el total cuando se cotiza por unidad habitacional.</div></div><div class="form-field form-field-half"><label>Descuento general</label>{{ form.descuento_general_tipo }}{{ form.descuento_general_tipo.errors }}</div><div class="form-field form-field-half"><label>Valor del descuento</label>{{ form.descuento_general_valor }}{{ form.descuento_general_valor.errors }}</div><div class="form-field"><label>Plantilla de condiciones</label>{{ form.plantilla_condiciones }}{{ form.plantilla_condiciones.errors }}<div class="field-help">El texto se copia al presupuesto y luego queda congelado/editable ahí.</div></div><div class="form-field"><label>Notas generales</label>{{ form.notas_generales }}{{ form.notas_generales.errors }}</div></div>
+<div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-file-earmark-plus me-1"></i>Crear presupuesto</button><a href="{% url 'quotes:lista' %}" class="btn btn-outline-secondary">Cancelar</a></div>
+</div></div></form>
 {% endblock %}

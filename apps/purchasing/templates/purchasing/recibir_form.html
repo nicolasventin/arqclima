@@ -1,24 +1,12 @@
 {% extends "base.html" %}
-
 {% block title %}Recibir línea — ARQCLIMA{% endblock %}
-
+{% block page_heading %}Recibir mercadería{% endblock %}
+{% block page_subheading %}Orden #{{ linea.orden.numero }} · recepción de compra{% endblock %}
 {% block content %}
-<h1 class="h4 mb-3">Recibir mercadería — Orden #{{ linea.orden.numero }}</h1>
-<p class="text-muted">{{ linea.producto_proveedor }} — pendiente: {{ pendiente }}</p>
-
-<form method="post" style="max-width: 400px;">
-    {% csrf_token %}
-    <div class="mb-3">
-        <label class="form-label">Cantidad recibida</label>
-        {{ form.cantidad }}
-        {{ form.cantidad.errors }}
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Costo real</label>
-        {{ form.costo_real }}
-        {{ form.costo_real.errors }}
-        <div class="form-text">Se precarga con el costo esperado de la línea — es editable.</div>
-    </div>
-    <button type="submit" class="btn btn-primary">Registrar recepción</button>
-</form>
+<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Recepción</div><h1>Recibir mercadería</h1><div class="detail-subtitle">{{ linea.producto_proveedor }} · pendiente: {{ pendiente }}</div></div><div class="detail-actions"><a href="{% url 'purchasing:detalle' linea.orden.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a></div></div>
+<form method="post" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Recepción</h2><p>La cantidad incrementará stock y el costo real quedará en el historial.</p></div><div class="form-card-body">
+{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+<div class="form-grid"><div class="form-field form-field-half"><label>Cantidad recibida</label>{{ form.cantidad }}{{ form.cantidad.errors }}</div><div class="form-field form-field-half"><label>Costo real</label>{{ form.costo_real }}{{ form.costo_real.errors }}<div class="field-help">Se precarga con el costo esperado de la línea; podés corregirlo.</div></div></div>
+<div class="form-actions"><button type="submit" class="btn btn-primary"><i class="bi bi-box-arrow-in-down me-1"></i>Registrar recepción</button><a href="{% url 'purchasing:detalle' linea.orden.pk %}" class="btn btn-outline-secondary">Cancelar</a></div>
+</div></div></form>
 {% endblock %}

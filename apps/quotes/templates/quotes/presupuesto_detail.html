@@ -1,151 +1,101 @@
 {% extends "base.html" %}
-
 {% block title %}Presupuesto #{{ presupuesto.numero }} — ARQCLIMA{% endblock %}
+{% block page_heading %}Presupuesto #{{ presupuesto.numero }}{% endblock %}
+{% block page_subheading %}{{ presupuesto.cliente.nombre }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-    <div>
-        <h1 class="h4 mb-0">Presupuesto #{{ presupuesto.numero }}</h1>
-        <p class="text-muted mb-0">{{ presupuesto.cliente.nombre }} — {{ presupuesto.direccion|default:"sin dirección" }}</p>
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Presupuesto</div>
+        <h1>Presupuesto #{{ presupuesto.numero }}</h1>
+        <div class="detail-subtitle">{{ presupuesto.cliente.nombre }} · {{ presupuesto.direccion|default:"sin dirección" }}</div>
     </div>
-    <div class="text-end">
-        <span class="badge bg-secondary fs-6">{{ presupuesto.get_estado_display }}</span>
-        <div class="mt-2">
-            <a href="{% url 'quotes:pdf' presupuesto.pk %}" class="btn btn-sm btn-outline-secondary" target="_blank">Exportar PDF</a>
-            {% if perms.quotes.add_presupuesto %}
-            <form method="post" action="{% url 'quotes:duplicar' presupuesto.pk %}" class="d-inline">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-secondary">Duplicar</button>
-            </form>
+    <div class="detail-actions">
+        {% if presupuesto.estado == "aceptado" %}<span class="status-pill status-pill-success">{{ presupuesto.get_estado_display }}</span>
+        {% elif presupuesto.estado == "enviado" %}<span class="status-pill status-pill-info">{{ presupuesto.get_estado_display }}</span>
+        {% elif presupuesto.estado == "rechazado" or presupuesto.estado == "cancelado" %}<span class="status-pill status-pill-danger">{{ presupuesto.get_estado_display }}</span>
+        {% elif presupuesto.estado == "vencido" %}<span class="status-pill status-pill-dark">{{ presupuesto.get_estado_display }}</span>
+        {% else %}<span class="status-pill status-pill-neutral">{{ presupuesto.get_estado_display }}</span>{% endif %}
+        <a href="{% url 'quotes:pdf' presupuesto.pk %}" class="btn btn-sm btn-outline-secondary" target="_blank"><i class="bi bi-file-earmark-pdf me-1"></i>Exportar PDF</a>
+        {% if perms.quotes.add_presupuesto %}<form method="post" action="{% url 'quotes:duplicar' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-copy me-1"></i>Duplicar</button></form>{% endif %}
+        <a href="{% url 'quotes:lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a>
+    </div>
+</div>
+
+{% if perms.quotes.change_presupuesto or puede_revertir %}
+<div class="workflow-bar">
+    {% if perms.quotes.change_presupuesto %}
+        {% if presupuesto.estado == "borrador" %}
+        <form method="post" action="{% url 'quotes:enviar' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-send me-1"></i>Enviar</button></form>
+        <form method="post" action="{% url 'quotes:cancelar' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Cancelar</button></form>
+        {% elif presupuesto.estado == "enviado" %}
+        <form method="post" action="{% url 'quotes:aceptar' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-success">Marcar Aceptado</button></form>
+        <form method="post" action="{% url 'quotes:rechazar' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Marcar Rechazado</button></form>
+        <form method="post" action="{% url 'quotes:reabrir' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-secondary">Reabrir a Borrador</button></form>
+        <form method="post" action="{% url 'quotes:cancelar' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Cancelar</button></form>
+        {% elif presupuesto.estado == "rechazado" or presupuesto.estado == "vencido" %}
+        <form method="post" action="{% url 'quotes:reabrir' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-secondary">Reabrir a Borrador</button></form>
+        {% endif %}
+    {% endif %}
+    {% if puede_revertir %}<form method="post" action="{% url 'quotes:revertir_aceptado' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Revertir Aceptado a Cancelado</button></form>{% endif %}
+</div>
+{% endif %}
+
+<div class="detail-grid">
+    <section class="detail-card detail-card-wide">
+        <div class="detail-card-title"><h2>Ítems</h2><span>Precios congelados</span></div>
+
+        {% for grupo in secciones %}
+        <div class="d-flex align-items-center justify-content-between gap-2 mt-3 mb-2">
+            <h3 class="h6 mb-0">{{ grupo.seccion.titulo }}</h3>
+            {% if puede_editar_estructura %}<form method="post" action="{% url 'quotes:eliminar_seccion' grupo.seccion.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Eliminar sección</button></form>{% endif %}
+        </div>
+        {% include "quotes/_tabla_items.html" with filas=grupo.filas %}
+        {% endfor %}
+
+        {% if filas_sin_seccion or not secciones %}
+        {% if secciones %}<h3 class="h6 mt-3">Sin sección</h3>{% endif %}
+        {% include "quotes/_tabla_items.html" with filas=filas_sin_seccion %}
+        {% endif %}
+
+        {% if puede_editar_estructura %}
+        <div class="form-section">
+            <div class="form-section-title">Agregar contenido</div>
+            <div class="d-flex flex-wrap gap-2 align-items-end">
+                <form method="post" action="{% url 'quotes:agregar_seccion' presupuesto.pk %}" class="d-flex gap-2">{% csrf_token %}{{ seccion_form.titulo }}<button type="submit" class="btn btn-sm btn-outline-primary">+ Sección</button></form>
+                <a href="{% url 'quotes:agregar_item_catalogo' presupuesto.pk %}" class="btn btn-sm btn-primary">+ Ítem de catálogo</a>
+                <a href="{% url 'quotes:agregar_item_manual' presupuesto.pk %}" class="btn btn-sm btn-outline-primary">+ Ítem manual</a>
+            </div>
+        </div>
+        {% endif %}
+    </section>
+
+    <aside class="detail-card detail-card-third">
+        <div class="detail-card-title"><h2>Resumen</h2><span>Totales</span></div>
+        <table class="summary-table">
+            <tr><td>Subtotal</td><td class="text-end">&#36;{{ totales.subtotal_general }}</td></tr>
+            <tr><td>Descuento general {% if totales.descuento_general_tipo == "porcentaje" %}({{ totales.descuento_general_valor }}%){% else %}(monto fijo){% endif %}</td><td class="text-end">&#36;{{ totales.descuento_general_valor }}</td></tr>
+            <tr><td>Cantidad de unidades</td><td class="text-end">×{{ totales.cantidad_unidades }}</td></tr>
+            <tr class="summary-total"><td>Total</td><td class="text-end">&#36;{{ totales.total_final }}</td></tr>
+        </table>
+
+        <div class="form-section">
+            <div class="form-section-title">Trabajo</div>
+            {% if presupuesto.trabajo %}
+            <a href="{% url 'jobs:detalle' presupuesto.trabajo.pk %}" class="btn btn-outline-primary w-100">Ver trabajo #{{ presupuesto.trabajo.pk }} ({{ presupuesto.trabajo.get_estado_display }})</a>
+            {% elif puede_crear_trabajo %}
+            <form method="post" action="{% url 'jobs:crear' presupuesto.pk %}" class="inline-form-card">{% csrf_token %}<div class="form-field"><label>{{ crear_trabajo_form.tecnico_asignado.label }}</label>{{ crear_trabajo_form.tecnico_asignado }}</div><div class="form-actions"><button type="submit" class="btn btn-sm btn-primary">Crear trabajo</button></div></form>
+            {% else %}
+            <div class="text-muted small">Todavía no hay un trabajo asociado.</div>
             {% endif %}
         </div>
-    </div>
-</div>
+    </aside>
 
-{% if perms.quotes.change_presupuesto %}
-<div class="mb-4 d-flex gap-2 flex-wrap">
-    {% if presupuesto.estado == "borrador" %}
-    <form method="post" action="{% url 'quotes:enviar' presupuesto.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-primary">Enviar</button>
-    </form>
-    <form method="post" action="{% url 'quotes:cancelar' presupuesto.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-outline-danger">Cancelar</button>
-    </form>
-    {% elif presupuesto.estado == "enviado" %}
-    <form method="post" action="{% url 'quotes:aceptar' presupuesto.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-success">Marcar Aceptado</button>
-    </form>
-    <form method="post" action="{% url 'quotes:rechazar' presupuesto.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-outline-danger">Marcar Rechazado</button>
-    </form>
-    <form method="post" action="{% url 'quotes:reabrir' presupuesto.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-outline-secondary">Reabrir a Borrador</button>
-    </form>
-    <form method="post" action="{% url 'quotes:cancelar' presupuesto.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-outline-danger">Cancelar</button>
-    </form>
-    {% elif presupuesto.estado == "rechazado" or presupuesto.estado == "vencido" %}
-    <form method="post" action="{% url 'quotes:reabrir' presupuesto.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-outline-secondary">Reabrir a Borrador</button>
-    </form>
+    {% if presupuesto.condiciones %}
+    <section class="detail-card detail-card-half"><div class="detail-card-title"><h2>Condiciones</h2><span>Congeladas en esta propuesta</span></div><div class="detail-note">{{ presupuesto.condiciones }}</div></section>
+    {% endif %}
+    {% if presupuesto.notas_generales %}
+    <section class="detail-card detail-card-half"><div class="detail-card-title"><h2>Notas</h2><span>Internas / generales</span></div><div class="detail-note">{{ presupuesto.notas_generales }}</div></section>
     {% endif %}
 </div>
-{% endif %}
-
-{% if puede_revertir %}
-<div class="mb-4">
-    <form method="post" action="{% url 'quotes:revertir_aceptado' presupuesto.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-outline-danger">Revertir Aceptado a Cancelado</button>
-    </form>
-</div>
-{% endif %}
-
-{% if presupuesto.trabajo %}
-<div class="mb-4">
-    <a href="{% url 'jobs:detalle' presupuesto.trabajo.pk %}" class="btn btn-sm btn-outline-primary">
-        Ver trabajo #{{ presupuesto.trabajo.pk }} ({{ presupuesto.trabajo.get_estado_display }})
-    </a>
-</div>
-{% elif puede_crear_trabajo %}
-<div class="mb-4">
-    <form method="post" action="{% url 'jobs:crear' presupuesto.pk %}" class="row g-2 align-items-end" style="max-width: 500px;">
-        {% csrf_token %}
-        <div class="col-auto">
-            <label class="form-label">{{ crear_trabajo_form.tecnico_asignado.label }}</label>
-            {{ crear_trabajo_form.tecnico_asignado }}
-        </div>
-        <div class="col-auto">
-            <button type="submit" class="btn btn-sm btn-primary">Crear trabajo</button>
-        </div>
-    </form>
-</div>
-{% endif %}
-
-<h2 class="h5">Ítems</h2>
-
-{% for grupo in secciones %}
-<h3 class="h6 mt-3">{{ grupo.seccion.titulo }}</h3>
-{% include "quotes/_tabla_items.html" with filas=grupo.filas %}
-{% if puede_editar_estructura %}
-<form method="post" action="{% url 'quotes:eliminar_seccion' grupo.seccion.pk %}" class="mb-2">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar sección "{{ grupo.seccion.titulo }}"</button>
-</form>
-{% endif %}
-{% endfor %}
-
-{% if filas_sin_seccion or not secciones %}
-{% if secciones %}<h3 class="h6 mt-3">Sin sección</h3>{% endif %}
-{% include "quotes/_tabla_items.html" with filas=filas_sin_seccion %}
-{% endif %}
-
-{% if puede_editar_estructura %}
-<div class="row g-3 mt-2">
-    <div class="col-md-4">
-        <form method="post" action="{% url 'quotes:agregar_seccion' presupuesto.pk %}" class="d-flex gap-2">
-            {% csrf_token %}
-            {{ seccion_form.titulo }}
-            <button type="submit" class="btn btn-sm btn-secondary text-nowrap">+ Sección</button>
-        </form>
-    </div>
-    <div class="col-md-4">
-        <a href="{% url 'quotes:agregar_item_catalogo' presupuesto.pk %}" class="btn btn-sm btn-outline-primary">+ Ítem de catálogo</a>
-    </div>
-    <div class="col-md-4">
-        <a href="{% url 'quotes:agregar_item_manual' presupuesto.pk %}" class="btn btn-sm btn-outline-primary">+ Ítem manual</a>
-    </div>
-</div>
-{% endif %}
-
-<h2 class="h5 mt-4">Totales</h2>
-<table class="table table-sm bg-white" style="max-width: 500px;">
-    <tr><td>Subtotal</td><td class="text-end">${{ totales.subtotal_general }}</td></tr>
-    <tr>
-        <td>
-            Descuento general
-            ({% if totales.descuento_general_tipo == "porcentaje" %}{{ totales.descuento_general_valor }}%{% else %}monto fijo{% endif %})
-        </td>
-        <td class="text-end">${{ totales.descuento_general_valor }}</td>
-    </tr>
-    <tr><td>Cantidad de unidades</td><td class="text-end">×{{ totales.cantidad_unidades }}</td></tr>
-    <tr class="fw-bold"><td>Total</td><td class="text-end">${{ totales.total_final }}</td></tr>
-</table>
-
-{% if presupuesto.condiciones %}
-<h2 class="h5 mt-4">Condiciones</h2>
-<p style="white-space: pre-line;">{{ presupuesto.condiciones }}</p>
-{% endif %}
-
-{% if presupuesto.notas_generales %}
-<h2 class="h5 mt-4">Notas</h2>
-<p style="white-space: pre-line;">{{ presupuesto.notas_generales }}</p>
-{% endif %}
 {% endblock %}

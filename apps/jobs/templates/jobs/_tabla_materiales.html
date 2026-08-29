@@ -1,78 +1,23 @@
-<table class="table table-sm mb-0">
-    <thead>
-        <tr>
-            <th>Material</th>
-            <th>Necesario</th>
-            <th>Enviado</th>
-            <th>Pendiente envío</th>
-            <th></th>
-        </tr>
-    </thead>
+<div class="data-panel">
+<div class="table-responsive">
+<table class="table data-table mb-0">
+    <thead><tr><th>Material</th><th>Necesario</th><th>Enviado</th><th>Pendiente</th><th class="text-end">Acciones</th></tr></thead>
     <tbody>
-        {% for fila in filas %}
-        <tr class="{% if fila.pendiente_envio > 0 %}table-warning{% endif %}">
-            <td>{{ fila.material.producto|default:fila.material.descripcion_manual }}</td>
-            <td>
-                {% if puede_gestionar_materiales %}
-                <form method="post" action="{% url 'jobs:actualizar_cantidad_material' fila.material.pk %}" class="d-flex gap-1">
-                    {% csrf_token %}
-                    <input type="number" step="0.01" name="cantidad_necesaria" value="{{ fila.material.cantidad_necesaria }}" class="form-control form-control-sm" style="width: 100px;">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary">Guardar</button>
-                </form>
-                {% else %}
-                {{ fila.material.cantidad_necesaria }}
-                {% endif %}
-            </td>
-            <td>{{ fila.enviado }}</td>
-            <td>
-                {% if fila.material.producto %}
-                    {{ fila.pendiente_envio }}
-                    <div class="small text-muted">Stock: {{ fila.stock_disponible }}</div>
-                    {% if fila.requiere_forzado %}
-                        <span class="badge bg-danger">Stock insuficiente</span>
-                    {% endif %}
-                {% else %}
-                    <span class="text-muted">— (manual)</span>
-                {% endif %}
-            </td>
-            <td class="d-flex gap-1">
-                {% if fila.requiere_forzado %}
-                    {% if fila.puede_forzar %}
-                    <form method="post" action="{% url 'jobs:enviar_material' fila.material.pk %}" class="d-flex gap-1 align-items-center">
-                        {% csrf_token %}
-                        <input type="hidden" name="forzar_stock_negativo" value="on">
-                        <input
-                            type="text"
-                            name="motivo_forzado"
-                            class="form-control form-control-sm"
-                            style="width: 220px;"
-                            placeholder="Motivo obligatorio"
-                            required
-                        >
-                        <button type="submit" class="btn btn-sm btn-danger">Forzar envío</button>
-                    </form>
-                    {% else %}
-                    <span class="text-danger small">No se puede enviar: stock insuficiente.</span>
-                    {% endif %}
-                {% elif fila.puede_enviar %}
-                <form method="post" action="{% url 'jobs:enviar_material' fila.material.pk %}">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-primary">Enviar</button>
-                </form>
-                {% endif %}
-                {% if fila.puede_consumo %}
-                <a href="{% url 'jobs:registrar_consumo_material' fila.material.pk %}" class="btn btn-sm btn-outline-secondary">Registrar consumo</a>
-                {% endif %}
-                {% if puede_gestionar_materiales %}
-                <form method="post" action="{% url 'jobs:eliminar_material' fila.material.pk %}">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Quitar</button>
-                </form>
-                {% endif %}
-            </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5" class="text-muted">Sin materiales.</td></tr>
-        {% endfor %}
+    {% for fila in filas %}
+    <tr {% if fila.pendiente_envio > 0 %}class="table-warning"{% endif %}>
+        <td><span class="table-primary-text">{{ fila.material.producto|default:fila.material.descripcion_manual }}</span></td>
+        <td>{% if puede_gestionar_materiales %}<form method="post" action="{% url 'jobs:actualizar_cantidad_material' fila.material.pk %}" class="d-flex gap-1">{% csrf_token %}<input type="number" step="0.01" name="cantidad_necesaria" value="{{ fila.material.cantidad_necesaria }}" class="form-control form-control-sm" style="width:100px"><button type="submit" class="btn btn-sm btn-outline-secondary">Guardar</button></form>{% else %}{{ fila.material.cantidad_necesaria }}{% endif %}</td>
+        <td>{{ fila.enviado }}</td>
+        <td>{% if fila.material.producto %}<strong>{{ fila.pendiente_envio }}</strong><span class="table-secondary-text">Stock disponible: {{ fila.stock_disponible }}</span>{% if fila.requiere_forzado %}<span class="status-pill status-pill-danger mt-1">Stock insuficiente</span>{% endif %}{% else %}<span class="text-muted">— (manual)</span>{% endif %}</td>
+        <td><div class="row-actions">
+            {% if fila.requiere_forzado %}{% if fila.puede_forzar %}<form method="post" action="{% url 'jobs:enviar_material' fila.material.pk %}" class="d-flex gap-1">{% csrf_token %}<input type="hidden" name="forzar_stock_negativo" value="on"><input type="text" name="motivo_forzado" class="form-control form-control-sm" placeholder="Motivo obligatorio" required><button type="submit" class="btn btn-sm btn-danger">Forzar envío</button></form>{% else %}<span class="text-danger small">No se puede enviar: stock insuficiente.</span>{% endif %}
+            {% elif fila.puede_enviar %}<form method="post" action="{% url 'jobs:enviar_material' fila.material.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-primary">Enviar</button></form>{% endif %}
+            {% if fila.puede_consumo %}<a href="{% url 'jobs:registrar_consumo_material' fila.material.pk %}" class="btn btn-sm btn-outline-secondary">Registrar consumo</a>{% endif %}
+            {% if puede_gestionar_materiales %}<form method="post" action="{% url 'jobs:eliminar_material' fila.material.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Quitar</button></form>{% endif %}
+        </div></td>
+    </tr>
+    {% empty %}<tr><td colspan="5" class="empty-table">Sin materiales.</td></tr>{% endfor %}
     </tbody>
 </table>
+</div>
+</div>

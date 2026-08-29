@@ -1,225 +1,89 @@
 {% extends "base.html" %}
-
 {% block title %}Orden #{{ orden.numero }} — ARQCLIMA{% endblock %}
+{% block page_heading %}Orden de compra #{{ orden.numero }}{% endblock %}
+{% block page_subheading %}{{ orden.proveedor }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-    <div>
-        <h1 class="h4 mb-0">Orden de compra #{{ orden.numero }}</h1>
-        <p class="text-muted mb-0">{{ orden.proveedor }} — {{ orden.get_deposito_destino_display }}</p>
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Compras</div>
+        <h1>Orden de compra #{{ orden.numero }}</h1>
+        <div class="detail-subtitle">{{ orden.proveedor }} · {{ orden.get_deposito_destino_display }}</div>
     </div>
-    <span class="badge
-        {% if orden.estado == 'cancelada' or orden.estado == 'rechazada' %}bg-danger
-        {% elif orden.estado == 'recepcion_parcial' %}bg-warning text-dark
-        {% elif orden.estado == 'recibida' %}bg-success
-        {% elif orden.estado == 'cerrada' %}bg-dark
-        {% elif orden.estado == 'enviada' %}bg-primary
-        {% else %}bg-secondary{% endif %} fs-6">
-        {{ orden.get_estado_display }}
-    </span>
-</div>
-
-{% if orden.notas %}
-<p style="white-space: pre-line;">{{ orden.notas }}</p>
-{% endif %}
-
-<div class="card mb-3">
-    <div class="card-body py-2">
-        <div class="row g-2 small">
-            <div class="col-md-4">
-                <strong>Creada:</strong>
-                {{ orden.creado_en|date:"d/m/Y H:i" }}
-                {% if orden.creado_por %}por {{ orden.creado_por }}{% endif %}
-            </div>
-            {% if orden.solicitud_aprobacion_en %}
-            <div class="col-md-4">
-                <strong>A aprobación:</strong>
-                {{ orden.solicitud_aprobacion_en|date:"d/m/Y H:i" }}
-                {% if orden.solicitud_aprobacion_por %}por {{ orden.solicitud_aprobacion_por }}{% endif %}
-            </div>
-            {% endif %}
-            {% if orden.aprobada_en %}
-            <div class="col-md-4">
-                <strong>Aprobada:</strong>
-                {{ orden.aprobada_en|date:"d/m/Y H:i" }}
-                {% if orden.aprobada_por %}por {{ orden.aprobada_por }}{% endif %}
-            </div>
-            {% endif %}
-            {% if orden.enviada_en %}
-            <div class="col-md-4">
-                <strong>Enviada al proveedor:</strong>
-                {{ orden.enviada_en|date:"d/m/Y H:i" }}
-                {% if orden.enviada_por %}por {{ orden.enviada_por }}{% endif %}
-            </div>
-            {% endif %}
-            {% if orden.primera_recepcion_en %}
-            <div class="col-md-4">
-                <strong>Primera recepción:</strong>
-                {{ orden.primera_recepcion_en|date:"d/m/Y H:i" }}
-            </div>
-            {% endif %}
-            {% if orden.recibida_en %}
-            <div class="col-md-4">
-                <strong>Recibida completa:</strong>
-                {{ orden.recibida_en|date:"d/m/Y H:i" }}
-            </div>
-            {% endif %}
-            {% if orden.cerrada_en %}
-            <div class="col-md-4">
-                <strong>Cerrada:</strong>
-                {{ orden.cerrada_en|date:"d/m/Y H:i" }}
-                {% if orden.cerrada_por %}por {{ orden.cerrada_por }}{% endif %}
-            </div>
-            {% endif %}
-            {% if orden.cancelada_en %}
-            <div class="col-md-4">
-                <strong>Cancelada:</strong>
-                {{ orden.cancelada_en|date:"d/m/Y H:i" }}
-                {% if orden.cancelada_por %}por {{ orden.cancelada_por }}{% endif %}
-            </div>
-            {% endif %}
-            {% if orden.rechazada_en %}
-            <div class="col-md-4">
-                <strong>Último rechazo:</strong>
-                {{ orden.rechazada_en|date:"d/m/Y H:i" }}
-                {% if orden.rechazada_por %}por {{ orden.rechazada_por }}{% endif %}
-            </div>
-            {% endif %}
-        </div>
-
-        {% if orden.motivo_rechazo %}
-        <div class="small text-danger mt-2"><strong>Motivo de rechazo:</strong> {{ orden.motivo_rechazo }}</div>
-        {% endif %}
-        {% if orden.motivo_cancelacion %}
-        <div class="small text-danger mt-2"><strong>Motivo de cancelación:</strong> {{ orden.motivo_cancelacion }}</div>
-        {% endif %}
-        {% if orden.motivo_cierre %}
-        <div class="small mt-2"><strong>Motivo de cierre:</strong> {{ orden.motivo_cierre }}</div>
-        {% endif %}
+    <div class="detail-actions">
+        {% if orden.estado == 'cancelada' or orden.estado == 'rechazada' %}<span class="status-pill status-pill-danger">{{ orden.get_estado_display }}</span>
+        {% elif orden.estado == 'recepcion_parcial' or orden.estado == 'pendiente_aprobacion' %}<span class="status-pill status-pill-warning">{{ orden.get_estado_display }}</span>
+        {% elif orden.estado == 'recibida' %}<span class="status-pill status-pill-success">{{ orden.get_estado_display }}</span>
+        {% elif orden.estado == 'cerrada' %}<span class="status-pill status-pill-dark">{{ orden.get_estado_display }}</span>
+        {% elif orden.estado == 'enviada' or orden.estado == 'aprobada' %}<span class="status-pill status-pill-info">{{ orden.get_estado_display }}</span>
+        {% else %}<span class="status-pill status-pill-neutral">{{ orden.get_estado_display }}</span>{% endif %}
+        <a href="{% url 'purchasing:lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a>
     </div>
 </div>
 
-{% if orden.estado == 'borrador' and not tiene_lineas %}
-<div class="alert alert-info py-2">
-    Agregá al menos una línea antes de enviar la orden a aprobación.
-</div>
-{% endif %}
+{% if orden.estado == 'borrador' and not tiene_lineas %}<div class="alert alert-info">Agregá al menos una línea antes de enviar la orden a aprobación.</div>{% endif %}
+{% if orden.estado == 'recepcion_parcial' %}<div class="alert alert-warning">La orden tiene recepción parcial. Quedan {{ lineas_pendientes|length }} línea(s) con mercadería pendiente.</div>{% endif %}
+{% if orden.estado == 'cerrada' and lineas_pendientes %}<div class="alert alert-secondary">Esta orden se cerró con {{ lineas_pendientes|length }} línea(s) que no se recibirán completamente.</div>{% endif %}
 
-{% if orden.estado == 'recepcion_parcial' %}
-<div class="alert alert-warning py-2">
-    La orden tiene recepción parcial. Quedan {{ lineas_pendientes|length }} línea(s) con mercadería pendiente.
-</div>
-{% endif %}
-
-{% if orden.estado == 'cerrada' and lineas_pendientes %}
-<div class="alert alert-secondary py-2">
-    Esta orden se cerró con {{ lineas_pendientes|length }} línea(s) que no se recibirán completamente.
-</div>
-{% endif %}
-
-<div class="d-flex flex-wrap gap-2 mb-3">
-    {% if puede_enviar_a_aprobacion %}
-    <form method="post" action="{% url 'purchasing:enviar_a_aprobacion' orden.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-primary">Enviar a aprobación</button>
-    </form>
-    {% endif %}
-
+{% if puede_enviar_a_aprobacion or puede_aprobar or puede_reabrir or puede_marcar_enviada or puede_cancelar or puede_cerrar %}
+<div class="workflow-bar">
+    {% if puede_enviar_a_aprobacion %}<form method="post" action="{% url 'purchasing:enviar_a_aprobacion' orden.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-send me-1"></i>Enviar a aprobación</button></form>{% endif %}
     {% if puede_aprobar %}
-    <form method="post" action="{% url 'purchasing:aprobar' orden.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-success">Aprobar</button>
-    </form>
-
-    <form method="post" action="{% url 'purchasing:rechazar' orden.pk %}" class="d-flex gap-1">
-        {% csrf_token %}
-        <input type="text" name="motivo" class="form-control form-control-sm" placeholder="Motivo del rechazo" required>
-        <button type="submit" class="btn btn-sm btn-outline-danger">Rechazar</button>
-    </form>
+    <form method="post" action="{% url 'purchasing:aprobar' orden.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check2 me-1"></i>Aprobar</button></form>
+    <form method="post" action="{% url 'purchasing:rechazar' orden.pk %}" class="d-flex gap-1">{% csrf_token %}<input type="text" name="motivo" class="form-control form-control-sm" placeholder="Motivo del rechazo" required><button type="submit" class="btn btn-sm btn-outline-danger">Rechazar</button></form>
     {% endif %}
-
-    {% if puede_reabrir %}
-    <form method="post" action="{% url 'purchasing:reabrir' orden.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-outline-secondary">Reabrir a Borrador</button>
-    </form>
-    {% endif %}
-
-    {% if puede_marcar_enviada %}
-    <form method="post" action="{% url 'purchasing:marcar_enviada' orden.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-primary">Marcar enviada al proveedor</button>
-    </form>
-    {% endif %}
-
-    {% if puede_cancelar %}
-    <form method="post" action="{% url 'purchasing:cancelar' orden.pk %}" class="d-flex gap-1">
-        {% csrf_token %}
-        <input type="text" name="motivo" class="form-control form-control-sm" placeholder="Motivo de cancelación" required>
-        <button type="submit" class="btn btn-sm btn-outline-danger">Cancelar orden</button>
-    </form>
-    {% endif %}
-
-    {% if puede_cerrar %}
-    <form method="post" action="{% url 'purchasing:cerrar' orden.pk %}" class="d-flex gap-1">
-        {% csrf_token %}
-        <input
-            type="text"
-            name="motivo"
-            class="form-control form-control-sm"
-            placeholder="{% if cierre_requiere_motivo %}Motivo obligatorio del cierre parcial{% else %}Nota de cierre (opcional){% endif %}"
-            {% if cierre_requiere_motivo %}required{% endif %}
-        >
-        <button type="submit" class="btn btn-sm btn-dark">Cerrar orden</button>
-    </form>
-    {% endif %}
+    {% if puede_reabrir %}<form method="post" action="{% url 'purchasing:reabrir' orden.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-secondary">Reabrir a Borrador</button></form>{% endif %}
+    {% if puede_marcar_enviada %}<form method="post" action="{% url 'purchasing:marcar_enviada' orden.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-primary">Marcar enviada al proveedor</button></form>{% endif %}
+    {% if puede_cancelar %}<form method="post" action="{% url 'purchasing:cancelar' orden.pk %}" class="d-flex gap-1">{% csrf_token %}<input type="text" name="motivo" class="form-control form-control-sm" placeholder="Motivo de cancelación" required><button type="submit" class="btn btn-sm btn-outline-danger">Cancelar orden</button></form>{% endif %}
+    {% if puede_cerrar %}<form method="post" action="{% url 'purchasing:cerrar' orden.pk %}" class="d-flex gap-1">{% csrf_token %}<input type="text" name="motivo" class="form-control form-control-sm" placeholder="{% if cierre_requiere_motivo %}Motivo obligatorio del cierre parcial{% else %}Nota de cierre (opcional){% endif %}" {% if cierre_requiere_motivo %}required{% endif %}><button type="submit" class="btn btn-sm btn-dark">Cerrar orden</button></form>{% endif %}
 </div>
-
-<h2 class="h5 mt-4">Líneas</h2>
-
-<table class="table table-sm table-hover bg-white">
-    <thead>
-        <tr>
-            <th>Producto</th>
-            <th>Cantidad</th>
-            <th>Costo esperado</th>
-            <th>Recibido</th>
-            <th>Pendiente</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for fila in filas %}
-        <tr>
-            <td>{{ fila.linea.producto_proveedor }}</td>
-            <td>{{ fila.linea.cantidad }}</td>
-            <td>&#36;{{ fila.linea.costo_esperado }}</td>
-            <td>{{ fila.recibido }}</td>
-            <td>
-                {{ fila.pendiente }}
-                {% if orden.estado == 'cerrada' and fila.pendiente > 0 %}
-                    <span class="badge bg-secondary">No se recibirá</span>
-                {% endif %}
-            </td>
-            <td>
-                {% if fila.puede_recibir %}
-                <a href="{% url 'purchasing:recibir_linea' fila.linea.pk %}" class="btn btn-sm btn-outline-primary">Recibir</a>
-                {% endif %}
-                {% if puede_editar_lineas %}
-                <form method="post" action="{% url 'purchasing:eliminar_linea' fila.linea.pk %}" class="d-inline">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
-                </form>
-                {% endif %}
-            </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="6" class="text-muted">No hay líneas cargadas todavía.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
-
-{% if puede_editar_lineas %}
-<a href="{% url 'purchasing:agregar_linea' orden.pk %}" class="btn btn-sm btn-secondary">Agregar línea</a>
 {% endif %}
+
+<div class="detail-grid">
+    <section class="detail-card detail-card-wide">
+        <div class="detail-card-title"><h2>Líneas</h2><span>Recepción y costos</span></div>
+        <div class="table-responsive"><table class="table data-table">
+            <thead><tr><th>Producto</th><th>Cantidad</th><th>Costo esperado</th><th>Recibido</th><th>Pendiente</th><th class="text-end">Acciones</th></tr></thead>
+            <tbody>
+            {% for fila in filas %}
+            <tr>
+                <td><span class="table-primary-text">{{ fila.linea.producto_proveedor }}</span></td>
+                <td>{{ fila.linea.cantidad }}</td><td>&#36;{{ fila.linea.costo_esperado }}</td><td>{{ fila.recibido }}</td>
+                <td>{{ fila.pendiente }} {% if orden.estado == 'cerrada' and fila.pendiente > 0 %}<span class="status-pill status-pill-neutral ms-1">No se recibirá</span>{% endif %}</td>
+                <td><div class="row-actions">{% if fila.puede_recibir %}<a href="{% url 'purchasing:recibir_linea' fila.linea.pk %}" class="btn btn-sm btn-primary">Recibir</a>{% endif %}{% if puede_editar_lineas %}<form method="post" action="{% url 'purchasing:eliminar_linea' fila.linea.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button></form>{% endif %}</div></td>
+            </tr>
+            {% empty %}<tr><td colspan="6" class="empty-table">No hay líneas cargadas todavía.</td></tr>{% endfor %}
+            </tbody>
+        </table></div>
+        {% if puede_editar_lineas %}<div class="form-section"><a href="{% url 'purchasing:agregar_linea' orden.pk %}" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle me-1"></i>Agregar línea</a></div>{% endif %}
+    </section>
+
+    <aside class="detail-card detail-card-third">
+        <div class="detail-card-title"><h2>Datos de la orden</h2><span>Resumen</span></div>
+        <dl class="detail-kv">
+            <div class="detail-kv-row"><dt>Proveedor</dt><dd>{{ orden.proveedor }}</dd></div>
+            <div class="detail-kv-row"><dt>Destino</dt><dd>{{ orden.get_deposito_destino_display }}</dd></div>
+            <div class="detail-kv-row"><dt>Creada</dt><dd>{{ orden.creado_en|date:"d/m/Y H:i" }}{% if orden.creado_por %}<br><span class="text-muted">por {{ orden.creado_por }}</span>{% endif %}</dd></div>
+        </dl>
+        {% if orden.notas %}<div class="form-section"><div class="form-section-title">Notas</div><div class="detail-note">{{ orden.notas }}</div></div>{% endif %}
+        {% if orden.motivo_rechazo %}<div class="alert alert-danger mt-3 mb-0"><strong>Motivo de rechazo:</strong> {{ orden.motivo_rechazo }}</div>{% endif %}
+        {% if orden.motivo_cancelacion %}<div class="alert alert-danger mt-3 mb-0"><strong>Motivo de cancelación:</strong> {{ orden.motivo_cancelacion }}</div>{% endif %}
+        {% if orden.motivo_cierre %}<div class="alert alert-secondary mt-3 mb-0"><strong>Motivo de cierre:</strong> {{ orden.motivo_cierre }}</div>{% endif %}
+    </aside>
+
+    <section class="detail-card">
+        <div class="detail-card-title"><h2>Historial del ciclo</h2><span>Hitos operativos</span></div>
+        <div class="timeline-grid">
+            <div class="timeline-item"><strong>Creada</strong><span>{{ orden.creado_en|date:"d/m/Y H:i" }}{% if orden.creado_por %} · {{ orden.creado_por }}{% endif %}</span></div>
+            {% if orden.solicitud_aprobacion_en %}<div class="timeline-item"><strong>Enviada a aprobación</strong><span>{{ orden.solicitud_aprobacion_en|date:"d/m/Y H:i" }}{% if orden.solicitud_aprobacion_por %} · {{ orden.solicitud_aprobacion_por }}{% endif %}</span></div>{% endif %}
+            {% if orden.aprobada_en %}<div class="timeline-item"><strong>Aprobada</strong><span>{{ orden.aprobada_en|date:"d/m/Y H:i" }}{% if orden.aprobada_por %} · {{ orden.aprobada_por }}{% endif %}</span></div>{% endif %}
+            {% if orden.rechazada_en %}<div class="timeline-item"><strong>Último rechazo</strong><span>{{ orden.rechazada_en|date:"d/m/Y H:i" }}{% if orden.rechazada_por %} · {{ orden.rechazada_por }}{% endif %}</span></div>{% endif %}
+            {% if orden.enviada_en %}<div class="timeline-item"><strong>Enviada al proveedor</strong><span>{{ orden.enviada_en|date:"d/m/Y H:i" }}{% if orden.enviada_por %} · {{ orden.enviada_por }}{% endif %}</span></div>{% endif %}
+            {% if orden.primera_recepcion_en %}<div class="timeline-item"><strong>Primera recepción</strong><span>{{ orden.primera_recepcion_en|date:"d/m/Y H:i" }}</span></div>{% endif %}
+            {% if orden.recibida_en %}<div class="timeline-item"><strong>Recibida completa</strong><span>{{ orden.recibida_en|date:"d/m/Y H:i" }}</span></div>{% endif %}
+            {% if orden.cerrada_en %}<div class="timeline-item"><strong>Cerrada</strong><span>{{ orden.cerrada_en|date:"d/m/Y H:i" }}{% if orden.cerrada_por %} · {{ orden.cerrada_por }}{% endif %}</span></div>{% endif %}
+            {% if orden.cancelada_en %}<div class="timeline-item"><strong>Cancelada</strong><span>{{ orden.cancelada_en|date:"d/m/Y H:i" }}{% if orden.cancelada_por %} · {{ orden.cancelada_por }}{% endif %}</span></div>{% endif %}
+        </div>
+    </section>
+</div>
 {% endblock %}
