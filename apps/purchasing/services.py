@@ -9,7 +9,13 @@ from apps.pricing.services import registrar_costo
 from apps.stock.models import TipoMovimiento
 from apps.stock.services import registrar_movimiento
 
-from .models import EstadoOrdenCompra, LineaOrdenCompra, OrdenDeCompra, TRANSICIONES_VALIDAS
+from .models import (
+    EstadoEnvioOrdenCompra,
+    EstadoOrdenCompra,
+    LineaOrdenCompra,
+    OrdenDeCompra,
+    TRANSICIONES_VALIDAS,
+)
 from .permissions import puede_cancelar_orden, puede_cerrar_orden, puede_gestionar_orden
 
 
@@ -96,6 +102,14 @@ def cambiar_estado_orden(orden, nuevo_estado, usuario, detalle="", motivo=""):
 
     orden_bloqueada = OrdenDeCompra.objects.select_for_update().get(pk=orden.pk)
     estado_anterior = orden_bloqueada.estado
+    if (
+        orden_bloqueada.estado_envio == EstadoEnvioOrdenCompra.ENVIANDO
+        and nuevo_estado in (EstadoOrdenCompra.BORRADOR, EstadoOrdenCompra.CANCELADA)
+    ):
+        raise TransicionInvalidaError(
+            "Hay un envío de correo en curso para esta orden. Esperá a que termine antes de modificarla."
+        )
+
     permitidos = TRANSICIONES_VALIDAS.get(estado_anterior, set())
     if nuevo_estado not in permitidos:
         raise TransicionInvalidaError(
@@ -118,12 +132,42 @@ def cambiar_estado_orden(orden, nuevo_estado, usuario, detalle="", motivo=""):
         # sigue quedando en AuditLog y una nueva emisión tendrá su propio hito.
         orden_bloqueada.emitida_por = None
         orden_bloqueada.emitida_en = None
-        update_fields += ["emitida_por", "emitida_en"]
+        orden_bloqueada.estado_envio = EstadoEnvioOrdenCompra.PENDIENTE
+        orden_bloqueada.enviada_a = ""
+        orden_bloqueada.ultimo_intento_envio_en = None
+        orden_bloqueada.ultimo_error_envio = ""
+
+        pdf_anterior = orden_bloqueada.pdf_generado
+        nombre_pdf_anterior = pdf_anterior.name if pdf_anterior else ""
+        almacenamiento_pdf = pdf_anterior.storage if pdf_anterior else None
+        orden_bloqueada.pdf_generado = ""
+
+        update_fields += [
+            "emitida_por",
+            "emitida_en",
+            "estado_envio",
+            "enviada_a",
+            "ultimo_intento_envio_en",
+            "ultimo_error_envio",
+            "pdf_generado",
+        ]
+        if nombre_pdf_anterior and almacenamiento_pdf is not None:
+            transaction.on_commit(
+                lambda nombre=nombre_pdf_anterior, storage=almacenamiento_pdf: storage.delete(nombre)
+            )
 
     elif nuevo_estado == EstadoOrdenCompra.ENVIADA:
         orden_bloqueada.enviada_por = usuario
         orden_bloqueada.enviada_en = ahora
-        update_fields += ["enviada_por", "enviada_en"]
+        orden_bloqueada.estado_envio = EstadoEnvioOrdenCompra.ENVIADO
+        if orden_bloqueada.ultimo_intento_envio_en is None:
+            orden_bloqueada.ultimo_intento_envio_en = ahora
+        update_fields += [
+            "enviada_por",
+            "enviada_en",
+            "estado_envio",
+            "ultimo_intento_envio_en",
+        ]
 
     elif nuevo_estado == EstadoOrdenCompra.CANCELADA:
         if orden_tiene_recepciones(orden_bloqueada):
@@ -163,6 +207,11 @@ def cambiar_estado_orden(orden, nuevo_estado, usuario, detalle="", motivo=""):
         "emitida_en",
         "enviada_por",
         "enviada_en",
+        "enviada_a",
+        "estado_envio",
+        "ultimo_intento_envio_en",
+        "ultimo_error_envio",
+        "pdf_generado",
         "cancelada_por",
         "cancelada_en",
         "motivo_cancelacion",
