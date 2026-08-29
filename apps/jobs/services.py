@@ -1,9 +1,10 @@
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Sum
 
 from apps.audit.services import log_action
-from apps.quotes.models import EstadoPresupuesto
+from apps.quotes.models import EstadoPresupuesto, Presupuesto
 from apps.stock.models import Deposito, TipoMovimiento
 from apps.stock.services import registrar_movimiento
 
@@ -14,29 +15,45 @@ class TransicionInvalidaError(ValueError):
     pass
 
 
+@transaction.atomic
 def crear_trabajo(presupuesto, usuario, tecnico_asignado=None):
     """
     Único punto de entrada para que nazca un Trabajo. No es un efecto
     automático de aceptar el presupuesto — alguien con permiso dispara
     esta acción a propósito, después de que el presupuesto ya está
     Aceptado.
+
+    Se bloquea el Presupuesto porque es la identidad única de origen
+    del Trabajo. Dos requests simultáneos se serializan sobre esa fila
+    y el segundo vuelve a comprobar si el Trabajo ya existe.
     """
-    if presupuesto.estado != EstadoPresupuesto.ACEPTADO:
+    presupuesto_bloqueado = (
+        Presupuesto.objects.select_for_update()
+        .select_related("cliente")
+        .get(pk=presupuesto.pk)
+    )
+    if presupuesto_bloqueado.estado != EstadoPresupuesto.ACEPTADO:
         raise ValueError("Solo se puede crear un Trabajo a partir de un Presupuesto Aceptado.")
-    if hasattr(presupuesto, "trabajo"):
+    if Trabajo.objects.filter(presupuesto=presupuesto_bloqueado).exists():
         raise ValueError("Este presupuesto ya tiene un Trabajo creado.")
 
     trabajo = Trabajo.objects.create(
-        presupuesto=presupuesto,
+        presupuesto=presupuesto_bloqueado,
         tecnico_asignado=tecnico_asignado,
-        direccion=presupuesto.direccion,
-        observaciones=presupuesto.notas_generales,
+        direccion=presupuesto_bloqueado.direccion,
+        observaciones=presupuesto_bloqueado.notas_generales,
         creado_por=usuario,
     )
-    log_action(usuario, "crear_trabajo", trabajo, detail=f"Trabajo creado desde {presupuesto}")
+    log_action(
+        usuario,
+        "crear_trabajo",
+        trabajo,
+        detail=f"Trabajo creado desde {presupuesto_bloqueado}",
+    )
     return trabajo
 
 
+@transaction.atomic
 def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
     """
     El estado de un Trabajo normalmente avanza —y se puede saltear
@@ -57,11 +74,17 @@ def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
     apps.jobs.permissions.puede_cambiar_estado_trabajo(), llamado
     desde la vista.
     """
+    trabajo_bloqueado = (
+        Trabajo.objects.select_for_update()
+        .select_related("presupuesto__cliente")
+        .get(pk=trabajo.pk)
+    )
+
     try:
-        idx_actual = ORDEN_ESTADOS.index(trabajo.estado)
+        idx_actual = ORDEN_ESTADOS.index(trabajo_bloqueado.estado)
     except ValueError:
         raise TransicionInvalidaError(
-            f"El trabajo está '{trabajo.estado}': no forma parte de la secuencia de avance "
+            f"El trabajo está '{trabajo_bloqueado.estado}': no forma parte de la secuencia de avance "
             "(un Cancelado no se reabre)."
         )
     try:
@@ -70,11 +93,13 @@ def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
         raise TransicionInvalidaError(f"Estado desconocido: '{nuevo_estado}'.")
 
     if idx_nuevo == idx_actual:
-        raise TransicionInvalidaError(f"El trabajo ya está en estado '{trabajo.estado}'.")
+        raise TransicionInvalidaError(
+            f"El trabajo ya está en estado '{trabajo_bloqueado.estado}'."
+        )
 
-    estado_anterior = trabajo.estado
-    trabajo.estado = nuevo_estado
-    trabajo.save(update_fields=["estado"])
+    estado_anterior = trabajo_bloqueado.estado
+    trabajo_bloqueado.estado = nuevo_estado
+    trabajo_bloqueado.save(update_fields=["estado"])
 
     accion = "cambiar_estado_trabajo"
     direccion = "avanzado" if idx_nuevo > idx_actual else "retrocedido"
@@ -86,7 +111,7 @@ def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
     # enviar_presupuesto(). No se sobreescribe si el caller ya mandó un
     # detalle propio.
     if nuevo_estado == EstadoTrabajo.LISTO and not detalle:
-        pendientes = materiales_pendientes_de_envio(trabajo)
+        pendientes = materiales_pendientes_de_envio(trabajo_bloqueado)
         if pendientes:
             accion = "trabajo_marcado_listo_con_pendientes"
             detalle = "Marcado Listo con material pendiente de envío: " + "; ".join(
@@ -96,12 +121,14 @@ def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
     log_action(
         usuario,
         accion,
-        trabajo,
+        trabajo_bloqueado,
         detail=detalle or f"{direccion}: {estado_anterior} → {nuevo_estado}",
     )
-    return trabajo
+    trabajo.estado = nuevo_estado
+    return trabajo_bloqueado
 
 
+@transaction.atomic
 def cancelar_trabajo(trabajo, usuario, motivo=""):
     """
     Cancelado es una salida terminal APARTE de ORDEN_ESTADOS (no
@@ -111,21 +138,30 @@ def cancelar_trabajo(trabajo, usuario, motivo=""):
     hay reapertura: si el trabajo cancelado necesita retomarse, es una
     decisión nueva de negocio, no una transición de estado.
     """
-    if trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
-        raise TransicionInvalidaError(f"No se puede cancelar un trabajo en estado '{trabajo.estado}'.")
+    trabajo_bloqueado = (
+        Trabajo.objects.select_for_update()
+        .select_related("presupuesto__cliente")
+        .get(pk=trabajo.pk)
+    )
+    if trabajo_bloqueado.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        raise TransicionInvalidaError(
+            f"No se puede cancelar un trabajo en estado '{trabajo_bloqueado.estado}'."
+        )
 
-    estado_anterior = trabajo.estado
-    trabajo.estado = EstadoTrabajo.CANCELADO
-    trabajo.save(update_fields=["estado"])
+    estado_anterior = trabajo_bloqueado.estado
+    trabajo_bloqueado.estado = EstadoTrabajo.CANCELADO
+    trabajo_bloqueado.save(update_fields=["estado"])
     log_action(
         usuario,
         "cancelar_trabajo",
-        trabajo,
+        trabajo_bloqueado,
         detail=motivo or f"Cancelado desde '{estado_anterior}'",
     )
-    return trabajo
+    trabajo.estado = EstadoTrabajo.CANCELADO
+    return trabajo_bloqueado
 
 
+@transaction.atomic
 def generar_listado_materiales(trabajo, usuario):
     """
     Acción explícita y única (no automática al crear el trabajo, mismo
@@ -147,21 +183,29 @@ def generar_listado_materiales(trabajo, usuario):
     diferencia de ItemPresupuesto donde el campo se deja sin tocar y el
     factor se aplica solo una vez al calcular el total en dinero.
     """
-    if trabajo.materiales.exists() or trabajo.etapas.exists():
+    trabajo_bloqueado = (
+        Trabajo.objects.select_for_update()
+        .select_related("presupuesto")
+        .get(pk=trabajo.pk)
+    )
+    if trabajo_bloqueado.materiales.exists() or trabajo_bloqueado.etapas.exists():
         raise ValueError("Este trabajo ya tiene un listado de materiales generado.")
 
     mapa_etapas = {
         seccion.pk: EtapaTrabajo.objects.create(
-            trabajo=trabajo, titulo=seccion.titulo, seccion_origen=seccion, orden=seccion.orden
+            trabajo=trabajo_bloqueado,
+            titulo=seccion.titulo,
+            seccion_origen=seccion,
+            orden=seccion.orden,
         )
-        for seccion in trabajo.presupuesto.secciones.all()
+        for seccion in trabajo_bloqueado.presupuesto.secciones.all()
     }
 
-    cantidad_unidades = trabajo.presupuesto.cantidad_unidades
-    items = trabajo.presupuesto.items.filter(producto__isnull=False, incluido=True)
+    cantidad_unidades = trabajo_bloqueado.presupuesto.cantidad_unidades
+    items = trabajo_bloqueado.presupuesto.items.filter(producto__isnull=False, incluido=True)
     for item in items:
         MaterialTrabajo.objects.create(
-            trabajo=trabajo,
+            trabajo=trabajo_bloqueado,
             etapa=mapa_etapas.get(item.seccion_id),
             producto=item.producto,
             item_presupuesto_origen=item,
@@ -170,10 +214,13 @@ def generar_listado_materiales(trabajo, usuario):
         )
 
     log_action(
-        usuario, "generar_listado_materiales", trabajo,
-        detail=f"{items.count()} material(es) generados desde {trabajo.presupuesto}",
+        usuario, "generar_listado_materiales", trabajo_bloqueado,
+        detail=(
+            f"{items.count()} material(es) generados desde "
+            f"{trabajo_bloqueado.presupuesto}"
+        ),
     )
-    return trabajo
+    return trabajo_bloqueado
 
 
 # --- Parte 3: envío y consumo real de materiales (regla de negocio 11) ---
@@ -222,6 +269,7 @@ def materiales_pendientes_de_envio(trabajo):
     ]
 
 
+@transaction.atomic
 def enviar_material(material, usuario):
     """
     Regla de negocio 11: "se asume que se usó todo" — manda exactamente
@@ -229,32 +277,66 @@ def enviar_material(material, usuario):
     antes), no pide una cantidad. Si cantidad_necesaria se edita hacia
     arriba después de un envío, un nuevo envío manda solo el delta.
     """
-    if material.producto_id is None:
+    material_bloqueado = (
+        MaterialTrabajo.objects.select_for_update()
+        .select_related("producto", "trabajo__presupuesto__cliente")
+        .get(pk=material.pk)
+    )
+    if material_bloqueado.producto_id is None:
         raise ValueError("Este material no tiene producto de catálogo — no se puede enviar desde Stock.")
 
-    pendiente = cantidad_pendiente_envio(material)
+    pendiente = cantidad_pendiente_envio(material_bloqueado)
     if pendiente <= 0:
         raise ValueError("Este material ya fue enviado por completo.")
 
     return registrar_movimiento(
-        producto=material.producto,
+        producto=material_bloqueado.producto,
         deposito=Deposito.GENERAL,
         tipo=TipoMovimiento.SALIDA,
         cantidad=-pendiente,
         usuario=usuario,
-        trabajo=material.trabajo,
-        material_trabajo=material,
-        referencia_libre=f"Envío a {material.trabajo}",
+        trabajo=material_bloqueado.trabajo,
+        material_trabajo=material_bloqueado,
+        referencia_libre=f"Envío a {material_bloqueado.trabajo}",
     )
 
 
+@transaction.atomic
 def enviar_materiales_pendientes(trabajo, usuario):
-    """Envía en bloque todos los materiales de catálogo con algo pendiente."""
-    return [
-        enviar_material(material, usuario) for material in materiales_pendientes_de_envio(trabajo)
-    ]
+    """
+    Envía en bloque todos los materiales de catálogo con algo pendiente.
+
+    Se bloquean todas las líneas en orden de PK antes de calcular
+    pendientes. Así el lote completo es atómico y el orden estable de
+    locks evita deadlocks entre dos envíos masivos simultáneos.
+    """
+    materiales = list(
+        MaterialTrabajo.objects.select_for_update()
+        .filter(trabajo_id=trabajo.pk, producto__isnull=False)
+        .select_related("producto", "trabajo__presupuesto__cliente")
+        .order_by("pk")
+    )
+    movimientos = []
+    for material in materiales:
+        pendiente = cantidad_pendiente_envio(material)
+        if pendiente <= 0:
+            continue
+        movimientos.append(
+            registrar_movimiento(
+                producto=material.producto,
+                deposito=Deposito.GENERAL,
+                tipo=TipoMovimiento.SALIDA,
+                cantidad=-pendiente,
+                usuario=usuario,
+                trabajo=material.trabajo,
+                material_trabajo=material,
+                referencia_libre=f"Envío a {material.trabajo}",
+            )
+        )
+    return movimientos
 
 
+@transaction.atomic
 def registrar_sobrante(material, cantidad_sobrante, usuario):
     """
     Regla de negocio 11: el sobrante vuelve a stock. Es una ENTRADA
@@ -263,22 +345,28 @@ def registrar_sobrante(material, cantidad_sobrante, usuario):
     requiere_devolucion/salida_relacionada, exclusivo del circuito de
     repuestos de Gabriel, que no pasa por Trabajo).
     """
-    if material.producto_id is None:
-        raise ValueError("Este material no tiene producto de catálogo — no se puede devolver a Stock.")
     if cantidad_sobrante <= 0:
         raise ValueError("La cantidad de sobrante tiene que ser mayor a cero.")
 
-    maximo = cantidad_usada_neta(material)
+    material_bloqueado = (
+        MaterialTrabajo.objects.select_for_update()
+        .select_related("producto", "trabajo__presupuesto__cliente")
+        .get(pk=material.pk)
+    )
+    if material_bloqueado.producto_id is None:
+        raise ValueError("Este material no tiene producto de catálogo — no se puede devolver a Stock.")
+
+    maximo = cantidad_usada_neta(material_bloqueado)
     if cantidad_sobrante > maximo:
         raise ValueError(f"No puede superar lo enviado y no devuelto todavía ({maximo}).")
 
     return registrar_movimiento(
-        producto=material.producto,
+        producto=material_bloqueado.producto,
         deposito=Deposito.GENERAL,
         tipo=TipoMovimiento.ENTRADA,
         cantidad=cantidad_sobrante,
         usuario=usuario,
-        trabajo=material.trabajo,
-        material_trabajo=material,
-        referencia_libre=f"Sobrante devuelto de {material.trabajo}",
+        trabajo=material_bloqueado.trabajo,
+        material_trabajo=material_bloqueado,
+        referencia_libre=f"Sobrante devuelto de {material_bloqueado.trabajo}",
     )
