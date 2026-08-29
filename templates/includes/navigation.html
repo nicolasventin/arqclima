@@ -1,0 +1,179 @@
+{% with app=request.resolver_match.app_name %}
+<nav class="app-navigation" aria-label="Navegación principal">
+    <a class="app-nav-link {% if app == 'dashboard' %}active{% endif %}"
+       href="{% url 'dashboard:home' %}"
+       {% if app == 'dashboard' %}aria-current="page"{% endif %}>
+        <i class="bi bi-grid-1x2-fill" aria-hidden="true"></i>
+        <span>Inicio</span>
+    </a>
+
+    {% if perms.clients.view_cliente or perms.quotes.view_presupuesto %}
+    <div class="app-nav-section">
+        <div class="app-nav-heading">Comercial</div>
+        {% if perms.clients.view_cliente %}
+        <a class="app-nav-link {% if app == 'clients' %}active{% endif %}"
+           href="{% url 'clients:lista' %}"
+           {% if app == 'clients' %}aria-current="page"{% endif %}>
+            <i class="bi bi-people" aria-hidden="true"></i>
+            <span>Clientes</span>
+        </a>
+        {% endif %}
+        {% if perms.quotes.view_presupuesto %}
+        <a class="app-nav-link {% if app == 'quotes' %}active{% endif %}"
+           href="{% url 'quotes:lista' %}"
+           {% if app == 'quotes' %}aria-current="page"{% endif %}>
+            <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+            <span>Presupuestos</span>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if perms.jobs.view_trabajo or perms.tasks.view_tarea or perms.tasks.add_tarea %}
+    <div class="app-nav-section">
+        <div class="app-nav-heading">Operación</div>
+        {% if perms.jobs.view_trabajo %}
+        <a class="app-nav-link {% if app == 'jobs' %}active{% endif %}"
+           href="{% url 'jobs:lista' %}"
+           {% if app == 'jobs' %}aria-current="page"{% endif %}>
+            <i class="bi bi-tools" aria-hidden="true"></i>
+            <span>Trabajos</span>
+        </a>
+        {% endif %}
+        {% if perms.tasks.view_tarea %}
+        <a class="app-nav-link {% if app == 'tasks' and request.resolver_match.url_name == 'mis_tareas' %}active{% endif %}"
+           href="{% url 'tasks:mis_tareas' %}">
+            <i class="bi bi-check2-square" aria-hidden="true"></i>
+            <span>Mis tareas</span>
+        </a>
+        {% endif %}
+        {% if perms.tasks.add_tarea %}
+        <a class="app-nav-link {% if app == 'tasks' and request.resolver_match.url_name != 'mis_tareas' %}active{% endif %}"
+           href="{% url 'tasks:lista' %}">
+            <i class="bi bi-list-check" aria-hidden="true"></i>
+            <span>Tareas del equipo</span>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if perms.stock.view_movimientostock or perms.purchasing.view_ordendecompra %}
+    <div class="app-nav-section">
+        <div class="app-nav-heading">Inventario</div>
+        {% if perms.stock.view_movimientostock %}
+        <a class="app-nav-link {% if app == 'stock' %}active{% endif %}"
+           href="{% url 'stock:lista' %}"
+           {% if app == 'stock' %}aria-current="page"{% endif %}>
+            <i class="bi bi-box-seam" aria-hidden="true"></i>
+            <span>Stock</span>
+        </a>
+        {% endif %}
+        {% if perms.purchasing.view_ordendecompra %}
+        <a class="app-nav-link {% if app == 'purchasing' %}active{% endif %}"
+           href="{% url 'purchasing:lista' %}"
+           {% if app == 'purchasing' %}aria-current="page"{% endif %}>
+            <i class="bi bi-cart3" aria-hidden="true"></i>
+            <span>Órdenes de compra</span>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if perms.catalog.view_producto or perms.catalog.view_proveedor or perms.pricing.manage_margenes or perms.pricing.add_historialcosto or perms.pricing.manage_costos_repuestos %}
+    <div class="app-nav-section">
+        <div class="app-nav-heading">Catálogo</div>
+        {% if perms.catalog.view_producto %}
+        <a class="app-nav-link {% if app == 'catalog' and 'producto' in request.resolver_match.url_name %}active{% endif %}"
+           href="{% url 'catalog:producto_lista' %}">
+            <i class="bi bi-snow" aria-hidden="true"></i>
+            <span>Productos</span>
+        </a>
+        {% endif %}
+        {% if perms.catalog.view_proveedor %}
+        <a class="app-nav-link {% if app == 'catalog' and 'proveedor' in request.resolver_match.url_name %}active{% endif %}"
+           href="{% url 'catalog:proveedor_lista' %}">
+            <i class="bi bi-truck" aria-hidden="true"></i>
+            <span>Proveedores</span>
+        </a>
+        {% endif %}
+        {% if perms.pricing.add_historialcosto or perms.pricing.manage_costos_repuestos %}
+        <a class="app-nav-link {% if app == 'imports' %}active{% endif %}"
+           href="{% url 'imports:lista' %}"
+           {% if app == 'imports' %}aria-current="page"{% endif %}>
+            <i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i>
+            <span>Importaciones</span>
+        </a>
+        {% endif %}
+        {% if perms.pricing.manage_margenes %}
+        <a class="app-nav-link {% if app == 'pricing' %}active{% endif %}"
+           href="{% url 'pricing:configuracion' %}"
+           {% if app == 'pricing' %}aria-current="page"{% endif %}>
+            <i class="bi bi-sliders" aria-hidden="true"></i>
+            <span>Configuración de precios</span>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if perms.reports.view_reporte_comercial or perms.reports.view_reporte_rentabilidad or perms.reports.view_reporte_stock or perms.reports.view_reporte_clientes or perms.reports.view_reporte_empleados %}
+    <div class="app-nav-section">
+        <div class="app-nav-heading">Reportes</div>
+        {% if perms.reports.view_reporte_comercial %}
+        <a class="app-nav-link {% if app == 'reports' and request.resolver_match.url_name == 'comercial' %}active{% endif %}"
+           href="{% url 'reports:comercial' %}">
+            <i class="bi bi-bar-chart-line" aria-hidden="true"></i>
+            <span>Comercial</span>
+        </a>
+        {% endif %}
+        {% if perms.reports.view_reporte_rentabilidad %}
+        <a class="app-nav-link {% if app == 'reports' and request.resolver_match.url_name == 'rentabilidad' %}active{% endif %}"
+           href="{% url 'reports:rentabilidad' %}">
+            <i class="bi bi-graph-up-arrow" aria-hidden="true"></i>
+            <span>Rentabilidad</span>
+        </a>
+        {% endif %}
+        {% if perms.reports.view_reporte_stock %}
+        <a class="app-nav-link {% if app == 'reports' and request.resolver_match.url_name == 'stock' %}active{% endif %}"
+           href="{% url 'reports:stock' %}">
+            <i class="bi bi-boxes" aria-hidden="true"></i>
+            <span>Stock</span>
+        </a>
+        {% endif %}
+        {% if perms.reports.view_reporte_clientes %}
+        <a class="app-nav-link {% if app == 'reports' and request.resolver_match.url_name == 'clientes' or app == 'reports' and request.resolver_match.url_name == 'historial_cliente' %}active{% endif %}"
+           href="{% url 'reports:clientes' %}">
+            <i class="bi bi-person-lines-fill" aria-hidden="true"></i>
+            <span>Clientes</span>
+        </a>
+        {% endif %}
+        {% if perms.reports.view_reporte_empleados %}
+        <a class="app-nav-link {% if app == 'reports' and request.resolver_match.url_name == 'empleados' %}active{% endif %}"
+           href="{% url 'reports:empleados' %}">
+            <i class="bi bi-person-workspace" aria-hidden="true"></i>
+            <span>Empleados</span>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if perms.accounts.manage_permissions or user.is_staff %}
+    <div class="app-nav-section">
+        <div class="app-nav-heading">Administración</div>
+        {% if perms.accounts.manage_permissions %}
+        <a class="app-nav-link {% if app == 'accounts' and request.resolver_match.url_name == 'permisos' %}active{% endif %}"
+           href="{% url 'accounts:permisos' %}">
+            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+            <span>Usuarios y permisos</span>
+        </a>
+        {% endif %}
+        {% if user.is_staff %}
+        <a class="app-nav-link {% if app == 'admin' %}active{% endif %}"
+           href="{% url 'admin:index' %}">
+            <i class="bi bi-gear" aria-hidden="true"></i>
+            <span>Admin Django</span>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</nav>
+{% endwith %}
