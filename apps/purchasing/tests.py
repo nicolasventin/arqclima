@@ -100,6 +100,12 @@ class ModelConstraintTests(TestCase):
                 linea.save()
 
     def test_trigger_bloquea_insert_fuera_de_borrador(self):
+        LineaOrdenCompra.objects.create(
+            orden=self.orden,
+            producto_proveedor=self.pp_a,
+            cantidad=Decimal("1"),
+            costo_esperado=Decimal("100"),
+        )
         cambiar_estado_orden(
             self.orden,
             EstadoOrdenCompra.PENDIENTE_APROBACION,
