@@ -2080,7 +2080,7 @@ a {
 .report-bar-neutral { background: #7c8991; }
 .report-bar-muted { background: #adb7bd; }
 
-.report-bar-warning {
+.report-bar-note-warning {
     display: block;
     margin-top: .35rem;
     color: #8a6414;
