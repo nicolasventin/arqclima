@@ -1,12 +1,30 @@
 from django.db import models as db_models
+from django.http import JsonResponse
 from django.urls import reverse
+from django.views import View
 from django.views.generic import CreateView, ListView, UpdateView
 
 from apps.audit.services import log_action
 from apps.core.mixins import PermisoRequeridoMixin
 
-from .forms import ClienteForm
+from .forms import ClienteForm, ClienteRapidoForm
 from .models import Cliente
+
+
+def _cliente_json(cliente):
+    detalle = []
+    if cliente.cuit_dni:
+        detalle.append(f"CUIT/DNI {cliente.cuit_dni}")
+    if cliente.telefono:
+        detalle.append(cliente.telefono)
+    if cliente.email:
+        detalle.append(cliente.email)
+    return {
+        "id": cliente.pk,
+        "nombre": cliente.nombre,
+        "tipo": cliente.get_tipo_display(),
+        "detalle": " · ".join(detalle),
+    }
 
 
 class ClienteListView(PermisoRequeridoMixin, ListView):
@@ -61,3 +79,50 @@ class ClienteUpdateView(PermisoRequeridoMixin, UpdateView):
 
     def get_success_url(self):
         return reverse("clients:lista")
+
+
+class ClienteSearchView(PermisoRequeridoMixin, View):
+    """Búsqueda server-side para selectores que pueden crecer a miles de clientes."""
+
+    permission_required = "clients.view_cliente"
+
+    def get(self, request):
+        q = (request.GET.get("q") or "").strip()
+        if len(q) < 2:
+            return JsonResponse({"resultados": []})
+
+        clientes = (
+            Cliente.objects.filter(activo=True)
+            .filter(
+                db_models.Q(nombre__icontains=q)
+                | db_models.Q(cuit_dni__icontains=q)
+                | db_models.Q(telefono__icontains=q)
+                | db_models.Q(email__icontains=q)
+            )
+            .order_by("nombre")[:20]
+        )
+        return JsonResponse({"resultados": [_cliente_json(cliente) for cliente in clientes]})
+
+
+class ClienteQuickCreateView(PermisoRequeridoMixin, View):
+    """Alta rápida de cliente sin abandonar el flujo que la invoca."""
+
+    permission_required = "clients.add_cliente"
+
+    def post(self, request):
+        form = ClienteRapidoForm(request.POST)
+        if not form.is_valid():
+            errores = {
+                campo: [error["message"] for error in lista]
+                for campo, lista in form.errors.get_json_data().items()
+            }
+            return JsonResponse({"ok": False, "errores": errores}, status=400)
+
+        cliente = form.save()
+        log_action(
+            request.user,
+            "create_cliente",
+            cliente,
+            f"Cliente creado mediante alta rápida: {cliente}",
+        )
+        return JsonResponse({"ok": True, "cliente": _cliente_json(cliente)}, status=201)
