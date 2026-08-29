@@ -10,7 +10,12 @@ from apps.stock.models import TipoMovimiento
 from apps.stock.services import registrar_movimiento
 
 from .models import EstadoOrdenCompra, LineaOrdenCompra, OrdenDeCompra, TRANSICIONES_VALIDAS
-from .permissions import puede_aprobar_orden, puede_cancelar_orden, puede_gestionar_orden
+from .permissions import (
+    puede_aprobar_orden,
+    puede_cancelar_orden,
+    puede_cerrar_orden,
+    puede_gestionar_orden,
+)
 
 
 class TransicionInvalidaError(ValueError):
@@ -272,7 +277,7 @@ def cerrar_orden(orden, usuario, motivo=""):
     Si todavía hay líneas pendientes, el cierre significa que ese
     remanente ya no se espera del proveedor y por eso exige motivo.
     """
-    if not puede_cancelar_orden(usuario):
+    if not puede_cerrar_orden(usuario):
         raise PermissionError("No tiene permiso para cerrar órdenes de compra.")
 
     orden_bloqueada = OrdenDeCompra.objects.select_for_update().get(pk=orden.pk)
