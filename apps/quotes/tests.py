@@ -817,3 +817,92 @@ class PresupuestoViewsTests(TestCase):
         response = self.client.get(reverse("quotes:pdf", args=[presupuesto.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
+
+
+class PresupuestoClienteSelectorTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        grupo, _ = Group.objects.get_or_create(name="Ventas Selector Clientes")
+        grupo.permissions.add(
+            Permission.objects.get(
+                codename="add_presupuesto",
+                content_type__app_label="quotes",
+            ),
+            Permission.objects.get(
+                codename="add_cliente",
+                content_type__app_label="clients",
+            ),
+        )
+        cls.usuario = User.objects.create_user(
+            username="ventas_selector",
+            password="clave12345",
+        )
+        cls.usuario.groups.add(grupo)
+        cls.cliente = Cliente.objects.create(
+            nombre="Cliente Selector",
+            cuit_dni="20-12345678-3",
+        )
+
+    def test_nuevo_presupuesto_usa_buscador_en_lugar_de_select_masivo(self):
+        self.client.login(username="ventas_selector", password="clave12345")
+
+        response = self.client.get(reverse("quotes:nuevo"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="hidden" name="cliente"')
+        self.assertNotContains(response, '<select name="cliente"')
+        self.assertContains(response, "Buscar por nombre, CUIT/DNI, teléfono o email")
+        self.assertContains(response, "Crear cliente")
+        self.assertContains(response, reverse("clients:buscar"))
+        self.assertContains(response, reverse("clients:nuevo_rapido"))
+
+    def test_cliente_creado_rapido_se_puede_usar_inmediatamente_en_presupuesto(self):
+        self.client.login(username="ventas_selector", password="clave12345")
+        alta = self.client.post(
+            reverse("clients:nuevo_rapido"),
+            {
+                "nombre": "Cliente Desde Presupuesto",
+                "tipo": "particular",
+                "telefono": "2614000000",
+            },
+        )
+        cliente_id = alta.json()["cliente"]["id"]
+
+        response = self.client.post(
+            reverse("quotes:nuevo"),
+            {
+                "cliente": cliente_id,
+                "direccion": "Obra 11F",
+                "fecha_vencimiento": "",
+                "cantidad_unidades": 1,
+                "descuento_general_tipo": "porcentaje",
+                "descuento_general_valor": 0,
+                "notas_generales": "",
+                "plantilla_condiciones": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        presupuesto = Presupuesto.objects.get(cliente_id=cliente_id)
+        self.assertEqual(presupuesto.creado_por, self.usuario)
+
+    def test_sin_permiso_de_alta_no_muestra_boton_crear_cliente(self):
+        grupo, _ = Group.objects.get_or_create(name="Cotizador sin alta cliente")
+        grupo.permissions.add(
+            Permission.objects.get(
+                codename="add_presupuesto",
+                content_type__app_label="quotes",
+            )
+        )
+        usuario = User.objects.create_user(
+            username="cotizador_solo",
+            password="clave12345",
+        )
+        usuario.groups.add(grupo)
+        self.client.login(username="cotizador_solo", password="clave12345")
+
+        response = self.client.get(reverse("quotes:nuevo"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Buscar por nombre, CUIT/DNI, teléfono o email")
+        self.assertNotContains(response, 'data-bs-target="#clienteRapidoModal"')
