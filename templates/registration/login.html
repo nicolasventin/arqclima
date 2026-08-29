@@ -4,11 +4,8 @@
 
 {% block auth_content %}
 <div class="auth-brand">
-    <span class="app-brand-mark">AC</span>
-    <div>
-        <div class="fw-bold fs-5">ARQCLIMA</div>
-        <div class="text-muted small">Sistema interno de gestión</div>
-    </div>
+    {% load static %}
+    <img src="{% static 'img/arqclima-logo.svg' %}" alt="ARQCLIMA — Calefacción y Refrigeración">
 </div>
 
 <div class="card border-0 shadow-sm">
