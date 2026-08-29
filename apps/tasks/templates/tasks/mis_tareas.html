@@ -1,55 +1,94 @@
 {% extends "base.html" %}
 
 {% block title %}Mis tareas — ARQCLIMA{% endblock %}
+{% block page_heading %}Mis tareas{% endblock %}
+{% block page_subheading %}Pendientes personales y próximas acciones{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-3">Mis tareas</h1>
+<div class="page-heading">
+    <div class="page-heading-copy">
+        <div class="page-heading-kicker">Pendientes</div>
+        <h1>Mis tareas</h1>
+        <p>Acciones asignadas a vos que todavía están abiertas.</p>
+    </div>
+</div>
 
-<table class="table table-sm table-hover bg-white">
-    <thead>
-        <tr>
-            <th>Título</th>
-            <th>Prioridad</th>
-            <th>Fecha límite</th>
-            <th>Estado</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for tarea in tareas %}
-        <tr class="{% if tarea.esta_vencida %}table-danger{% endif %}">
-            <td>
-                {{ tarea.titulo }}
-                {% if tarea.descripcion %}<div class="text-muted small">{{ tarea.descripcion }}</div>{% endif %}
-            </td>
-            <td>{{ tarea.get_prioridad_display }}</td>
-            <td>
-                {{ tarea.fecha_limite|date:"d/m/Y"|default:"—" }}
-                {% if tarea.esta_vencida %}<span class="badge bg-danger">Vencida</span>{% endif %}
-            </td>
-            <td><span class="badge bg-secondary">{{ tarea.get_estado_display }}</span></td>
-            <td class="d-flex gap-1">
-                {% if tarea.estado == "pendiente" %}
-                <form method="post" action="{% url 'tasks:cambiar_estado' tarea.pk %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="estado" value="en_proceso">
-                    <input type="hidden" name="next" value="{% url 'tasks:mis_tareas' %}">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary">Iniciar</button>
-                </form>
-                {% endif %}
-                {% if tarea.estado == "pendiente" or tarea.estado == "en_proceso" %}
-                <form method="post" action="{% url 'tasks:cambiar_estado' tarea.pk %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="estado" value="completada">
-                    <input type="hidden" name="next" value="{% url 'tasks:mis_tareas' %}">
-                    <button type="submit" class="btn btn-sm btn-success">Completar</button>
-                </form>
-                {% endif %}
-            </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5" class="text-muted">No tenés tareas pendientes.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="data-panel">
+    <div class="table-responsive">
+        <table class="table data-table table-hover">
+            <thead>
+                <tr>
+                    <th>Tarea</th>
+                    <th>Prioridad</th>
+                    <th>Fecha límite</th>
+                    <th>Estado</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tarea in tareas %}
+                <tr class="{% if tarea.esta_vencida %}table-danger-soft{% endif %}">
+                    <td>
+                        <span class="table-primary-text">{{ tarea.titulo }}</span>
+                        {% if tarea.descripcion %}<span class="table-secondary-text">{{ tarea.descripcion }}</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if tarea.prioridad == "alta" %}
+                        <span class="status-pill status-pill-danger">Alta</span>
+                        {% elif tarea.prioridad == "media" %}
+                        <span class="status-pill status-pill-warning">Media</span>
+                        {% else %}
+                        <span class="status-pill status-pill-neutral">Baja</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ tarea.fecha_limite|date:"d/m/Y"|default:"—" }}
+                        {% if tarea.esta_vencida %}
+                        <span class="status-pill status-pill-danger ms-1">Vencida</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if tarea.estado == "en_proceso" %}
+                        <span class="status-pill status-pill-info">{{ tarea.get_estado_display }}</span>
+                        {% else %}
+                        <span class="status-pill status-pill-neutral">{{ tarea.get_estado_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="row-actions">
+                            {% if tarea.estado == "pendiente" %}
+                            <form method="post" action="{% url 'tasks:cambiar_estado' tarea.pk %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="estado" value="en_proceso">
+                                <input type="hidden" name="next" value="{% url 'tasks:mis_tareas' %}">
+                                <button type="submit" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-play-fill me-1"></i>Iniciar
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% if tarea.estado == "pendiente" or tarea.estado == "en_proceso" %}
+                            <form method="post" action="{% url 'tasks:cambiar_estado' tarea.pk %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="estado" value="completada">
+                                <input type="hidden" name="next" value="{% url 'tasks:mis_tareas' %}">
+                                <button type="submit" class="btn btn-sm btn-success">
+                                    <i class="bi bi-check2 me-1"></i>Completar
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="empty-table">
+                        <i class="bi bi-check-circle"></i>
+                        No tenés tareas pendientes.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endblock %}
