@@ -92,6 +92,32 @@
     {% endfor %}
 </div>
 
+{% if importacion.estado == "pendiente" and filas_sin_marca %}
+<section class="detail-card import-brand-card mb-3">
+    <div class="detail-card-title">
+        <h2><i class="bi bi-tags me-1"></i>La planilla no informa Marca</h2>
+        <span>{{ filas_sin_marca }} fila{{ filas_sin_marca|pluralize:"s" }}</span>
+    </div>
+    <p class="mb-2">
+        Detectamos códigos, nombres y precios en la planilla, pero esas filas no traen una columna Marca.
+        Si esta lista corresponde a una sola marca, elegila una vez y ARQCLIMA reclasifica todas las filas sin marca.
+    </p>
+    <form method="post" action="{% url 'imports:asignar_marca' importacion.pk %}" class="d-flex flex-wrap gap-2 align-items-end">
+        {% csrf_token %}
+        <div style="min-width: 260px;">
+            <label class="form-label mb-1">{{ form_marca_masiva.marca.label }}</label>
+            {{ form_marca_masiva.marca }}
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">
+            <i class="bi bi-check2-circle me-1"></i>Aplicar marca a filas sin marca
+        </button>
+    </form>
+    <div class="field-help mt-2">
+        Esto solo actualiza la vista previa. No crea productos ni modifica costos hasta la confirmación final.
+    </div>
+</section>
+{% endif %}
+
 {% if imagenes %}
 <section class="detail-card mb-3">
     <div class="detail-card-title">
