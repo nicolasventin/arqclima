@@ -16,6 +16,18 @@ SIGNO_ESPERADO = {
 }
 
 
+class StockInsuficienteError(ValueError):
+    def __init__(self, *, stock_disponible, cantidad_retirada, stock_resultante):
+        self.stock_disponible = stock_disponible
+        self.cantidad_retirada = cantidad_retirada
+        self.stock_resultante = stock_resultante
+        super().__init__(
+            "Stock insuficiente: disponible "
+            f"{stock_disponible}, se intentan retirar {cantidad_retirada} "
+            f"y el saldo quedaría en {stock_resultante}."
+        )
+
+
 def stock_actual(producto, deposito):
     total = MovimientoStock.objects.filter(producto=producto, deposito=deposito).aggregate(
         total=Sum("cantidad")
@@ -69,6 +81,8 @@ def registrar_movimiento(
     orden_compra=None,
     linea_orden_compra=None,
     detalle="",
+    forzar_stock_negativo=False,
+    motivo_forzado="",
 ):
     """
     Único punto de entrada para crear un MovimientoStock — nunca se
@@ -97,8 +111,35 @@ def registrar_movimiento(
     if tipo == TipoMovimiento.AJUSTE and cantidad == 0:
         raise ValueError("La cantidad para un Ajuste no puede ser cero.")
 
+    # Producto es la fila estable que serializa todos los movimientos del
+    # mismo producto. El trigger de PostgreSQL usa el mismo lock, de modo
+    # que incluso un INSERT directo por ORM/SQL participa de la misma
+    # exclusión mutua. Es un lock algo más grueso que producto+depósito,
+    # pero evita introducir una tabla mutable de saldos en un ledger
+    # deliberadamente append-only.
+    producto_bloqueado = Producto.objects.select_for_update().get(pk=producto.pk)
+    stock_antes = stock_actual(producto_bloqueado, deposito)
+    stock_despues = stock_antes + cantidad
+    deja_negativo = cantidad < 0 and stock_despues < 0
+
+    forzado_real = False
+    motivo_forzado_limpio = ""
+    if deja_negativo:
+        if not forzar_stock_negativo:
+            raise StockInsuficienteError(
+                stock_disponible=stock_antes,
+                cantidad_retirada=abs(cantidad),
+                stock_resultante=stock_despues,
+            )
+        if usuario is None or not usuario.has_perm("stock.force_negative_stock"):
+            raise PermissionError("No tiene permiso para forzar una salida con stock insuficiente.")
+        motivo_forzado_limpio = (motivo_forzado or "").strip()
+        if not motivo_forzado_limpio:
+            raise ValueError("Debe indicar el motivo para forzar una salida con stock insuficiente.")
+        forzado_real = True
+
     movimiento = MovimientoStock.objects.create(
-        producto=producto,
+        producto=producto_bloqueado,
         deposito=deposito,
         tipo=tipo,
         cantidad=cantidad,
@@ -109,14 +150,30 @@ def registrar_movimiento(
         material_trabajo=material_trabajo,
         orden_compra=orden_compra,
         linea_orden_compra=linea_orden_compra,
+        forzado_stock_negativo=forzado_real,
+        motivo_forzado=motivo_forzado_limpio,
         registrado_por=usuario,
     )
-    log_action(
-        usuario,
-        "registrar_movimiento_stock",
-        movimiento,
-        detail=detalle or f"{movimiento.get_tipo_display()} {cantidad} de {producto} ({deposito})",
-    )
+
+    if forzado_real:
+        log_action(
+            usuario,
+            "salida_stock_forzada",
+            movimiento,
+            detail=(
+                f"Motivo: {motivo_forzado_limpio} | depósito={deposito} | "
+                f"stock_antes={stock_antes} | cantidad_retirada={abs(cantidad)} | "
+                f"stock_despues={stock_despues}"
+            ),
+        )
+    else:
+        log_action(
+            usuario,
+            "registrar_movimiento_stock",
+            movimiento,
+            detail=detalle
+            or f"{movimiento.get_tipo_display()} {cantidad} de {producto_bloqueado} ({deposito})",
+        )
     return movimiento
 
 
