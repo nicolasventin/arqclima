@@ -300,7 +300,7 @@ class CancelarTrabajoView(UserPassesTestMixin, View):
         try:
             cancelar_trabajo(self.trabajo, request.user, motivo=motivo)
             messages.success(request, f"Trabajo #{self.trabajo.pk} cancelado.")
-        except (TransicionInvalidaError, ValueError) as exc:
+        except (TransicionInvalidaError, PermissionError, ValueError) as exc:
             messages.error(request, str(exc))
         return redirect("jobs:detalle", pk=pk)
 
@@ -323,7 +323,7 @@ class FinalizarTrabajoView(UserPassesTestMixin, View):
                 request.user,
                 observaciones=form.cleaned_data["observaciones"],
             )
-        except (TransicionInvalidaError, ValueError) as exc:
+        except (TransicionInvalidaError, PermissionError, ValueError) as exc:
             messages.error(request, str(exc))
         else:
             messages.success(request, f"Trabajo #{self.trabajo.pk} finalizado.")
