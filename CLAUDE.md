@@ -296,3 +296,9 @@ Regla de implementación: **11M debe realizarse antes de 11N** para no maquillar
 4. No implementes todavía productos, presupuestos, stock, etc. — eso es de etapas posteriores. Enfocate solo en Etapa 1.
 
 Antes de programar, decime si tenés alguna duda sobre el modelo de datos, los roles o las reglas de negocio de arriba.
+
+**11H — ajuste para listas comerciales sin encabezados Código/Nombre:**
+- Algunas listas reales no rotulan Código y Nombre: repiten bloques del tipo categoría + Embalaje + Precio + Precio bonificado, y debajo ubican código/nombre por posición.
+- El parser XLSX ahora cae a detección estructural por bloques cuando falla el detector tabular clásico: infiere la columna de código por patrón alfanumérico largo, la de nombre por texto y conserva el título del bloque como categoría sugerida.
+- Si existen precio de lista y precio bonificado/neto, se prioriza el bonificado como costo efectivo; si una fila no tiene bonificado interpretable, se intenta el otro precio para que el producto no desaparezca de la preview.
+- La falta de columna Marca no se resuelve por inferencia. La preview ofrece una acción explícita para asignar una marca existente a todas las filas sin marca y reclasificarlas antes de confirmar.
