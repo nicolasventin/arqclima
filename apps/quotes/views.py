@@ -196,6 +196,9 @@ class PresupuestoDetailView(PermisoRequeridoMixin, DetailView):
             {
                 "seccion": seccion,
                 "filas": [f for f in filas if f["item"].seccion_id == seccion.id],
+                "lineas_comerciales": presupuesto.lineas_comerciales.filter(
+                    seccion=seccion
+                ).order_by("orden", "pk"),
             }
             for seccion in presupuesto.secciones.all()
         ]
@@ -213,6 +216,9 @@ class PresupuestoDetailView(PermisoRequeridoMixin, DetailView):
                 "puede_revertir": puede_revertir_aceptado(self.request.user, presupuesto)
                 and presupuesto.estado == EstadoPresupuesto.ACEPTADO,
                 "seccion_form": SeccionPresupuestoForm(),
+                "lineas_comerciales_sin_seccion": presupuesto.lineas_comerciales.filter(
+                    seccion__isnull=True
+                ).order_by("orden", "pk"),
                 "margen_minimo_alerta": config.margen_minimo_alerta,
                 "puede_crear_trabajo": (
                     presupuesto.estado == EstadoPresupuesto.ACEPTADO
@@ -385,6 +391,85 @@ class EliminarSeccionView(UserPassesTestMixin, View):
             )
         else:
             self.seccion.delete()
+        return redirect("quotes:detalle", pk=presupuesto_pk)
+
+
+
+class EditarSeccionView(UserPassesTestMixin, UpdateView):
+    model = SeccionPresupuesto
+    form_class = SeccionPresupuestoForm
+    template_name = "quotes/seccion_form.html"
+    pk_url_kwarg = "seccion_pk"
+    raise_exception = True
+
+    def test_func(self):
+        self.object = self.get_object()
+        return (
+            self.request.user.has_perm("quotes.change_presupuesto")
+            and self.object.presupuesto.estado == EstadoPresupuesto.BORRADOR
+        )
+
+    def get_success_url(self):
+        return reverse("quotes:detalle", args=[self.object.presupuesto_id])
+
+
+class AgregarLineaComercialView(UserPassesTestMixin, CreateView):
+    model = LineaComercialPresupuesto
+    form_class = LineaComercialPresupuestoForm
+    template_name = "quotes/linea_comercial_form.html"
+    raise_exception = True
+
+    def test_func(self):
+        self.presupuesto = get_object_or_404(Presupuesto, pk=self.kwargs["pk"])
+        return (
+            self.request.user.has_perm("quotes.add_itempresupuesto")
+            and self.presupuesto.estado == EstadoPresupuesto.BORRADOR
+        )
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["presupuesto"] = self.presupuesto
+        return kwargs
+
+    def get_initial(self):
+        initial = super().get_initial()
+        seccion = self.request.GET.get("seccion")
+        if seccion:
+            initial["seccion"] = seccion
+        return initial
+
+    def form_valid(self, form):
+        form.instance.presupuesto = self.presupuesto
+        form.instance.orden = self.presupuesto.lineas_comerciales.count()
+        response = super().form_valid(form)
+        log_action(
+            self.request.user,
+            "agregar_linea_comercial_presupuesto",
+            self.presupuesto,
+            f"Importe comercial agregado: {self.object.etiqueta}",
+        )
+        return response
+
+    def get_success_url(self):
+        return reverse("quotes:detalle", args=[self.presupuesto.pk])
+
+
+class EliminarLineaComercialView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.linea = get_object_or_404(
+            LineaComercialPresupuesto,
+            pk=self.kwargs["linea_pk"],
+        )
+        return (
+            self.request.user.has_perm("quotes.delete_itempresupuesto")
+            and self.linea.presupuesto.estado == EstadoPresupuesto.BORRADOR
+        )
+
+    def post(self, request, linea_pk):
+        presupuesto_pk = self.linea.presupuesto_id
+        self.linea.delete()
         return redirect("quotes:detalle", pk=presupuesto_pk)
 
 
