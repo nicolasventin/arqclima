@@ -13,6 +13,8 @@ from xhtml2pdf import pisa
 
 from apps.audit.services import log_action
 from apps.catalog.models import ProductoProveedor
+from apps.clients.forms import ClienteRapidoForm
+from apps.clients.models import Cliente
 from apps.core.mixins import PermisoRequeridoMixin
 from apps.jobs.forms import CrearTrabajoForm
 from apps.jobs.permissions import puede_crear_trabajo
@@ -66,6 +68,29 @@ class PresupuestoCreateView(PermisoRequeridoMixin, CreateView):
     form_class = PresupuestoForm
     permission_required = "quotes.add_presupuesto"
     template_name = "quotes/presupuesto_form.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        cliente_id = context["form"]["cliente"].value()
+        cliente_seleccionado = None
+        if cliente_id:
+            try:
+                cliente_seleccionado = Cliente.objects.filter(pk=cliente_id).first()
+            except (TypeError, ValueError):
+                cliente_seleccionado = None
+
+        context.update(
+            {
+                "cliente_seleccionado": cliente_seleccionado,
+                "puede_crear_cliente": self.request.user.has_perm("clients.add_cliente"),
+                "cliente_rapido_form": (
+                    ClienteRapidoForm()
+                    if self.request.user.has_perm("clients.add_cliente")
+                    else None
+                ),
+            }
+        )
+        return context
 
     def form_valid(self, form):
         form.instance.creado_por = self.request.user
