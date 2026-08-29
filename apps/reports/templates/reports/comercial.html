@@ -3,50 +3,126 @@
 {% block title %}Reporte comercial — ARQCLIMA{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Reporte comercial</h1>
-    <div class="d-flex align-items-center gap-2">
-        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}">◀</a>
-        <span class="fw-semibold">{{ mes }}/{{ anio }}</span>
-        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}">▶</a>
+<div class="report-header">
+    <div>
+        <div class="detail-kicker">Reportes</div>
+        <h1>Comercial</h1>
+        <p>Envíos, conversión y estado actual de los presupuestos del período.</p>
+    </div>
+    <div class="report-period-nav" aria-label="Navegación del período">
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_anterior }}&mes={{ mes_anterior }}" aria-label="Mes anterior"><i class="bi bi-chevron-left"></i></a>
+        <div class="report-period-label">
+            <span>Período</span>
+            <strong>{{ periodo_fecha|date:"F Y"|capfirst }}</strong>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="?anio={{ anio_siguiente }}&mes={{ mes_siguiente }}" aria-label="Mes siguiente"><i class="bi bi-chevron-right"></i></a>
     </div>
 </div>
 
-<div class="alert alert-info">
-    Los estados (Aceptado, Rechazado, etc.) reflejan la situación <strong>actual</strong> de cada
-    presupuesto, no necesariamente resuelta dentro del período mostrado. Un presupuesto enviado
-    este mes que todavía sigue Enviado hoy puede pasar a Aceptado o Rechazado más adelante — si
-    volvés a generar este mismo reporte en el futuro, estos números pueden cambiar.
+<div class="report-kpi-grid">
+    <article class="report-kpi">
+        <span class="report-kpi-label">Presupuestos enviados</span>
+        <strong>{{ metricas.total_realizados }}</strong>
+        <small>Enviados al menos una vez en el período.</small>
+    </article>
+    <article class="report-kpi report-kpi-success">
+        <span class="report-kpi-label">Tasa de conversión</span>
+        <strong>{% if metricas.tasa_conversion is not None %}{{ metricas.tasa_conversion|floatformat:1 }}%{% else %}—{% endif %}</strong>
+        <small>{{ metricas.aceptados }} aceptado{{ metricas.aceptados|pluralize:"s" }}.</small>
+    </article>
+    <article class="report-kpi report-kpi-info">
+        <span class="report-kpi-label">Sin resolver</span>
+        <strong>{{ metricas.enviados_sin_resolver }}</strong>
+        <small>Presupuestos que hoy continúan Enviados.</small>
+    </article>
+    <article class="report-kpi">
+        <span class="report-kpi-label">Descuento promedio</span>
+        <strong>{% if metricas.descuento_promedio is not None %}{{ metricas.descuento_promedio|floatformat:1 }}%{% else %}—{% endif %}</strong>
+        <small>Descuento general efectivo del período.</small>
+    </article>
 </div>
 
-<h2 class="h5">Presupuestos enviados en el período</h2>
-<table class="table table-sm bg-white" style="max-width: 500px;">
-    <tbody>
-        <tr><th>Total enviados en el período</th><td>{{ metricas.total_realizados }}</td></tr>
-        <tr><th>Aceptados</th><td>{{ metricas.aceptados }}</td></tr>
-        <tr><th>Rechazados</th><td>{{ metricas.rechazados }}</td></tr>
-        <tr><th>Vencidos</th><td>{{ metricas.vencidos }}</td></tr>
-        <tr><th>Cancelados</th><td>{{ metricas.cancelados }}</td></tr>
-        <tr><th>Todavía Enviados (sin resolver)</th><td>{{ metricas.enviados_sin_resolver }}</td></tr>
-        <tr><th>Reabiertos a Borrador</th><td>{{ metricas.reabiertos_a_borrador }}</td></tr>
-        <tr>
-            <th>Tasa de conversión</th>
-            <td>{% if metricas.tasa_conversion is not None %}{{ metricas.tasa_conversion|floatformat:1 }}%{% else %}—{% endif %}</td>
-        </tr>
-        <tr>
-            <th>Descuento general promedio</th>
-            <td>{% if metricas.descuento_promedio is not None %}{{ metricas.descuento_promedio|floatformat:1 }}%{% else %}—{% endif %}</td>
-        </tr>
-    </tbody>
-</table>
+<div class="alert alert-info report-note">
+    Los estados reflejan la situación <strong>actual</strong> de cada presupuesto enviado en este período.
+    Si un presupuesto cambia de estado más adelante, al volver a consultar este mismo mes el gráfico también cambia.
+</div>
+
+<div class="report-grid">
+    <section class="report-panel report-panel-wide">
+        <div class="report-panel-header">
+            <div>
+                <h2>Estado actual de los presupuestos</h2>
+                <p>Distribución de los {{ metricas.total_realizados }} presupuestos enviados durante el período.</p>
+            </div>
+        </div>
+
+        <div class="report-bar-chart">
+            {% for fila in chart_estados %}
+            <div class="report-bar-row">
+                <div class="report-bar-meta">
+                    <span>{{ fila.label }}</span>
+                    <strong>{{ fila.value }} <small>{{ fila.percentage|floatformat:1 }}%</small></strong>
+                </div>
+                <div class="report-bar-track" role="img" aria-label="{{ fila.label }}: {{ fila.value }}, {{ fila.percentage|floatformat:1 }} por ciento">
+                    <span class="report-bar-fill report-bar-{{ fila.tone }}" style="--report-width: {{ fila.chart_width }}"></span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <aside class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h2>Lectura rápida</h2>
+                <p>Qué pasó con los presupuestos del período.</p>
+            </div>
+        </div>
+        <dl class="report-summary-list">
+            <div><dt>Aceptados</dt><dd>{{ metricas.aceptados }}</dd></div>
+            <div><dt>Rechazados</dt><dd>{{ metricas.rechazados }}</dd></div>
+            <div><dt>Vencidos</dt><dd>{{ metricas.vencidos }}</dd></div>
+            <div><dt>Cancelados</dt><dd>{{ metricas.cancelados }}</dd></div>
+            <div><dt>Reabiertos a Borrador</dt><dd>{{ metricas.reabiertos_a_borrador }}</dd></div>
+        </dl>
+    </aside>
+</div>
 
 {% if montos %}
-<h2 class="h5 mt-4">Montos <span class="badge bg-warning text-dark">Confidencial — solo Administrador</span></h2>
-<table class="table table-sm bg-white" style="max-width: 500px;">
-    <tbody>
-        <tr><th>Facturación potencial (Enviados sin resolver)</th><td>${{ montos.facturacion_potencial }}</td></tr>
-        <tr><th>Facturación aceptada del período</th><td>${{ montos.facturacion_aceptada }}</td></tr>
-    </tbody>
-</table>
+<section class="report-panel report-confidential mt-3">
+    <div class="report-panel-header">
+        <div>
+            <h2>Montos comerciales <span class="status-pill status-pill-warning ms-1">Solo Administrador</span></h2>
+            <p>Comparación entre negocio ya aceptado y cotizaciones todavía abiertas.</p>
+        </div>
+    </div>
+
+    <div class="report-kpi-grid report-kpi-grid-compact">
+        <article class="report-kpi report-kpi-success">
+            <span class="report-kpi-label">Facturación aceptada</span>
+            <strong>$ {{ montos.facturacion_aceptada|floatformat:2 }}</strong>
+            <small>Presupuestos del período que hoy están Aceptados.</small>
+        </article>
+        <article class="report-kpi report-kpi-info">
+            <span class="report-kpi-label">Facturación potencial</span>
+            <strong>$ {{ montos.facturacion_potencial|floatformat:2 }}</strong>
+            <small>Presupuestos del período que siguen Enviados.</small>
+        </article>
+    </div>
+
+    <div class="report-bar-chart report-bar-chart-money">
+        {% for fila in chart_montos %}
+        <div class="report-bar-row">
+            <div class="report-bar-meta">
+                <span>{{ fila.label }}</span>
+                <strong>$ {{ fila.value|floatformat:2 }}</strong>
+            </div>
+            <div class="report-bar-track" role="img" aria-label="{{ fila.label }}: {{ fila.value }}">
+                <span class="report-bar-fill {% if forloop.first %}report-bar-success{% else %}report-bar-info{% endif %}" style="--report-width: {{ fila.chart_width }}"></span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
 {% endif %}
 {% endblock %}
