@@ -1,3 +1,4 @@
+import base64
 from pathlib import Path
 
 from django.conf import settings
@@ -34,6 +35,17 @@ def _resolver_recurso(uri, rel):
         return uri[7:]
 
     return uri
+
+
+
+
+def _logo_pdf_data_uri():
+    ruta = finders.find("img/arqclima-logo-pdf.png")
+    if not ruta:
+        return ""
+    contenido = Path(ruta).read_bytes()
+    codificado = base64.b64encode(contenido).decode("ascii")
+    return f"data:image/png;base64,{codificado}"
 
 
 def _lineas_texto(texto):
@@ -74,6 +86,7 @@ def contexto_pdf_presupuesto(presupuesto):
     return {
         "presupuesto": presupuesto,
         "empresa": settings.ARQCLIMA_COMPANY,
+        "logo_data_uri": _logo_pdf_data_uri(),
         "totales": calcular_totales(presupuesto),
         "hay_lineas_comerciales": hay_lineas_comerciales,
         "secciones": secciones,
