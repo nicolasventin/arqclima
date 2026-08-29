@@ -1,54 +1,92 @@
 {% extends "base.html" %}
 
 {% block title %}Clientes — ARQCLIMA{% endblock %}
+{% block page_heading %}Clientes{% endblock %}
+{% block page_subheading %}Base comercial y datos de contacto{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Clientes</h1>
-    {% if puede_crear %}
-    <a href="{% url 'clients:nuevo' %}" class="btn btn-primary btn-sm">+ Nuevo cliente</a>
-    {% endif %}
+<div class="page-heading">
+    <div class="page-heading-copy">
+        <div class="page-heading-kicker">Comercial</div>
+        <h1>Clientes</h1>
+        <p>Buscá y administrá las personas y empresas con las que trabaja ARQCLIMA.</p>
+    </div>
+    <div class="page-actions">
+        {% if puede_crear %}
+        <a href="{% url 'clients:nuevo' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-person-plus me-1"></i>Nuevo cliente
+        </a>
+        {% endif %}
+    </div>
 </div>
 
-<form method="get" class="row g-2 mb-3">
-    <div class="col-auto">
-        <input type="text" name="q" value="{{ request.GET.q }}" class="form-control form-control-sm" placeholder="Buscar por nombre, CUIT/DNI o email">
+<form method="get" class="filter-bar">
+    <div class="filter-field filter-field-search">
+        <label for="cliente-q">Buscar</label>
+        <input id="cliente-q" type="text" name="q" value="{{ request.GET.q }}"
+               class="form-control form-control-sm"
+               placeholder="Nombre, CUIT/DNI o email">
     </div>
-    <div class="col-auto">
-        <button type="submit" class="btn btn-sm btn-outline-secondary">Buscar</button>
+    <div class="filter-actions">
+        <button type="submit" class="btn btn-sm btn-primary">
+            <i class="bi bi-search me-1"></i>Buscar
+        </button>
+        {% if request.GET.q %}
+        <a href="{% url 'clients:lista' %}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        {% endif %}
     </div>
 </form>
 
-<table class="table table-sm table-hover bg-white">
-    <thead>
-        <tr>
-            <th>Nombre</th>
-            <th>Tipo</th>
-            <th>CUIT/DNI</th>
-            <th>Teléfono</th>
-            <th>Email</th>
-            <th>Activo</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for cliente in clientes %}
-        <tr>
-            <td>{{ cliente.nombre }}</td>
-            <td>{{ cliente.get_tipo_display }}</td>
-            <td>{{ cliente.cuit_dni|default:"—" }}</td>
-            <td>{{ cliente.telefono|default:"—" }}</td>
-            <td>{{ cliente.email|default:"—" }}</td>
-            <td>{% if cliente.activo %}Sí{% else %}No{% endif %}</td>
-            <td>
-                {% if perms.clients.change_cliente %}
-                <a href="{% url 'clients:editar' cliente.pk %}" class="btn btn-sm btn-outline-primary">Editar</a>
-                {% endif %}
-            </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="7" class="text-muted">No hay clientes cargados todavía.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="data-panel">
+    <div class="table-responsive">
+        <table class="table data-table table-hover">
+            <thead>
+                <tr>
+                    <th>Cliente</th>
+                    <th>Tipo</th>
+                    <th>CUIT/DNI</th>
+                    <th>Teléfono</th>
+                    <th>Email</th>
+                    <th>Estado</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cliente in clientes %}
+                <tr>
+                    <td><span class="table-primary-text">{{ cliente.nombre }}</span></td>
+                    <td>{{ cliente.get_tipo_display }}</td>
+                    <td>{{ cliente.cuit_dni|default:"—" }}</td>
+                    <td>{{ cliente.telefono|default:"—" }}</td>
+                    <td>{{ cliente.email|default:"—" }}</td>
+                    <td>
+                        {% if cliente.activo %}
+                        <span class="status-pill status-pill-success">Activo</span>
+                        {% else %}
+                        <span class="status-pill status-pill-neutral">Inactivo</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="row-actions">
+                            {% if perms.clients.change_cliente %}
+                            <a href="{% url 'clients:editar' cliente.pk %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i><span class="d-none d-xl-inline ms-1">Editar</span>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="empty-table">
+                        <i class="bi bi-people"></i>
+                        No hay clientes que coincidan con la búsqueda.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% include "includes/pagination.html" %}
 {% endblock %}
