@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+from django.db import transaction
+
 from apps.audit.services import log_action
 from apps.pricing.models import ConfiguracionGeneral
 from apps.pricing.services import calcular_precio_venta, costo_actual
@@ -30,6 +32,7 @@ TRANSICIONES_VALIDAS = {
 }
 
 
+@transaction.atomic
 def cambiar_estado(presupuesto, nuevo_estado, usuario, accion=None, detalle=""):
     """
     Único punto de entrada para mover el estado de un presupuesto.
@@ -44,23 +47,29 @@ def cambiar_estado(presupuesto, nuevo_estado, usuario, accion=None, detalle=""):
     que el resto de los permisos del proyecto — ver
     apps.quotes.permissions.puede_revertir_aceptado.
     """
-    estado_actual = presupuesto.estado
+    presupuesto_bloqueado = (
+        Presupuesto.objects.select_for_update()
+        .select_related("cliente")
+        .get(pk=presupuesto.pk)
+    )
+    estado_actual = presupuesto_bloqueado.estado
     permitidos = TRANSICIONES_VALIDAS.get(estado_actual, set())
     if nuevo_estado not in permitidos:
         raise TransicionInvalidaError(
             f"No se puede pasar de '{estado_actual}' a '{nuevo_estado}'."
         )
 
-    presupuesto.estado = nuevo_estado
-    presupuesto.save(update_fields=["estado"])
+    presupuesto_bloqueado.estado = nuevo_estado
+    presupuesto_bloqueado.save(update_fields=["estado"])
 
     log_action(
         usuario,
         accion or "cambiar_estado_presupuesto",
-        presupuesto,
+        presupuesto_bloqueado,
         detail=detalle or f"{estado_actual} → {nuevo_estado}",
     )
-    return presupuesto
+    presupuesto.estado = nuevo_estado
+    return presupuesto_bloqueado
 
 
 def sugerir_costo_mano_obra(precio_unitario):
@@ -138,6 +147,7 @@ def margen_item(item):
     return ((precio_con_descuento / item.costo_unitario) - Decimal("1")) * Decimal("100")
 
 
+@transaction.atomic
 def enviar_presupuesto(presupuesto, usuario):
     """
     Pasa el presupuesto a estado Enviado. Regla de negocio 6: un margen
@@ -145,9 +155,17 @@ def enviar_presupuesto(presupuesto, usuario):
     lo mandó así. Se evalúa en CADA transición a Enviado, incluidos
     reenvíos tras editar un presupuesto ya enviado.
     """
+    presupuesto_bloqueado = (
+        Presupuesto.objects.select_for_update()
+        .select_related("cliente")
+        .get(pk=presupuesto.pk)
+    )
     config = ConfiguracionGeneral.obtener()
     items_con_margen_bajo = []
-    for item in presupuesto.items.filter(incluido=True):
+    items = list(
+        presupuesto_bloqueado.items.select_for_update().filter(incluido=True)
+    )
+    for item in items:
         margen = margen_item(item)
         if margen is not None and margen < config.margen_minimo_alerta:
             items_con_margen_bajo.append((item, margen))
@@ -155,7 +173,7 @@ def enviar_presupuesto(presupuesto, usuario):
     if items_con_margen_bajo:
         detalle = "; ".join(f"{item} ({margen:.2f}%)" for item, margen in items_con_margen_bajo)
         return cambiar_estado(
-            presupuesto,
+            presupuesto_bloqueado,
             EstadoPresupuesto.ENVIADO,
             usuario,
             accion="enviar_presupuesto_margen_bajo",
@@ -166,10 +184,11 @@ def enviar_presupuesto(presupuesto, usuario):
         )
 
     return cambiar_estado(
-        presupuesto, EstadoPresupuesto.ENVIADO, usuario, accion="enviar_presupuesto"
+        presupuesto_bloqueado, EstadoPresupuesto.ENVIADO, usuario, accion="enviar_presupuesto"
     )
 
 
+@transaction.atomic
 def duplicar_presupuesto(original, usuario):
     """
     Crea un presupuesto nuevo en Borrador a partir de uno existente,
