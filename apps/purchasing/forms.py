@@ -25,29 +25,35 @@ class CrearOrdenForm(forms.Form):
 class LineaOrdenCompraForm(forms.ModelForm):
     """
     producto_proveedor queda acotado a los del proveedor de la orden —
-    filtro de UX, no la garantía real (esa vive en el trigger de
-    Postgres: ver apps.purchasing.models.LineaOrdenCompra).
+    filtro de UX y validación del formulario, no la garantía final (esa
+    vive también en el trigger de Postgres).
     """
 
     class Meta:
         model = LineaOrdenCompra
         fields = ["producto_proveedor", "cantidad", "costo_esperado"]
+        widgets = {
+            "producto_proveedor": forms.HiddenInput(),
+        }
 
     def __init__(self, *args, orden=None, **kwargs):
         super().__init__(*args, **kwargs)
-        for name, field in self.fields.items():
-            if name == "producto_proveedor":
-                field.widget.attrs["class"] = "form-select"
-            else:
-                field.widget.attrs.setdefault("class", "form-control")
+        self.fields["cantidad"].widget.attrs.setdefault("class", "form-control")
+        self.fields["costo_esperado"].widget.attrs.setdefault("class", "form-control")
         self.fields["cantidad"].validators.append(MinValueValidator(Decimal("0.01")))
         self.fields["cantidad"].widget.attrs.update({"min": "0.01", "step": "0.01"})
         self.fields["costo_esperado"].validators.append(MinValueValidator(Decimal("0")))
         self.fields["costo_esperado"].widget.attrs.update({"min": "0", "step": "0.01"})
+
+        qs = ProductoProveedor.objects.none()
         if orden is not None:
-            self.fields["producto_proveedor"].queryset = ProductoProveedor.objects.filter(
-                proveedor=orden.proveedor, activo=True
+            qs = ProductoProveedor.objects.filter(
+                proveedor=orden.proveedor,
+                activo=True,
+                producto__activo=True,
             ).select_related("producto", "producto__marca")
+        self.fields["producto_proveedor"].queryset = qs
+        self.fields["producto_proveedor"].error_messages["required"] = "Seleccioná un producto."
 
 
 class RecibirLineaForm(forms.Form):

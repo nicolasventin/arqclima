@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.db.models import Q
+from django.db.models import OuterRef, Q, Subquery
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
@@ -8,6 +9,7 @@ from django.views.generic import DetailView, ListView
 
 from apps.catalog.models import ProductoProveedor
 from apps.core.mixins import PermisoRequeridoMixin
+from apps.pricing.models import HistorialCosto
 from apps.pricing.services import costo_actual
 from apps.stock.permissions import puede_registrar_entrada_salida
 
@@ -199,6 +201,89 @@ class CrearOrdenView(UserPassesTestMixin, View):
         return redirect("purchasing:detalle", pk=orden.pk)
 
 
+def _producto_proveedor_de_orden(orden, producto_proveedor_id):
+    if not producto_proveedor_id:
+        return None
+    try:
+        return (
+            ProductoProveedor.objects.select_related("producto", "producto__marca")
+            .filter(
+                pk=producto_proveedor_id,
+                proveedor=orden.proveedor,
+                activo=True,
+                producto__activo=True,
+            )
+            .first()
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _producto_proveedor_json(relacion, costo=None):
+    producto = relacion.producto
+    detalle = f"{producto.marca.nombre} · Código {producto.codigo}"
+    if relacion.codigo_proveedor:
+        detalle += f" · Cód. proveedor {relacion.codigo_proveedor}"
+    return {
+        "id": relacion.pk,
+        "codigo": producto.codigo,
+        "nombre": producto.nombre,
+        "marca": producto.marca.nombre,
+        "codigo_proveedor": relacion.codigo_proveedor,
+        "detalle": detalle,
+        "costo_esperado": "" if costo is None else str(costo),
+    }
+
+
+class BuscarProductosOrdenView(UserPassesTestMixin, View):
+    """Buscador server-side de productos vinculados al proveedor de la OC."""
+
+    raise_exception = True
+
+    def test_func(self):
+        self.orden = get_object_or_404(OrdenDeCompra, pk=self.kwargs["pk"])
+        return (
+            puede_gestionar_orden(self.request.user)
+            and self.orden.estado == EstadoOrdenCompra.BORRADOR
+        )
+
+    def get(self, request, pk):
+        q = (request.GET.get("q") or "").strip()
+        if len(q) < 2:
+            return JsonResponse({"resultados": []})
+
+        costo_vigente = (
+            HistorialCosto.objects.filter(producto_proveedor_id=OuterRef("pk"))
+            .order_by("-vigente_desde")
+            .values("costo")[:1]
+        )
+
+        relaciones = (
+            ProductoProveedor.objects.filter(
+                proveedor=self.orden.proveedor,
+                activo=True,
+                producto__activo=True,
+            )
+            .filter(
+                Q(producto__codigo__icontains=q)
+                | Q(producto__nombre__icontains=q)
+                | Q(codigo_proveedor__icontains=q)
+            )
+            .select_related("producto", "producto__marca")
+            .annotate(costo_vigente=Subquery(costo_vigente))
+            .order_by("producto__marca__nombre", "producto__codigo")[:20]
+        )
+
+        return JsonResponse(
+            {
+                "resultados": [
+                    _producto_proveedor_json(relacion, relacion.costo_vigente)
+                    for relacion in relaciones
+                ]
+            }
+        )
+
+
 class AgregarLineaView(UserPassesTestMixin, View):
     template_name = "purchasing/linea_form.html"
     raise_exception = True
@@ -210,29 +295,50 @@ class AgregarLineaView(UserPassesTestMixin, View):
             and self.orden.estado == EstadoOrdenCompra.BORRADOR
         )
 
+    def _contexto(self, form, relacion=None):
+        costo = None
+        if relacion is not None:
+            historial = costo_actual(relacion)
+            costo = historial.costo if historial is not None else None
+        return {
+            "form": form,
+            "orden": self.orden,
+            "producto_seleccionado": (
+                _producto_proveedor_json(relacion, costo)
+                if relacion is not None
+                else None
+            ),
+        }
+
     def get(self, request, pk):
         initial = {}
-        producto_proveedor_id = request.GET.get("producto_proveedor")
-        if producto_proveedor_id:
-            initial["producto_proveedor"] = producto_proveedor_id
-            pp = ProductoProveedor.objects.filter(pk=producto_proveedor_id).first()
-            if pp is not None:
-                historial = costo_actual(pp)
-                if historial is not None:
-                    initial["costo_esperado"] = historial.costo
+        relacion = _producto_proveedor_de_orden(
+            self.orden,
+            request.GET.get("producto_proveedor"),
+        )
+        if relacion is not None:
+            initial["producto_proveedor"] = relacion.pk
+            historial = costo_actual(relacion)
+            if historial is not None:
+                initial["costo_esperado"] = historial.costo
+
         form = LineaOrdenCompraForm(initial=initial, orden=self.orden)
         return render(
             request,
             self.template_name,
-            {"form": form, "orden": self.orden},
+            self._contexto(form, relacion),
         )
 
     def post(self, request, pk):
         form = LineaOrdenCompraForm(request.POST, orden=self.orden)
-        if "recalcular" in request.POST and form.data.get("producto_proveedor"):
+        relacion = _producto_proveedor_de_orden(
+            self.orden,
+            form.data.get("producto_proveedor"),
+        )
+        if "recalcular" in request.POST and relacion is not None:
             return redirect(
                 f"{reverse('purchasing:agregar_linea', args=[pk])}"
-                f"?producto_proveedor={form.data.get('producto_proveedor')}"
+                f"?producto_proveedor={relacion.pk}"
             )
         if form.is_valid():
             linea = form.save(commit=False)
@@ -244,7 +350,7 @@ class AgregarLineaView(UserPassesTestMixin, View):
             return render(
                 request,
                 self.template_name,
-                {"form": form, "orden": self.orden},
+                self._contexto(form, relacion),
             )
         return redirect("purchasing:detalle", pk=pk)
 

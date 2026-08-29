@@ -496,3 +496,168 @@ class ViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["filas"]), 1)
         self.assertEqual(response.context["filas"][0]["pendiente"], Decimal("5"))
+
+
+class BuscadorProductosOrdenTests(TestCase):
+    def setUp(self):
+        self.diego = _crear_usuario("diego_buscador_oc", "Administrador")
+        self.rodrigo = _crear_usuario("rodrigo_buscador_oc", "Ventas y Presupuestos")
+        self.proveedor = _proveedor("Proveedor Buscador")
+        self.otro_proveedor = _proveedor("Proveedor Ajeno")
+        self.pp = _producto_proveedor(self.proveedor, "VAL-100")
+        self.pp.producto.nombre = "Válvula esférica 3/4"
+        self.pp.producto.save(update_fields=["nombre"])
+        self.pp.codigo_proveedor = "PROV-7788"
+        self.pp.save(update_fields=["codigo_proveedor"])
+        registrar_costo(self.pp, Decimal("120.50"), self.diego)
+        self.orden = crear_orden(
+            self.proveedor,
+            Deposito.GENERAL,
+            self.rodrigo,
+        )
+
+    def _buscar(self, termino):
+        return self.client.get(
+            reverse("purchasing:buscar_productos", args=[self.orden.pk]),
+            {"q": termino},
+        )
+
+    def test_formulario_usa_buscador_en_lugar_de_select_masivo(self):
+        self.client.login(username="rodrigo_buscador_oc", password="clave12345")
+
+        response = self.client.get(
+            reverse("purchasing:agregar_linea", args=[self.orden.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="hidden" name="producto_proveedor"')
+        self.assertNotContains(response, '<select name="producto_proveedor"')
+        self.assertContains(response, "Buscar por código o nombre")
+        self.assertContains(
+            response,
+            reverse("purchasing:buscar_productos", args=[self.orden.pk]),
+        )
+
+    def test_busca_por_codigo_nombre_y_codigo_del_proveedor(self):
+        self.client.login(username="rodrigo_buscador_oc", password="clave12345")
+
+        for termino in ("VAL-100", "Válvula esférica", "PROV-7788"):
+            with self.subTest(termino=termino):
+                response = self._buscar(termino)
+                self.assertEqual(response.status_code, 200)
+                ids = [fila["id"] for fila in response.json()["resultados"]]
+                self.assertIn(self.pp.pk, ids)
+
+    def test_busqueda_solo_devuelve_productos_del_proveedor_de_la_orden(self):
+        pp_ajeno = _producto_proveedor(self.otro_proveedor, "AJENO-01")
+        pp_ajeno.producto.nombre = "Producto Ajeno Buscable"
+        pp_ajeno.producto.save(update_fields=["nombre"])
+        self.client.login(username="rodrigo_buscador_oc", password="clave12345")
+
+        response = self._buscar("Ajeno")
+
+        self.assertEqual(response.status_code, 200)
+        ids = [fila["id"] for fila in response.json()["resultados"]]
+        self.assertNotIn(pp_ajeno.pk, ids)
+
+    def test_busqueda_excluye_relaciones_y_productos_inactivos(self):
+        pp_relacion_inactiva = _producto_proveedor(self.proveedor, "INACT-PP")
+        pp_relacion_inactiva.producto.nombre = "Inactivo Relación"
+        pp_relacion_inactiva.producto.save(update_fields=["nombre"])
+        pp_relacion_inactiva.activo = False
+        pp_relacion_inactiva.save(update_fields=["activo"])
+
+        pp_producto_inactivo = _producto_proveedor(self.proveedor, "INACT-PROD")
+        pp_producto_inactivo.producto.nombre = "Inactivo Producto"
+        pp_producto_inactivo.producto.activo = False
+        pp_producto_inactivo.producto.save(update_fields=["nombre", "activo"])
+
+        self.client.login(username="rodrigo_buscador_oc", password="clave12345")
+
+        response = self._buscar("Inactivo")
+
+        self.assertEqual(response.status_code, 200)
+        ids = [fila["id"] for fila in response.json()["resultados"]]
+        self.assertNotIn(pp_relacion_inactiva.pk, ids)
+        self.assertNotIn(pp_producto_inactivo.pk, ids)
+
+    def test_busqueda_devuelve_ultimo_costo_vigente(self):
+        registrar_costo(self.pp, Decimal("135.75"), self.diego)
+        self.client.login(username="rodrigo_buscador_oc", password="clave12345")
+
+        response = self._buscar("VAL-100")
+
+        self.assertEqual(response.status_code, 200)
+        resultado = next(
+            fila for fila in response.json()["resultados"] if fila["id"] == self.pp.pk
+        )
+        self.assertEqual(resultado["costo_esperado"], "135.75")
+
+    def test_busqueda_corta_no_devuelve_catalogo_completo(self):
+        self.client.login(username="rodrigo_buscador_oc", password="clave12345")
+
+        response = self._buscar("V")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["resultados"], [])
+
+    def test_busqueda_no_funciona_fuera_de_borrador(self):
+        self.client.login(username="rodrigo_buscador_oc", password="clave12345")
+        LineaOrdenCompra.objects.create(
+            orden=self.orden,
+            producto_proveedor=self.pp,
+            cantidad=Decimal("1"),
+            costo_esperado=Decimal("120.50"),
+        )
+        cambiar_estado_orden(
+            self.orden,
+            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            self.rodrigo,
+        )
+
+        response = self._buscar("VAL-100")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_producto_seleccionado_por_buscador_se_agrega_a_la_orden(self):
+        self.client.login(username="rodrigo_buscador_oc", password="clave12345")
+
+        response = self.client.post(
+            reverse("purchasing:agregar_linea", args=[self.orden.pk]),
+            {
+                "producto_proveedor": self.pp.pk,
+                "cantidad": "3",
+                "costo_esperado": "125.00",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("purchasing:detalle", args=[self.orden.pk]),
+        )
+        linea = LineaOrdenCompra.objects.get(orden=self.orden)
+        self.assertEqual(linea.producto_proveedor, self.pp)
+        self.assertEqual(linea.cantidad, Decimal("3"))
+        self.assertEqual(linea.costo_esperado, Decimal("125.00"))
+
+    def test_id_de_otro_proveedor_no_se_puede_forzar_por_post(self):
+        pp_ajeno = _producto_proveedor(self.otro_proveedor, "FORZADO-01")
+        self.client.login(username="rodrigo_buscador_oc", password="clave12345")
+
+        response = self.client.post(
+            reverse("purchasing:agregar_linea", args=[self.orden.pk]),
+            {
+                "producto_proveedor": pp_ajeno.pk,
+                "cantidad": "1",
+                "costo_esperado": "10.00",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No se pudo agregar la línea")
+        self.assertFalse(
+            LineaOrdenCompra.objects.filter(
+                orden=self.orden,
+                producto_proveedor=pp_ajeno,
+            ).exists()
+        )

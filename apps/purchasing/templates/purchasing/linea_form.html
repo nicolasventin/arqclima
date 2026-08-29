@@ -2,11 +2,269 @@
 {% block title %}Agregar línea — Orden #{{ orden.numero }} — ARQCLIMA{% endblock %}
 {% block page_heading %}Agregar línea{% endblock %}
 {% block page_subheading %}Orden #{{ orden.numero }} · {{ orden.proveedor }}{% endblock %}
+
 {% block content %}
-<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Compras</div><h1>Agregar línea a la orden #{{ orden.numero }}</h1><div class="detail-subtitle">{{ orden.proveedor }}</div></div><div class="detail-actions"><a href="{% url 'purchasing:detalle' orden.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a></div></div>
-<form method="post" class="form-shell">{% csrf_token %}<div class="form-card"><div class="form-card-header"><h2>Producto y costo esperado</h2><p>El costo sugerido se puede recalcular y editar antes de guardar.</p></div><div class="form-card-body">
-{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-<div class="form-grid"><div class="form-field"><label>Producto del proveedor</label>{{ form.producto_proveedor }}{{ form.producto_proveedor.errors }}</div><div class="form-field form-field-half"><label>Cantidad</label>{{ form.cantidad }}{{ form.cantidad.errors }}</div><div class="form-field form-field-half"><label>Costo esperado</label>{{ form.costo_esperado }}{{ form.costo_esperado.errors }}<div class="field-help">Se sugiere el último costo registrado para este producto y proveedor.</div></div></div>
-<div class="form-actions"><button type="submit" name="recalcular" class="btn btn-outline-secondary">Recalcular costo sugerido</button><button type="submit" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Agregar línea</button><a href="{% url 'purchasing:detalle' orden.pk %}" class="btn btn-outline-secondary">Cancelar</a></div>
-</div></div></form>
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Compras</div>
+        <h1>Agregar línea a la orden #{{ orden.numero }}</h1>
+        <div class="detail-subtitle">{{ orden.proveedor }}</div>
+    </div>
+    <div class="detail-actions">
+        <a href="{% url 'purchasing:detalle' orden.pk %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+</div>
+
+<form method="post" class="form-shell">
+    {% csrf_token %}
+    <div class="form-card">
+        <div class="form-card-header">
+            <h2>Producto y costo esperado</h2>
+            <p>Buscá dentro de los productos vinculados a {{ orden.proveedor }}.</p>
+        </div>
+        <div class="form-card-body">
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <div class="form-grid">
+                <div class="form-field">
+                    <label>Producto del proveedor</label>
+                    {{ form.producto_proveedor }}
+
+                    <div
+                        class="product-picker"
+                        id="product-picker"
+                        data-search-url="{% url 'purchasing:buscar_productos' orden.pk %}">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white text-muted">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input
+                                type="search"
+                                class="form-control"
+                                id="producto-search"
+                                placeholder="Buscar por código o nombre..."
+                                autocomplete="off"
+                                aria-label="Buscar producto"
+                                aria-controls="producto-results">
+                        </div>
+                        <div
+                            class="product-picker-results d-none"
+                            id="producto-results"
+                            role="listbox"
+                            aria-live="polite"></div>
+                    </div>
+
+                    <div
+                        class="product-picker-selected {% if not producto_seleccionado %}d-none{% endif %}"
+                        id="producto-selected">
+                        <div class="product-picker-selected-icon">
+                            <i class="bi bi-box-seam"></i>
+                        </div>
+                        <div class="product-picker-selected-copy">
+                            <strong id="producto-selected-name">
+                                {% if producto_seleccionado %}{{ producto_seleccionado.codigo }} — {{ producto_seleccionado.nombre }}{% endif %}
+                            </strong>
+                            <span id="producto-selected-detail">
+                                {% if producto_seleccionado %}{{ producto_seleccionado.detalle }}{% endif %}
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-light border"
+                            id="producto-clear"
+                            aria-label="Cambiar producto seleccionado">
+                            Cambiar
+                        </button>
+                    </div>
+
+                    <div class="field-help">
+                        Se muestran únicamente productos activos asociados a este proveedor. Escribí al menos 2 caracteres.
+                    </div>
+                    {{ form.producto_proveedor.errors }}
+                </div>
+
+                <div class="form-field form-field-half">
+                    <label>Cantidad</label>
+                    {{ form.cantidad }}
+                    {{ form.cantidad.errors }}
+                </div>
+
+                <div class="form-field form-field-half">
+                    <label>Costo esperado</label>
+                    {{ form.costo_esperado }}
+                    {{ form.costo_esperado.errors }}
+                    <div class="field-help">
+                        Al seleccionar un producto se propone el último costo registrado para este proveedor. Podés modificarlo antes de guardar.
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" name="recalcular" class="btn btn-outline-secondary">
+                    Actualizar costo sugerido
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-1"></i>Agregar línea
+                </button>
+                <a href="{% url 'purchasing:detalle' orden.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const picker = document.getElementById("product-picker");
+    const searchInput = document.getElementById("producto-search");
+    const results = document.getElementById("producto-results");
+    const hiddenProduct = document.getElementById("id_producto_proveedor");
+    const selected = document.getElementById("producto-selected");
+    const selectedName = document.getElementById("producto-selected-name");
+    const selectedDetail = document.getElementById("producto-selected-detail");
+    const clearButton = document.getElementById("producto-clear");
+    const costInput = document.getElementById("id_costo_esperado");
+
+    if (
+        !picker || !searchInput || !results || !hiddenProduct ||
+        !selected || !selectedName || !selectedDetail || !clearButton || !costInput
+    ) {
+        return;
+    }
+
+    let searchTimer = null;
+    let requestController = null;
+
+    const hideResults = () => {
+        results.classList.add("d-none");
+        results.replaceChildren();
+    };
+
+    const selectProduct = (product) => {
+        hiddenProduct.value = product.id;
+        selectedName.textContent = `${product.codigo} — ${product.nombre}`;
+        selectedDetail.textContent = product.detalle || "";
+        selected.classList.remove("d-none");
+        searchInput.value = "";
+        searchInput.placeholder = "Buscar otro producto...";
+        costInput.value = product.costo_esperado || "";
+        hideResults();
+    };
+
+    const clearProduct = () => {
+        hiddenProduct.value = "";
+        selectedName.textContent = "";
+        selectedDetail.textContent = "";
+        selected.classList.add("d-none");
+        searchInput.value = "";
+        searchInput.placeholder = "Buscar por código o nombre...";
+        costInput.value = "";
+        searchInput.focus();
+        hideResults();
+    };
+
+    const renderResults = (products) => {
+        results.replaceChildren();
+
+        if (!products.length) {
+            const empty = document.createElement("div");
+            empty.className = "product-picker-empty";
+            empty.textContent = "No se encontraron productos de este proveedor.";
+            results.appendChild(empty);
+            results.classList.remove("d-none");
+            return;
+        }
+
+        for (const product of products) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "product-picker-option";
+            button.setAttribute("role", "option");
+
+            const header = document.createElement("div");
+            header.className = "product-picker-option-header";
+
+            const name = document.createElement("strong");
+            name.textContent = `${product.codigo} — ${product.nombre}`;
+
+            const cost = document.createElement("span");
+            cost.className = "product-picker-cost";
+            cost.textContent = product.costo_esperado
+                ? `Último costo: $${product.costo_esperado}`
+                : "Sin costo registrado";
+
+            const detail = document.createElement("span");
+            detail.className = "product-picker-option-detail";
+            detail.textContent = product.detalle || "";
+
+            header.append(name, cost);
+            button.append(header, detail);
+            button.addEventListener("click", () => selectProduct(product));
+            results.appendChild(button);
+        }
+
+        results.classList.remove("d-none");
+    };
+
+    const searchProducts = async (query) => {
+        if (requestController) {
+            requestController.abort();
+        }
+        requestController = new AbortController();
+
+        try {
+            const url = new URL(picker.dataset.searchUrl, window.location.origin);
+            url.searchParams.set("q", query);
+            const response = await fetch(url, {
+                headers: {"X-Requested-With": "XMLHttpRequest"},
+                signal: requestController.signal,
+            });
+            if (!response.ok) {
+                throw new Error("No se pudo buscar productos.");
+            }
+            const data = await response.json();
+            renderResults(data.resultados || []);
+        } catch (error) {
+            if (error.name === "AbortError") {
+                return;
+            }
+            results.replaceChildren();
+            const message = document.createElement("div");
+            message.className = "product-picker-empty text-danger";
+            message.textContent = "No se pudo realizar la búsqueda. Intentá nuevamente.";
+            results.appendChild(message);
+            results.classList.remove("d-none");
+        }
+    };
+
+    searchInput.addEventListener("input", () => {
+        window.clearTimeout(searchTimer);
+        const query = searchInput.value.trim();
+        if (query.length < 2) {
+            hideResults();
+            return;
+        }
+        searchTimer = window.setTimeout(() => searchProducts(query), 250);
+    });
+
+    searchInput.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            hideResults();
+        }
+    });
+
+    clearButton.addEventListener("click", clearProduct);
+
+    document.addEventListener("click", (event) => {
+        if (!picker.contains(event.target)) {
+            hideResults();
+        }
+    });
+});
+</script>
 {% endblock %}
