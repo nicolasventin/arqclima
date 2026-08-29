@@ -60,8 +60,10 @@ def _overlay_encabezado(presupuesto, ancho, alto):
     linea_y = alto - 65.20  # ~23 mm desde arriba
 
     logo = finders.find("img/arqclima-logo-oficial.svg")
-    dibujo_logo = svg2rlg(logo) if logo else None
-    if dibujo_logo and dibujo_logo.width and dibujo_logo.height:
+    if logo:
+        dibujo_logo = svg2rlg(logo)
+        if not dibujo_logo or not dibujo_logo.width or not dibujo_logo.height:
+            raise PDFPresupuestoError("No se pudo interpretar el logo oficial de ARQCLIMA.")
         ancho_logo = 113.39  # 40 mm
         escala = ancho_logo / float(dibujo_logo.width)
         alto_logo = float(dibujo_logo.height) * escala
