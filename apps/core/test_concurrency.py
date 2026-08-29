@@ -321,7 +321,16 @@ class AtomicidadOperacionesCriticasTests(TestCase):
             username=f"atomicidad_{self._testMethodName}",
             password="clave12345",
         )
-        self.usuario.groups.add(Group.objects.get(name="Administrador"))
+        self.usuario.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="purchasing",
+                codename__in=[
+                    "add_ordendecompra",
+                    "change_ordendecompra",
+                    "approve_ordendecompra",
+                ],
+            )
+        )
         self.marca = Marca.objects.create(nombre=f"Marca A {self._testMethodName}")
         self.proveedor = Proveedor.objects.create(
             nombre_comercial=f"Proveedor A {self._testMethodName}"
