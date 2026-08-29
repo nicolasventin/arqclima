@@ -309,3 +309,16 @@ Antes de programar, decime si tenés alguna duda sobre el modelo de datos, los r
 - La alta rápida pide nombre comercial y permite completar razón social, CUIT, contacto, teléfono y email; el proveedor nace activo y queda seleccionado automáticamente para la importación actual.
 - Se rechazan duplicados exactos por nombre comercial o CUIT en este flujo rápido.
 - La acción reutiliza el mismo permiso de catálogo y deja AuditLog `create_proveedor`; usuarios sin permiso no ven ni pueden invocar el endpoint.
+
+## Presupuestos técnico-comerciales — rediseño basado en documentos reales (2026-08-29)
+
+- Presupuesto puede guardar Obra/Proyecto, Referencia, título de propuesta, alcance técnico general, notas al cliente, forma de pago, garantía, exclusiones, firma visible, importes por unidad y visibilidad del total general.
+- SeccionPresupuesto.descripcion_publica contiene el texto técnico visible por etapa.
+- LineaComercialPresupuesto separa los importes visibles para el cliente (Materiales, Equipamiento, Mano de Obra, adicionales) de ItemPresupuesto, que sigue siendo la capa interna de productos, costos y márgenes.
+- Si existen líneas comerciales, calcular_totales usa esas líneas para el total comercial; presupuestos históricos sin líneas comerciales siguen usando ItemPresupuesto.
+- Una línea comercial opcional puede quedar fuera del total y marcarse como recomendada.
+- El detalle web funciona como constructor de propuesta: cabecera/alcance, etapas, importes al cliente y detalle interno plegable.
+- El PDF nuevo usa encabezado ARQCLIMA, datos de empresa configurables, cliente/obra/referencia, bloques técnicos, importes por etapa, opcionales, Nota, Forma de pago, Garantía, Exclusiones y firma.
+- notas_generales se considera interna y no se imprime en el PDF nuevo.
+- El PDF puede ocultar el total general para cotizaciones que muestran solamente importes por etapa/unidad.
+- La propuesta, las etapas y las líneas comerciales solo se editan en Borrador; la tabla de líneas comerciales también queda protegida por el trigger PostgreSQL.
