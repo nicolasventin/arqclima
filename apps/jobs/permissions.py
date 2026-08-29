@@ -47,6 +47,8 @@ def puede_registrar_consumo_material(user, material):
     trabajo, mismo alcance que manage_ejecucion_propia (Parte 1). No es
     un permiso nuevo: es la misma responsabilidad de ejecución de obra.
     """
+    if material.trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        return False
     if user.has_perm("jobs.change_trabajo"):
         return True
     return (
@@ -73,6 +75,10 @@ def puede_cambiar_estado_trabajo(user, trabajo, nuevo_estado):
     puede retroceder más allá de su propio rango (ej. no puede volver
     a "Preparando materiales", que es territorio de Contri).
     """
+    if trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        return False
+    if nuevo_estado == EstadoTrabajo.TERMINADO:
+        return False
     if user.has_perm("jobs.change_trabajo"):
         return True
     if nuevo_estado in ESTADOS_PREPARACION:
