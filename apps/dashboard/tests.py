@@ -119,3 +119,83 @@ class HomeViewWidgetsTests(TestCase):
         self._login("andres_dashboard")
         response = self.client.get(reverse("dashboard:home"))
         self.assertEqual(response.context["mis_trabajos_activos"], 1)
+
+
+
+class DashboardPorRolTests(HomeViewWidgetsTests):
+    def test_cada_rol_recibe_una_portada_diferente(self):
+        casos = [
+            ("diego_dashboard", "Panel general", "Dirección"),
+            ("rodrigo_dashboard", "Ventas y presupuestos", "Comercial"),
+            ("gabriel_dashboard", "Service y repuestos", "Service"),
+            ("contri_dashboard", "Depósito y compras", "Inventario"),
+            ("andres_dashboard", "Mis trabajos", "Operación"),
+        ]
+        for username, titulo, eyebrow in casos:
+            with self.subTest(username=username):
+                self._login(username)
+                response = self.client.get(reverse("dashboard:home"))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["dashboard_perfil"]["titulo"], titulo)
+                self.assertContains(response, titulo)
+                self.assertContains(response, eyebrow)
+                self.client.logout()
+
+    def test_diego_ve_metricas_de_direccion(self):
+        self._login("diego_dashboard")
+        response = self.client.get(reverse("dashboard:home"))
+
+        self.assertContains(response, "Compras por aprobar")
+        self.assertContains(response, "Trabajos activos")
+        self.assertContains(response, "Alertas de stock")
+        self.assertContains(response, "Presupuestos pendientes")
+        self.assertContains(response, "Usuarios y permisos")
+
+    def test_rodrigo_ve_acciones_comerciales(self):
+        self._login("rodrigo_dashboard")
+        response = self.client.get(reverse("dashboard:home"))
+
+        self.assertContains(response, "Nuevo presupuesto")
+        self.assertContains(response, "Nuevo cliente")
+        self.assertContains(response, "Aceptados por iniciar")
+        self.assertNotContains(response, "Compras por aprobar")
+
+    def test_gabriel_ve_devoluciones_y_repuestos(self):
+        self._login("gabriel_dashboard")
+        response = self.client.get(reverse("dashboard:home"))
+
+        self.assertContains(response, "Devoluciones pendientes")
+        self.assertContains(response, "Repuestos bajo mínimo")
+        self.assertNotContains(response, "Nuevo presupuesto")
+
+    def test_contri_ve_recepciones_y_movimientos(self):
+        self._login("contri_dashboard")
+        response = self.client.get(reverse("dashboard:home"))
+
+        self.assertContains(response, "Compras por recibir")
+        self.assertContains(response, "Registrar entrada")
+        self.assertContains(response, "Ver movimientos")
+
+    def test_andres_ve_sus_trabajos_recientes(self):
+        presupuesto = Presupuesto.objects.create(cliente=self.cliente)
+        ItemPresupuesto.objects.create(
+            presupuesto=presupuesto,
+            descripcion_manual="Trabajo dashboard 11B",
+            precio_unitario=Decimal("100"),
+            orden=0,
+        )
+        enviar_presupuesto(presupuesto, self.diego)
+        cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, self.diego)
+        trabajo = crear_trabajo(
+            presupuesto,
+            self.diego,
+            tecnico_asignado=self.andres,
+        )
+
+        self._login("andres_dashboard")
+        response = self.client.get(reverse("dashboard:home"))
+
+        self.assertContains(response, "Trabajos activos")
+        self.assertContains(response, f"#{trabajo.pk}")
+        self.assertContains(response, self.cliente.nombre)
+        self.assertContains(response, "Tareas vencidas")
