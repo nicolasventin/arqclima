@@ -301,6 +301,52 @@ def _clave_duplicado(fila):
     return None
 
 
+def _restaurar_filas_marcadas_por_duplicado(importacion, usuario):
+    """
+    Si una corrección manual rompe un conflicto de duplicados, restaura la
+    clasificación base de las filas que habían quedado bloqueadas solo por
+    ese conflicto antes de volver a detectar duplicados.
+    """
+    prefijos = (
+        "El mismo producto/código de proveedor aparece repetido",
+        "Duplicado idéntico de ",
+    )
+    for fila in importacion.filas.all():
+        if not any((fila.detalle or "").startswith(prefijo) for prefijo in prefijos):
+            continue
+        clasificacion = _clasificar(
+            importacion,
+            {
+                "marca": fila.marca_texto,
+                "codigo": fila.codigo,
+                "nombre": fila.nombre_texto,
+                "descripcion": fila.descripcion_texto,
+                "costo_crudo": fila.costo,
+                "codigo_proveedor": fila.codigo_proveedor_texto,
+                "unidad": fila.unidad_texto,
+                "categoria": fila.categoria_texto,
+            },
+            usuario,
+        )
+        fila.categoria = clasificacion["categoria"]
+        fila.detalle = clasificacion["detalle"]
+        fila.producto = clasificacion["producto"]
+        fila.incluir = (
+            fila.categoria not in (
+                ImportacionFila.Categoria.ERROR,
+                ImportacionFila.Categoria.PARA_REVISAR,
+                ImportacionFila.Categoria.SIN_CAMBIOS,
+            )
+            and fila.confianza not in (
+                ImportacionFila.Confianza.MEDIA,
+                ImportacionFila.Confianza.BAJA,
+            )
+        )
+        fila.save(
+            update_fields=["categoria", "detalle", "producto", "incluir"]
+        )
+
+
 def _marcar_duplicados(importacion):
     grupos = {}
     for fila in importacion.filas.all():
@@ -468,6 +514,7 @@ def reclasificar_fila(fila, usuario, datos_editados):
             "incluir",
         ]
     )
+    _restaurar_filas_marcadas_por_duplicado(fila.importacion, usuario)
     _marcar_duplicados(fila.importacion)
     return fila
 
