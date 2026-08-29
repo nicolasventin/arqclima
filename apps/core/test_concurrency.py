@@ -80,7 +80,6 @@ class _ConcurrenteMixin:
 
 
 class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCase):
-    reset_sequences = True
 
     def setUp(self):
         self.usuario = User.objects.create_user(
