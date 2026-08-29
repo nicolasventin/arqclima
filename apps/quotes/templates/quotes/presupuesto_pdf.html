@@ -1,94 +1,450 @@
+{% load static %}
 <!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-    body { font-family: Helvetica, sans-serif; font-size: 11px; color: #222; }
-    h1 { font-size: 18px; margin-bottom: 0; }
-    .muted { color: #666; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
-    th { background-color: #eee; }
-    .text-end { text-align: right; }
-    .totales td { border: none; padding: 2px 6px; }
-    .totales .total-final { font-weight: bold; border-top: 1px solid #222; }
-    .seccion-titulo { margin-top: 14px; font-size: 13px; font-weight: bold; }
-    .bloque { margin-top: 16px; }
+    @page {
+        size: A4;
+        margin: 31mm 15mm 20mm 15mm;
+        @frame header_frame {
+            -pdf-frame-content: header_content;
+            left: 15mm;
+            right: 15mm;
+            top: 8mm;
+            height: 20mm;
+        }
+        @frame footer_frame {
+            -pdf-frame-content: footer_content;
+            left: 15mm;
+            right: 15mm;
+            bottom: 7mm;
+            height: 9mm;
+        }
+    }
+
+    body {
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 9.5pt;
+        line-height: 1.35;
+        color: #1f2933;
+    }
+
+    #header_content {
+        border-bottom: 1px solid #d7e1e7;
+        padding-bottom: 4mm;
+    }
+
+    .header-table,
+    .meta-table,
+    .commercial-table,
+    .summary-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .header-table td {
+        border: 0;
+        vertical-align: middle;
+    }
+
+    .logo {
+        width: 52mm;
+    }
+
+    .company-data {
+        text-align: right;
+        color: #547080;
+        font-size: 7.8pt;
+        line-height: 1.25;
+    }
+
+    #footer_content {
+        border-top: 1px solid #d7e1e7;
+        padding-top: 2mm;
+        color: #71808a;
+        font-size: 7pt;
+    }
+
+    .footer-right {
+        text-align: right;
+    }
+
+    .date-line {
+        margin: 0 0 5mm;
+        text-align: right;
+        font-size: 9.3pt;
+    }
+
+    .meta-table {
+        margin-bottom: 4mm;
+    }
+
+    .meta-table td {
+        padding: 1.2mm 1.5mm;
+        border: 0;
+        vertical-align: top;
+    }
+
+    .meta-label {
+        width: 18mm;
+        color: #475d6b;
+        font-weight: bold;
+    }
+
+    .quote-number {
+        margin: 5mm 0 5mm;
+        padding: 2.5mm 3mm;
+        border-left: 4px solid #f39200;
+        background: #f5f9fb;
+        color: #075b9b;
+        font-size: 13pt;
+        font-weight: bold;
+    }
+
+    .proposal-title {
+        margin: 5mm 0 2.5mm;
+        color: #075b9b;
+        font-size: 13pt;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .intro-note {
+        margin: 0 0 3mm;
+        color: #52636d;
+        font-style: italic;
+    }
+
+    .technical-list {
+        margin: 0 0 4mm;
+        padding: 0;
+    }
+
+    .technical-item {
+        margin: 0 0 2mm;
+        padding-left: 5mm;
+    }
+
+    .technical-item:before {
+        content: "✓";
+        color: #075b9b;
+        font-weight: bold;
+    }
+
+    .stage {
+        margin-top: 5mm;
+        page-break-inside: avoid;
+    }
+
+    .stage-title {
+        margin: 0 0 2.5mm;
+        padding: 2.2mm 3mm;
+        background: #075b9b;
+        color: #ffffff;
+        font-size: 11pt;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .commercial-table {
+        margin: 3mm 0 2mm;
+    }
+
+    .commercial-table td {
+        padding: 2mm 2.5mm;
+        border-bottom: 1px solid #dbe3e8;
+        vertical-align: top;
+    }
+
+    .commercial-label {
+        width: 54%;
+        font-weight: bold;
+    }
+
+    .commercial-iva {
+        width: 18%;
+        color: #5d6d76;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .commercial-amount {
+        width: 28%;
+        text-align: right;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+
+    .optional-box {
+        margin: 3mm 0 4mm;
+        padding: 2.5mm 3mm;
+        border: 1px solid #f0c94c;
+        background: #fff9df;
+    }
+
+    .optional-box strong {
+        color: #6e5610;
+    }
+
+    .section-block {
+        margin-top: 5mm;
+    }
+
+    .section-heading {
+        margin: 0 0 2mm;
+        color: #142f42;
+        font-size: 10.5pt;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .note-box {
+        margin-top: 5mm;
+        padding: 3mm 3.5mm;
+        border-left: 4px solid #ef4444;
+        background: #fff7f6;
+    }
+
+    .payment-box {
+        margin-top: 5mm;
+        padding: 3mm 3.5mm;
+        border-left: 4px solid #f39200;
+        background: #fffaf0;
+    }
+
+    .warranty-box {
+        margin-top: 5mm;
+        padding: 3mm 3.5mm;
+        border-left: 4px solid #075b9b;
+        background: #f4f9fc;
+    }
+
+    .exclusion-box {
+        margin-top: 5mm;
+        padding: 3mm 3.5mm;
+        border-left: 4px solid #d4a800;
+        background: #fffcef;
+    }
+
+    .bullet {
+        margin: 0 0 1.4mm;
+        padding-left: 4mm;
+    }
+
+    .summary-table {
+        width: 70mm;
+        margin: 5mm 0 0 auto;
+    }
+
+    .summary-table td {
+        padding: 2mm;
+        border-bottom: 1px solid #dbe3e8;
+    }
+
+    .summary-total td {
+        border-top: 2px solid #075b9b;
+        border-bottom: 0;
+        color: #075b9b;
+        font-size: 11pt;
+        font-weight: bold;
+    }
+
+    .signature {
+        margin-top: 12mm;
+        text-align: right;
+    }
+
+    .signature-line {
+        display: inline-block;
+        min-width: 60mm;
+        padding-top: 3mm;
+        border-top: 1px solid #7d8a91;
+        text-align: left;
+    }
+
+    .muted {
+        color: #687983;
+    }
 </style>
 </head>
 <body>
-    <h1>Presupuesto #{{ presupuesto.numero }}</h1>
-    <p class="muted">Fecha: {{ presupuesto.fecha|date:"d/m/Y" }}
-        {% if presupuesto.fecha_vencimiento %} — Válido hasta: {{ presupuesto.fecha_vencimiento|date:"d/m/Y" }}{% endif %}
-    </p>
 
-    <p>
-        <strong>Cliente:</strong> {{ presupuesto.cliente.nombre }}<br>
-        {% if presupuesto.direccion %}<strong>Dirección:</strong> {{ presupuesto.direccion }}<br>{% endif %}
-    </p>
-
-    {% for seccion in secciones %}
-    <div class="seccion-titulo">{{ seccion.titulo }}</div>
-    <table>
-        <thead>
-            <tr><th>Ítem</th><th>Cant.</th><th>P. unitario</th><th>Desc. %</th><th>IVA</th></tr>
-        </thead>
-        <tbody>
-            {% for item in seccion.items.all %}
-            {% if item.incluido %}
-            <tr>
-                <td>{{ item.producto|default:item.descripcion_manual }}</td>
-                <td>{{ item.cantidad }}</td>
-                <td>${{ item.precio_unitario }}</td>
-                <td>{{ item.descuento_pct }}%</td>
-                <td>{{ item.get_tipo_iva_display }}</td>
-            </tr>
-            {% endif %}
-            {% endfor %}
-        </tbody>
+<div id="header_content">
+    <table class="header-table">
+        <tr>
+            <td style="width:58%;">
+                <img src="{% static 'img/arqclima-logo.svg' %}" class="logo">
+            </td>
+            <td style="width:42%;" class="company-data">
+                {% if empresa.direccion %}{{ empresa.direccion }}<br>{% endif %}
+                {% if empresa.telefono %}Tel/Wapp {{ empresa.telefono }}<br>{% endif %}
+                {% if empresa.email %}{{ empresa.email }}{% endif %}
+            </td>
+        </tr>
     </table>
+</div>
+
+<div id="footer_content">
+    <table class="header-table">
+        <tr>
+            <td>{{ empresa.nombre }}{% if empresa.tagline %} · {{ empresa.tagline }}{% endif %}</td>
+            <td class="footer-right">Presupuesto Nº {{ presupuesto.numero }} · pág. <pdf:pagenumber> de <pdf:pagecount></td>
+        </tr>
+    </table>
+</div>
+
+<p class="date-line">Mendoza, {{ presupuesto.fecha|date:"d \d\e F \d\e Y" }}</p>
+
+<table class="meta-table">
+    <tr><td class="meta-label">At:</td><td>{{ presupuesto.cliente.nombre }}.-</td></tr>
+    {% if presupuesto.obra %}<tr><td class="meta-label">Obra:</td><td>{{ presupuesto.obra }}.-</td></tr>{% endif %}
+    {% if presupuesto.direccion %}<tr><td class="meta-label">Ubicación:</td><td>{{ presupuesto.direccion }}</td></tr>{% endif %}
+    {% if presupuesto.referencia %}<tr><td class="meta-label">Ref:</td><td>{{ presupuesto.referencia|linebreaksbr }}</td></tr>{% endif %}
+</table>
+
+<div class="quote-number">PRESUPUESTO Nº {{ presupuesto.numero }}</div>
+
+{% if presupuesto.titulo_propuesta %}
+<div class="proposal-title">{{ presupuesto.titulo_propuesta }}</div>
+{% endif %}
+
+{% if presupuesto.importes_por_unidad %}
+<div class="intro-note">
+    La descripción y los montos comerciales se expresan POR UNIDAD / CASA.
+    {% if presupuesto.cantidad_unidades > 1 %}Cantidad prevista: {{ presupuesto.cantidad_unidades }} unidades.{% endif %}
+</div>
+{% endif %}
+
+{% if alcance_lineas %}
+<div class="technical-list">
+    {% for linea in alcance_lineas %}
+    <div class="technical-item">{{ linea }}</div>
     {% endfor %}
+</div>
+{% endif %}
 
-    {% if items_sin_seccion %}
-    <table>
-        <thead>
-            <tr><th>Ítem</th><th>Cant.</th><th>P. unitario</th><th>Desc. %</th><th>IVA</th></tr>
-        </thead>
-        <tbody>
-            {% for item in items_sin_seccion %}
-            {% if item.incluido %}
-            <tr>
-                <td>{{ item.producto|default:item.descripcion_manual }}</td>
-                <td>{{ item.cantidad }}</td>
-                <td>${{ item.precio_unitario }}</td>
-                <td>{{ item.descuento_pct }}%</td>
-                <td>{{ item.get_tipo_iva_display }}</td>
-            </tr>
-            {% endif %}
-            {% endfor %}
-        </tbody>
-    </table>
-    {% endif %}
+{% for grupo in secciones %}
+<div class="stage">
+    <div class="stage-title">{{ grupo.seccion.titulo }}</div>
 
-    <table class="totales" style="width: 300px; margin-left: auto;">
-        <tr><td>Subtotal</td><td class="text-end">${{ totales.subtotal_general }}</td></tr>
-        <tr><td>Descuento general</td><td class="text-end">${{ totales.descuento_general_valor }}</td></tr>
-        <tr><td>Cantidad de unidades</td><td class="text-end">×{{ totales.cantidad_unidades }}</td></tr>
-        <tr class="total-final"><td>Total</td><td class="text-end">${{ totales.total_final }}</td></tr>
-    </table>
-
-    {% if presupuesto.condiciones %}
-    <div class="bloque">
-        <strong>Condiciones</strong>
-        <p>{{ presupuesto.condiciones|linebreaksbr }}</p>
+    {% if grupo.descripcion_lineas %}
+    <div class="technical-list">
+        {% for linea in grupo.descripcion_lineas %}
+        <div class="technical-item">{{ linea }}</div>
+        {% endfor %}
     </div>
     {% endif %}
 
-    {% if presupuesto.notas_generales %}
-    <div class="bloque">
-        <strong>Notas</strong>
-        <p>{{ presupuesto.notas_generales|linebreaksbr }}</p>
-    </div>
+    {% if grupo.lineas %}
+    <table class="commercial-table">
+        {% for linea in grupo.lineas %}
+        <tr>
+            <td class="commercial-label">
+                {{ linea.etiqueta }}
+                {% if linea.descripcion %}<br><span class="muted">{{ linea.descripcion }}</span>{% endif %}
+            </td>
+            <td class="commercial-iva">{{ linea.get_tipo_iva_display }}</td>
+            <td class="commercial-amount">$ {{ linea.monto|floatformat:"0g" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% elif grupo.items_publicos %}
+    <table class="commercial-table">
+        {% for item in grupo.items_publicos %}
+        <tr>
+            <td class="commercial-label">{{ item.producto|default:item.descripcion_manual }}</td>
+            <td class="commercial-iva">{{ item.get_tipo_iva_display }}</td>
+            <td class="commercial-amount">$ {{ item.precio_unitario|floatformat:"0g" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
     {% endif %}
+
+    {% for linea in grupo.opcionales %}
+    <div class="optional-box">
+        <strong>{% if linea.recomendado %}OPCIONAL RECOMENDADO{% else %}OPCIONAL{% endif %}:</strong>
+        {{ linea.etiqueta }}{% if linea.descripcion %} - {{ linea.descripcion }}{% endif %}
+        <strong>$ {{ linea.monto|floatformat:"0g" }} {{ linea.get_tipo_iva_display }}</strong>
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+
+{% if lineas_sin_seccion %}
+<div class="section-block">
+    <div class="section-heading">Conceptos generales</div>
+    <table class="commercial-table">
+        {% for linea in lineas_sin_seccion %}
+        <tr>
+            <td class="commercial-label">{{ linea.etiqueta }}{% if linea.descripcion %}<br><span class="muted">{{ linea.descripcion }}</span>{% endif %}</td>
+            <td class="commercial-iva">{{ linea.get_tipo_iva_display }}</td>
+            <td class="commercial-amount">$ {{ linea.monto|floatformat:"0g" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% for linea in opcionales_sin_seccion %}
+<div class="optional-box">
+    <strong>{% if linea.recomendado %}OPCIONAL RECOMENDADO{% else %}OPCIONAL{% endif %}:</strong>
+    {{ linea.etiqueta }}{% if linea.descripcion %} - {{ linea.descripcion }}{% endif %}
+    <strong>$ {{ linea.monto|floatformat:"0g" }} {{ linea.get_tipo_iva_display }}</strong>
+</div>
+{% endfor %}
+
+{% if presupuesto.mostrar_total_general %}
+<table class="summary-table">
+    {% if presupuesto.importes_por_unidad %}
+    <tr><td>Total por unidad</td><td style="text-align:right;">$ {{ totales.total_por_unidad|floatformat:"0g" }}</td></tr>
+    <tr><td>Unidades</td><td style="text-align:right;">× {{ totales.cantidad_unidades }}</td></tr>
+    {% endif %}
+    <tr class="summary-total"><td>Total</td><td style="text-align:right;">$ {{ totales.total_final|floatformat:"0g" }}</td></tr>
+</table>
+{% endif %}
+
+{% if notas_lineas %}
+<div class="note-box">
+    <div class="section-heading">NOTA</div>
+    {% for linea in notas_lineas %}<div class="bullet">- {{ linea }}</div>{% endfor %}
+</div>
+{% endif %}
+
+{% if forma_pago_lineas %}
+<div class="payment-box">
+    <div class="section-heading">FORMA DE PAGO</div>
+    {% for linea in forma_pago_lineas %}<div class="bullet">- {{ linea }}</div>{% endfor %}
+</div>
+{% endif %}
+
+{% if presupuesto.garantia %}
+<div class="warranty-box">
+    <div class="section-heading">GARANTÍA TRABAJOS</div>
+    <div>{{ presupuesto.garantia|linebreaksbr }}</div>
+</div>
+{% endif %}
+
+{% if exclusiones_lineas %}
+<div class="exclusion-box">
+    <div class="section-heading">EXCLUSIONES</div>
+    {% for linea in exclusiones_lineas %}<div class="bullet">✓ {{ linea }}</div>{% endfor %}
+</div>
+{% endif %}
+
+{% if presupuesto.condiciones %}
+<div class="section-block">
+    <div class="section-heading">CONDICIONES GENERALES</div>
+    <div>{{ presupuesto.condiciones|linebreaksbr }}</div>
+</div>
+{% endif %}
+
+<div class="signature">
+    <div class="signature-line">
+        <strong>Por ARQCLIMA</strong><br>
+        {% if presupuesto.firma_texto %}{{ presupuesto.firma_texto }}{% else %}Responsable comercial{% endif %}
+    </div>
+</div>
+
 </body>
 </html>
