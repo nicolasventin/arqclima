@@ -114,6 +114,12 @@ class ConstraintsBaseDeDatosTests(TestCase):
 
     def setUp(self):
         self.producto = _producto("S3")
+        MovimientoStock.objects.create(
+            producto=self.producto,
+            deposito=Deposito.GENERAL,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=Decimal("10"),
+        )
 
     def test_signo_incoherente_con_tipo_falla_en_la_base(self):
         with self.assertRaises(IntegrityError):
