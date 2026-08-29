@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.utils import timezone
 
 from apps.audit.services import log_action
@@ -16,6 +17,7 @@ TRANSICIONES_VALIDAS = {
 }
 
 
+@transaction.atomic
 def cambiar_estado_tarea(tarea, nuevo_estado, usuario):
     """
     Único punto de entrada para mover el estado de una tarea. Permite
@@ -24,24 +26,31 @@ def cambiar_estado_tarea(tarea, nuevo_estado, usuario):
     si se cerró por error, se crea una tarea nueva, no se reabre —
     mismo criterio que Presupuesto en la Etapa 5.
     """
-    estado_actual = tarea.estado
+    tarea_bloqueada = Tarea.objects.select_for_update().get(pk=tarea.pk)
+    estado_actual = tarea_bloqueada.estado
     permitidos = TRANSICIONES_VALIDAS.get(estado_actual, set())
     if nuevo_estado not in permitidos:
         raise TransicionInvalidaError(f"No se puede pasar de '{estado_actual}' a '{nuevo_estado}'.")
 
-    tarea.estado = nuevo_estado
+    tarea_bloqueada.estado = nuevo_estado
     if nuevo_estado == EstadoTarea.COMPLETADA:
-        tarea.completada_en = timezone.now()
-        tarea.save(update_fields=["estado", "completada_en"])
+        tarea_bloqueada.completada_en = timezone.now()
+        tarea_bloqueada.save(update_fields=["estado", "completada_en"])
     else:
-        tarea.save(update_fields=["estado"])
+        tarea_bloqueada.save(update_fields=["estado"])
 
     log_action(
-        usuario, "cambiar_estado_tarea", tarea, detail=f"{estado_actual} → {nuevo_estado}"
+        usuario,
+        "cambiar_estado_tarea",
+        tarea_bloqueada,
+        detail=f"{estado_actual} → {nuevo_estado}",
     )
-    return tarea
+    tarea.estado = nuevo_estado
+    tarea.completada_en = tarea_bloqueada.completada_en
+    return tarea_bloqueada
 
 
+@transaction.atomic
 def crear_tarea_automatica(tipo, titulo, descripcion, asignado_a, presupuesto=None, producto=None, deposito=""):
     """
     Único punto de entrada para que una de las 3 reglas automáticas de
