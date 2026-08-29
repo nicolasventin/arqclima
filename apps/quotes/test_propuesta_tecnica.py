@@ -264,16 +264,31 @@ class PropuestaTecnicaPresupuestoTests(TestCase):
         reader = PdfReader(BytesIO(response.content))
         self.assertEqual(len(reader.pages), 2)
 
-        resources = reader.pages[0].get("/Resources")
-        xobjects = resources.get("/XObject") if resources else None
-        hay_imagen = False
-        if xobjects:
+        def contiene_imagen(resources, visitados=None):
+            if not resources:
+                return False
+            visitados = visitados or set()
+            xobjects = resources.get("/XObject")
+            if not xobjects:
+                return False
             for referencia in xobjects.values():
                 objeto = referencia.get_object()
+                identidad = getattr(objeto, "indirect_reference", None)
+                clave = repr(identidad) if identidad is not None else id(objeto)
+                if clave in visitados:
+                    continue
+                visitados.add(clave)
                 if objeto.get("/Subtype") == "/Image":
-                    hay_imagen = True
-                    break
-        self.assertTrue(hay_imagen, "El encabezado del PDF debe incluir el logo raster de ARQCLIMA.")
+                    return True
+                if objeto.get("/Subtype") == "/Form":
+                    if contiene_imagen(objeto.get("/Resources"), visitados):
+                        return True
+            return False
+
+        self.assertTrue(
+            contiene_imagen(reader.pages[0].get("/Resources")),
+            "El encabezado del PDF debe incluir el logo raster de ARQCLIMA.",
+        )
 
         texto = "\n".join(page.extract_text() or "" for page in reader.pages)
         self.assertIn("Echeqs 0-30-60 sin recargo", texto)
