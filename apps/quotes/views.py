@@ -216,6 +216,9 @@ class PresupuestoDetailView(PermisoRequeridoMixin, DetailView):
                 "puede_revertir": puede_revertir_aceptado(self.request.user, presupuesto)
                 and presupuesto.estado == EstadoPresupuesto.ACEPTADO,
                 "seccion_form": SeccionPresupuestoForm(),
+                "linea_comercial_form": LineaComercialPresupuestoForm(
+                    presupuesto=presupuesto
+                ),
                 "lineas_comerciales_sin_seccion": presupuesto.lineas_comerciales.filter(
                     seccion__isnull=True
                 ).order_by("orden", "pk"),
