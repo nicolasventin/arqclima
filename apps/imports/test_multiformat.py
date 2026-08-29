@@ -33,6 +33,7 @@ def _usuario_admin(username="diego_11h"):
         ("add_marca", "catalog"),
         ("add_producto", "catalog"),
         ("change_producto", "catalog"),
+        ("add_proveedor", "catalog"),
     ):
         grupo.permissions.add(
             Permission.objects.get(codename=codename, content_type__app_label=app)
@@ -420,6 +421,99 @@ class VistasMultiformatoTests(TestCase):
         self.usuario = _usuario_admin("diego_vistas_11h")
         self.proveedor = Proveedor.objects.create(nombre_comercial="Proveedor vistas 11H")
         self.client.login(username=self.usuario.username, password="clave12345")
+
+
+
+    def test_nueva_importacion_permite_crear_proveedor_sin_salir(self):
+        response = self.client.get(reverse("imports:nueva"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Crear proveedor")
+        self.assertContains(
+            response,
+            reverse("catalog:proveedor_nuevo_rapido"),
+        )
+        self.assertContains(response, 'id="proveedor-rapido-form"')
+
+    def test_alta_rapida_crea_proveedor_activo_y_devuelve_json(self):
+        response = self.client.post(
+            reverse("catalog:proveedor_nuevo_rapido"),
+            {
+                "nombre_comercial": "Proveedor Nuevo 11H",
+                "razon_social": "Proveedor Nuevo SA",
+                "cuit": "30-11111111-1",
+                "contacto_nombre": "Compras",
+                "telefono": "2610000000",
+                "email": "compras@proveedor.test",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        proveedor = Proveedor.objects.get(pk=data["proveedor"]["id"])
+        self.assertTrue(proveedor.activo)
+        self.assertEqual(proveedor.nombre_comercial, "Proveedor Nuevo 11H")
+        self.assertEqual(data["proveedor"]["email"], "compras@proveedor.test")
+
+    def test_alta_rapida_rechaza_nombre_o_cuit_duplicados(self):
+        existente = Proveedor.objects.create(
+            nombre_comercial="Duplicado 11H",
+            cuit="30-22222222-2",
+        )
+
+        por_nombre = self.client.post(
+            reverse("catalog:proveedor_nuevo_rapido"),
+            {
+                "nombre_comercial": existente.nombre_comercial.lower(),
+                "cuit": "30-33333333-3",
+            },
+        )
+        self.assertEqual(por_nombre.status_code, 400)
+        self.assertIn("nombre_comercial", por_nombre.json()["errores"])
+
+        por_cuit = self.client.post(
+            reverse("catalog:proveedor_nuevo_rapido"),
+            {
+                "nombre_comercial": "Otro proveedor",
+                "cuit": existente.cuit,
+            },
+        )
+        self.assertEqual(por_cuit.status_code, 400)
+        self.assertIn("cuit", por_cuit.json()["errores"])
+
+    def test_usuario_sin_add_proveedor_no_ve_ni_usa_alta_rapida(self):
+        grupo, _ = Group.objects.get_or_create(name="Importador sin alta proveedor")
+        permiso_importar = Permission.objects.get(
+            codename="add_historialcosto",
+            content_type__app_label="pricing",
+        )
+        grupo.permissions.add(permiso_importar)
+        usuario = User.objects.create_user(
+            username="importador_sin_proveedor_11h",
+            password="clave12345",
+        )
+        usuario.groups.add(grupo)
+
+        self.client.logout()
+        self.client.login(
+            username=usuario.username,
+            password="clave12345",
+        )
+
+        pagina = self.client.get(reverse("imports:nueva"))
+        self.assertEqual(pagina.status_code, 200)
+        self.assertNotContains(pagina, "Crear proveedor")
+
+        alta = self.client.post(
+            reverse("catalog:proveedor_nuevo_rapido"),
+            {"nombre_comercial": "No permitido"},
+        )
+        self.assertEqual(alta.status_code, 403)
+        self.assertFalse(
+            Proveedor.objects.filter(nombre_comercial="No permitido").exists()
+        )
 
     def test_formulario_acepta_formatos_nuevos_y_rechaza_doc_antiguo(self):
         form = NuevaImportacionForm(

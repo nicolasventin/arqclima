@@ -6,6 +6,7 @@ from django.views import View
 from django.views.generic import DetailView, ListView
 
 from apps.audit.services import log_action
+from apps.catalog.forms import ProveedorRapidoForm
 
 from .forms import (
     AsignarMarcaImportacionForm,
@@ -25,6 +26,15 @@ from .services import (
     procesar_importacion,
     reclasificar_fila,
 )
+
+
+def _contexto_nueva_importacion(user, form):
+    puede_crear_proveedor = user.has_perm("catalog.add_proveedor")
+    return {
+        "form": form,
+        "puede_crear_proveedor": puede_crear_proveedor,
+        "proveedor_rapido_form": ProveedorRapidoForm() if puede_crear_proveedor else None,
+    }
 
 
 def _puede_ver_importacion(user, importacion):
@@ -68,12 +78,21 @@ class NuevaImportacionView(UserPassesTestMixin, View):
         return puede_importar(self.request.user)
 
     def get(self, request):
-        return render(request, self.template_name, {"form": NuevaImportacionForm()})
+        form = NuevaImportacionForm()
+        return render(
+            request,
+            self.template_name,
+            _contexto_nueva_importacion(request.user, form),
+        )
 
     def post(self, request):
         form = NuevaImportacionForm(request.POST, request.FILES)
         if not form.is_valid():
-            return render(request, self.template_name, {"form": form})
+            return render(
+                request,
+                self.template_name,
+                _contexto_nueva_importacion(request.user, form),
+            )
 
         archivo = form.cleaned_data["archivo"]
         tipo_archivo = tipo_archivo_por_nombre(archivo.name)
@@ -89,7 +108,11 @@ class NuevaImportacionView(UserPassesTestMixin, View):
         except (ColumnasNoDetectadas, ArchivoImportacionInvalido) as exc:
             _borrar_importacion_fallida(importacion)
             form.add_error("archivo", str(exc))
-            return render(request, self.template_name, {"form": form})
+            return render(
+                request,
+                self.template_name,
+                _contexto_nueva_importacion(request.user, form),
+            )
         except Exception:
             _borrar_importacion_fallida(importacion)
             form.add_error(
@@ -97,7 +120,11 @@ class NuevaImportacionView(UserPassesTestMixin, View):
                 "No se pudo analizar el archivo de forma segura. Verificá que no esté "
                 "dañado y que sea realmente un Excel, CSV, PDF o Word compatible.",
             )
-            return render(request, self.template_name, {"form": form})
+            return render(
+                request,
+                self.template_name,
+                _contexto_nueva_importacion(request.user, form),
+            )
 
         cantidad_filas = importacion.filas.count()
         cantidad_imagenes = importacion.imagenes.count()

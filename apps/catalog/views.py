@@ -1,5 +1,6 @@
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db import models as db_models
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
@@ -15,7 +16,7 @@ from apps.stock.models import Deposito
 from apps.stock.permissions import puede_configurar_stock_minimo, puede_ver_stock
 from apps.stock.services import stock_actual
 
-from .forms import ProductoForm, ProductoProveedorForm, ProveedorForm
+from .forms import ProductoForm, ProductoProveedorForm, ProveedorForm, ProveedorRapidoForm
 from .models import Categoria, Marca, Producto, ProductoProveedor, Proveedor
 from .permissions import puede_crear_producto, puede_editar_producto
 
@@ -254,6 +255,44 @@ class ProveedorCreateView(PermisoRequeridoMixin, CreateView):
 
     def get_success_url(self):
         return reverse("catalog:proveedor_lista")
+
+
+class ProveedorQuickCreateView(PermisoRequeridoMixin, View):
+    permission_required = "catalog.add_proveedor"
+
+    def post(self, request):
+        form = ProveedorRapidoForm(request.POST)
+        if not form.is_valid():
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "errores": {
+                        campo: [str(error) for error in errores]
+                        for campo, errores in form.errors.items()
+                    },
+                },
+                status=400,
+            )
+
+        proveedor = form.save()
+        log_action(
+            request.user,
+            "create_proveedor",
+            proveedor,
+            f"Proveedor creado mediante alta rápida: {proveedor}",
+        )
+        return JsonResponse(
+            {
+                "ok": True,
+                "proveedor": {
+                    "id": proveedor.pk,
+                    "nombre": proveedor.nombre_comercial,
+                    "cuit": proveedor.cuit,
+                    "email": proveedor.email,
+                },
+            },
+            status=201,
+        )
 
 
 class ProveedorUpdateView(PermisoRequeridoMixin, UpdateView):
