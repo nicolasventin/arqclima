@@ -223,9 +223,10 @@ def finalizar_trabajo(trabajo, usuario, observaciones=""):
     Cierre operativo real de 10F.
 
     Solo se finaliza desde En ejecución, con técnico asignado y sin
-    materiales de catálogo pendientes de envío. Se bloquean Trabajo y
-    sus MaterialTrabajo antes de recalcular pendientes, evitando que una
-    edición/envío concurrente cambie la foto durante el cierre.
+    materiales de catálogo pendientes de envío. La fila Trabajo es el
+    mutex estable del cierre: los triggers de materiales y movimientos
+    de stock toman el mismo lock, así ninguna operación concurrente puede
+    cambiar la foto mientras se valida y cierra.
     """
     trabajo_bloqueado = (
         Trabajo.objects.select_for_update()
@@ -243,11 +244,6 @@ def finalizar_trabajo(trabajo, usuario, observaciones=""):
     if trabajo_bloqueado.tecnico_asignado_id is None:
         raise ValueError("No se puede finalizar un trabajo sin técnico asignado.")
 
-    list(
-        MaterialTrabajo.objects.select_for_update()
-        .filter(trabajo_id=trabajo_bloqueado.pk)
-        .order_by("pk")
-    )
     pendientes = materiales_pendientes_de_envio(trabajo_bloqueado)
     if pendientes:
         detalle = "; ".join(
