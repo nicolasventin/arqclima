@@ -88,6 +88,7 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             username=f"concurrencia_{self._testMethodName}",
             password="clave12345",
         )
+        self.usuario.groups.add(Group.objects.get(name="Administrador"))
         self.marca = Marca.objects.create(nombre=f"Marca {self._testMethodName}")
         self.proveedor = Proveedor.objects.create(
             nombre_comercial=f"Proveedor {self._testMethodName}"
@@ -115,8 +116,20 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             cantidad=Decimal("10"),
             costo_esperado=Decimal("100"),
         )
-        OrdenDeCompra.objects.filter(pk=orden.pk).update(
-            estado=EstadoOrdenCompra.APROBADA
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            self.usuario,
+        )
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.APROBADA,
+            self.usuario,
+        )
+        cambiar_estado_orden(
+            orden,
+            EstadoOrdenCompra.ENVIADA,
+            self.usuario,
         )
         orden.refresh_from_db()
 
@@ -261,6 +274,12 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
             estado=EstadoOrdenCompra.BORRADOR,
             creado_por=self.usuario,
         )
+        LineaOrdenCompra.objects.create(
+            orden=orden,
+            producto_proveedor=self.producto_proveedor,
+            cantidad=Decimal("1"),
+            costo_esperado=Decimal("100"),
+        )
 
         def preparar():
             orden_local = OrdenDeCompra.objects.get(pk=orden.pk)
@@ -279,7 +298,7 @@ class ConcurrenciaOperacionesCriticasTests(_ConcurrenteMixin, TransactionTestCas
         self.assertEqual(orden.estado, EstadoOrdenCompra.PENDIENTE_APROBACION)
         self.assertEqual(
             AuditLog.objects.filter(
-                accion="cambiar_estado_orden_compra",
+                accion="solicitar_aprobacion_orden_compra",
                 object_id=str(orden.pk),
             ).count(),
             1,
@@ -292,6 +311,7 @@ class AtomicidadOperacionesCriticasTests(TestCase):
             username=f"atomicidad_{self._testMethodName}",
             password="clave12345",
         )
+        self.usuario.groups.add(Group.objects.get(name="Administrador"))
         self.marca = Marca.objects.create(nombre=f"Marca A {self._testMethodName}")
         self.proveedor = Proveedor.objects.create(
             nombre_comercial=f"Proveedor A {self._testMethodName}"
