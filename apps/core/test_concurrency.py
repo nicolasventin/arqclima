@@ -45,6 +45,28 @@ from apps.stock.services import (
 )
 
 
+def _otorgar_permisos_compras(user):
+    """
+    TransactionTestCase hace flush entre pruebas y no conserva filas
+    creadas por migraciones de datos. Las pruebas de concurrencia crean
+    explícitamente los permisos que necesitan.
+    """
+    content_type = ContentType.objects.get_for_model(OrdenDeCompra)
+    permisos = []
+    for codename, nombre in [
+        ("add_ordendecompra", "Puede agregar orden de compra"),
+        ("change_ordendecompra", "Puede modificar orden de compra"),
+        ("approve_ordendecompra", "Puede aprobar o rechazar una orden de compra"),
+    ]:
+        permiso, _ = Permission.objects.get_or_create(
+            content_type=content_type,
+            codename=codename,
+            defaults={"name": nombre},
+        )
+        permisos.append(permiso)
+    user.user_permissions.add(*permisos)
+
+
 class _ConcurrenteMixin:
     def ejecutar_dos(self, preparar):
         """
