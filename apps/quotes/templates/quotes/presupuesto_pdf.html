@@ -301,7 +301,11 @@
     <table class="header-table">
         <tr>
             <td style="width:55%;">
-                <img src="{% static 'img/arqclima-logo-pdf.png' %}" class="logo">
+                {% if logo_data_uri %}
+                <img src="{{ logo_data_uri }}" class="logo">
+                {% else %}
+                <strong style="font-size:14pt;color:#075b9b;">ARQCLIMA</strong>
+                {% endif %}
             </td>
             <td style="width:45%;" class="company-data">
                 <strong>Presupuesto Nº {{ presupuesto.numero }}</strong><br>
