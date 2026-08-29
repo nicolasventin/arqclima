@@ -113,6 +113,8 @@ def puede_finalizar_trabajo(user, trabajo):
     Terminar un trabajo deja de ser una transición genérica en 10F.
     Diego puede finalizar cualquiera; el técnico de campo solo el suyo.
     """
+    if trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        return False
     if user.has_perm("jobs.change_trabajo"):
         return True
     return (
