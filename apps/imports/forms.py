@@ -3,7 +3,7 @@ from django import forms
 from apps.catalog.models import Proveedor
 
 from .models import ImportacionFila
-from .parsing import MAX_ARCHIVO_BYTES, tipo_archivo_por_nombre
+from .parsing import ArchivoImportacionInvalido, MAX_ARCHIVO_BYTES, tipo_archivo_por_nombre
 
 
 class NuevaImportacionForm(forms.Form):
@@ -23,7 +23,10 @@ class NuevaImportacionForm(forms.Form):
 
     def clean_archivo(self):
         archivo = self.cleaned_data["archivo"]
-        tipo_archivo_por_nombre(archivo.name)
+        try:
+            tipo_archivo_por_nombre(archivo.name)
+        except ArchivoImportacionInvalido as exc:
+            raise forms.ValidationError(str(exc)) from exc
         if archivo.size > MAX_ARCHIVO_BYTES:
             raise forms.ValidationError(
                 f"El archivo supera el máximo de {MAX_ARCHIVO_BYTES // (1024 * 1024)} MB."
