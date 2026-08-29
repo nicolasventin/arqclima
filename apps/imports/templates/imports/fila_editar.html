@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Revisar fila — Importación #{{ importacion.pk }} — ARQCLIMA{% endblock %}
+{% block page_heading %}Revisar fila{% endblock %}
+{% block page_subheading %}Importación #{{ importacion.pk }} · {{ importacion.proveedor.nombre_comercial }}{% endblock %}
+
+{% block content %}
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Importaciones</div>
+        <h1>Revisar fila</h1>
+        <div class="detail-subtitle">
+            {{ fila.origen|default:"Archivo" }} · fila {{ fila.numero_fila }} ·
+            clasificación actual: {{ fila.get_categoria_display }}
+        </div>
+    </div>
+    <div class="detail-actions">
+        <a href="{% url 'imports:detalle' importacion.pk %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver a la vista previa
+        </a>
+    </div>
+</div>
+
+<div class="report-grid import-review-grid">
+    <section class="form-card">
+        <div class="form-card-header">
+            <h2>Datos interpretados</h2>
+            <p>Corregí únicamente lo que el archivo haya sido interpretado mal o esté incompleto.</p>
+        </div>
+        <div class="form-card-body">
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <form method="post">
+                {% csrf_token %}
+                <div class="form-grid">
+                    <div class="form-field form-field-half">
+                        <label>Marca</label>
+                        {{ form.marca }}
+                        {{ form.marca.errors }}
+                        <div class="field-help">Necesaria para productos nuevos si no existe un vínculo previo por código de proveedor.</div>
+                    </div>
+
+                    <div class="form-field form-field-half">
+                        <label>Código oficial</label>
+                        {{ form.codigo }}
+                        {{ form.codigo.errors }}
+                    </div>
+
+                    <div class="form-field">
+                        <label>Nombre / descripción corta</label>
+                        {{ form.nombre }}
+                        {{ form.nombre.errors }}
+                    </div>
+
+                    <div class="form-field">
+                        <label>Descripción extendida</label>
+                        {{ form.descripcion }}
+                        {{ form.descripcion.errors }}
+                    </div>
+
+                    <div class="form-field form-field-half">
+                        <label>Costo</label>
+                        {{ form.costo }}
+                        {{ form.costo.errors }}
+                    </div>
+
+                    <div class="form-field form-field-half">
+                        <label>Código del proveedor</label>
+                        {{ form.codigo_proveedor }}
+                        {{ form.codigo_proveedor.errors }}
+                    </div>
+
+                    <div class="form-field form-field-half">
+                        <label>Unidad</label>
+                        {{ form.unidad }}
+                        {{ form.unidad.errors }}
+                        <div class="field-help">Opcional. Si se informa y no se reconoce, la fila seguirá marcada para revisar.</div>
+                    </div>
+
+                    <div class="form-field form-field-half">
+                        <label>Categoría</label>
+                        {{ form.categoria }}
+                        {{ form.categoria.errors }}
+                        <div class="field-help">Opcional. Solo se vincula automáticamente si esa categoría ya existe.</div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-arrow-repeat me-1"></i>Guardar y reclasificar
+                    </button>
+                    <a href="{% url 'imports:detalle' importacion.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <aside class="detail-card">
+        <div class="detail-card-title">
+            <h2>Por qué revisar</h2>
+            <span>{{ fila.get_confianza_display }}</span>
+        </div>
+
+        {% if fila.detalle %}
+        <div class="alert {% if fila.categoria == 'error' %}alert-danger{% else %}alert-warning{% endif %}">
+            {{ fila.detalle }}
+        </div>
+        {% endif %}
+
+        <dl class="detail-kv">
+            <div class="detail-kv-row"><dt>Origen</dt><dd>{{ fila.origen|default:"Archivo" }}</dd></div>
+            <div class="detail-kv-row"><dt>Fila</dt><dd>{{ fila.numero_fila }}</dd></div>
+            <div class="detail-kv-row"><dt>Confianza original</dt><dd>{{ fila.get_confianza_display }}</dd></div>
+            <div class="detail-kv-row"><dt>Costo leído</dt><dd>{{ fila.costo_texto|default:"—" }}</dd></div>
+            <div class="detail-kv-row"><dt>Producto asociado</dt><dd>{{ fila.producto|default:"—" }}</dd></div>
+        </dl>
+
+        <div class="detail-note mt-3">
+            Guardar esta pantalla no modifica el catálogo. Solo actualiza la vista previa y vuelve a ejecutar las reglas de identificación y permisos.
+        </div>
+
+        <a href="{% url 'imports:archivo' importacion.pk %}" target="_blank" class="btn btn-outline-primary w-100 mt-3">
+            <i class="bi bi-file-earmark me-1"></i>Abrir archivo original
+        </a>
+    </aside>
+</div>
+{% endblock %}
