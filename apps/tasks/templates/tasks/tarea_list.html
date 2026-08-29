@@ -1,57 +1,117 @@
 {% extends "base.html" %}
 
 {% block title %}Tareas — ARQCLIMA{% endblock %}
+{% block page_heading %}Tareas{% endblock %}
+{% block page_subheading %}Asignación y seguimiento del equipo{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Tareas</h1>
-    {% if puede_gestionar %}
-    <a href="{% url 'tasks:nueva' %}" class="btn btn-primary btn-sm">+ Nueva tarea</a>
-    {% endif %}
+<div class="page-heading">
+    <div class="page-heading-copy">
+        <div class="page-heading-kicker">Operación</div>
+        <h1>Tareas</h1>
+        <p>Seguimiento de pendientes, responsables, prioridad y vencimientos.</p>
+    </div>
+    <div class="page-actions">
+        {% if puede_gestionar %}
+        <a href="{% url 'tasks:nueva' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle me-1"></i>Nueva tarea
+        </a>
+        {% endif %}
+    </div>
 </div>
 
-<form method="get" class="row g-2 mb-3">
-    <div class="col-auto">
-        <select name="estado" class="form-select form-select-sm" onchange="this.form.submit()">
+<form method="get" class="filter-bar">
+    <div class="filter-field filter-field-search">
+        <label for="tarea-q">Buscar</label>
+        <input id="tarea-q" type="text" name="q" value="{{ request.GET.q }}"
+               class="form-control form-control-sm"
+               placeholder="Título, descripción o responsable">
+    </div>
+    <div class="filter-field">
+        <label for="tarea-estado">Estado</label>
+        <select id="tarea-estado" name="estado" class="form-select form-select-sm">
             <option value="">Pendientes y en proceso</option>
             {% for valor, etiqueta in estados %}
             <option value="{{ valor }}" {% if request.GET.estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
             {% endfor %}
         </select>
     </div>
+    <div class="filter-actions">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+        {% if request.GET.q or request.GET.estado %}
+        <a href="{% url 'tasks:lista' %}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        {% endif %}
+    </div>
 </form>
 
-<table class="table table-sm table-hover bg-white">
-    <thead>
-        <tr>
-            <th>Título</th>
-            <th>Asignado a</th>
-            <th>Asignado por</th>
-            <th>Prioridad</th>
-            <th>Fecha límite</th>
-            <th>Estado</th>
-            {% if puede_gestionar %}<th></th>{% endif %}
-        </tr>
-    </thead>
-    <tbody>
-        {% for tarea in tareas %}
-        <tr class="{% if tarea.esta_vencida %}table-danger{% endif %}">
-            <td>{{ tarea.titulo }}</td>
-            <td>{{ tarea.asignado_a|default:"Sin asignar" }}</td>
-            <td>{{ tarea.asignado_por|default:"—" }}</td>
-            <td>{{ tarea.get_prioridad_display }}</td>
-            <td>
-                {{ tarea.fecha_limite|date:"d/m/Y"|default:"—" }}
-                {% if tarea.esta_vencida %}<span class="badge bg-danger">Vencida</span>{% endif %}
-            </td>
-            <td><span class="badge bg-secondary">{{ tarea.get_estado_display }}</span></td>
-            {% if puede_gestionar %}
-            <td><a href="{% url 'tasks:editar' tarea.pk %}" class="btn btn-sm btn-outline-primary">Editar</a></td>
-            {% endif %}
-        </tr>
-        {% empty %}
-        <tr><td colspan="7" class="text-muted">No hay tareas.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="data-panel">
+    <div class="table-responsive">
+        <table class="table data-table table-hover">
+            <thead>
+                <tr>
+                    <th>Tarea</th>
+                    <th>Asignado a</th>
+                    <th>Asignado por</th>
+                    <th>Prioridad</th>
+                    <th>Fecha límite</th>
+                    <th>Estado</th>
+                    {% if puede_gestionar %}<th class="text-end">Acciones</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for tarea in tareas %}
+                <tr class="{% if tarea.esta_vencida %}table-danger-soft{% endif %}">
+                    <td>
+                        <span class="table-primary-text">{{ tarea.titulo }}</span>
+                        {% if tarea.descripcion %}<span class="table-secondary-text">{{ tarea.descripcion|truncatechars:80 }}</span>{% endif %}
+                    </td>
+                    <td>{{ tarea.asignado_a|default:"Sin asignar" }}</td>
+                    <td>{{ tarea.asignado_por|default:"—" }}</td>
+                    <td>
+                        {% if tarea.prioridad == "alta" %}
+                        <span class="status-pill status-pill-danger">Alta</span>
+                        {% elif tarea.prioridad == "media" %}
+                        <span class="status-pill status-pill-warning">Media</span>
+                        {% else %}
+                        <span class="status-pill status-pill-neutral">Baja</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ tarea.fecha_limite|date:"d/m/Y"|default:"—" }}
+                        {% if tarea.esta_vencida %}
+                        <span class="status-pill status-pill-danger ms-1">Vencida</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if tarea.estado == "completada" %}
+                        <span class="status-pill status-pill-success">{{ tarea.get_estado_display }}</span>
+                        {% elif tarea.estado == "en_proceso" %}
+                        <span class="status-pill status-pill-info">{{ tarea.get_estado_display }}</span>
+                        {% else %}
+                        <span class="status-pill status-pill-neutral">{{ tarea.get_estado_display }}</span>
+                        {% endif %}
+                    </td>
+                    {% if puede_gestionar %}
+                    <td>
+                        <div class="row-actions">
+                            <a href="{% url 'tasks:editar' tarea.pk %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i><span class="d-none d-xl-inline ms-1">Editar</span>
+                            </a>
+                        </div>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="{% if puede_gestionar %}7{% else %}6{% endif %}" class="empty-table">
+                        <i class="bi bi-list-check"></i>
+                        No hay tareas que coincidan con los filtros.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% include "includes/pagination.html" %}
 {% endblock %}
