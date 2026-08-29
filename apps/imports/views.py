@@ -120,7 +120,11 @@ class NuevaImportacionView(UserPassesTestMixin, View):
                 "No se pudo analizar el archivo de forma segura. Verificá que no esté "
                 "dañado y que sea realmente un Excel, CSV, PDF o Word compatible.",
             )
-            return render(request, self.template_name, {"form": form})
+            return render(
+                request,
+                self.template_name,
+                _contexto_nueva_importacion(request.user, form),
+            )
 
         cantidad_filas = importacion.filas.count()
         cantidad_imagenes = importacion.imagenes.count()
