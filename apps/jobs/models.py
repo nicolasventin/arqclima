@@ -112,6 +112,15 @@ class EtapaTrabajo(models.Model):
 
     class Meta:
         ordering = ["trabajo_id", "orden"]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(duracion_estimada_dias__isnull=True)
+                    | models.Q(duracion_estimada_dias__gt=0)
+                ),
+                name="etapatrabajo_duracion_positiva",
+            ),
+        ]
         verbose_name = "Etapa de trabajo"
         verbose_name_plural = "Etapas de trabajo"
 
@@ -190,6 +199,10 @@ class MaterialTrabajo(models.Model):
                     | models.Q(producto__isnull=True, descripcion_manual__gt="")
                 ),
                 name="materialtrabajo_producto_xor_descripcion_manual",
+            ),
+            models.CheckConstraint(
+                check=models.Q(cantidad_necesaria__gt=0),
+                name="materialtrabajo_cantidad_positiva",
             ),
         ]
         verbose_name = "Material de trabajo"

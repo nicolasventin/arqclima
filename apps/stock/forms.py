@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 from django import forms
+from django.core.validators import MinValueValidator
 
 from apps.catalog.models import Producto
 
@@ -70,6 +73,12 @@ class DevolucionForm(forms.Form):
 
 
 class StockMinimoForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for nombre in ("stock_minimo_general", "stock_minimo_repuestos"):
+            self.fields[nombre].validators.append(MinValueValidator(Decimal("0")))
+            self.fields[nombre].widget.attrs["min"] = "0"
+
     class Meta:
         model = Producto
         fields = ["stock_minimo_general", "stock_minimo_repuestos"]

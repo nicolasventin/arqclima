@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 from django import forms
+from django.core.validators import MinValueValidator
 
 from apps.catalog.models import ProductoProveedor, Proveedor
 from apps.stock.models import Deposito
@@ -37,6 +40,10 @@ class LineaOrdenCompraForm(forms.ModelForm):
                 field.widget.attrs["class"] = "form-select"
             else:
                 field.widget.attrs.setdefault("class", "form-control")
+        self.fields["cantidad"].validators.append(MinValueValidator(Decimal("0.01")))
+        self.fields["cantidad"].widget.attrs.update({"min": "0.01", "step": "0.01"})
+        self.fields["costo_esperado"].validators.append(MinValueValidator(Decimal("0")))
+        self.fields["costo_esperado"].widget.attrs.update({"min": "0", "step": "0.01"})
         if orden is not None:
             self.fields["producto_proveedor"].queryset = ProductoProveedor.objects.filter(
                 proveedor=orden.proveedor, activo=True

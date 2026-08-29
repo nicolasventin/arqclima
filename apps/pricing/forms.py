@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 from django import forms
+from django.core.validators import MinValueValidator
 
 from apps.catalog.models import Categoria, Marca, Producto
 
@@ -6,6 +9,16 @@ from .models import ConfiguracionGeneral
 
 MARGEN_WIDGET = forms.NumberInput(attrs={"class": "form-control form-control-sm", "step": "0.01"})
 DIAS_WIDGET = forms.NumberInput(attrs={"class": "form-control form-control-sm", "step": "1", "min": "1"})
+
+
+def _minimo_cero(field):
+    field.validators.append(MinValueValidator(Decimal("0")))
+    field.widget.attrs["min"] = "0"
+
+
+def _minimo_uno(field):
+    field.validators.append(MinValueValidator(1))
+    field.widget.attrs["min"] = "1"
 
 
 class RegistrarCostoForm(forms.Form):
@@ -16,6 +29,10 @@ class RegistrarCostoForm(forms.Form):
 
 
 class MargenProductoForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _minimo_cero(self.fields["margen"])
+
     class Meta:
         model = Producto
         fields = ["margen"]
@@ -23,6 +40,10 @@ class MargenProductoForm(forms.ModelForm):
 
 
 class MargenMarcaForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _minimo_cero(self.fields["margen"])
+
     class Meta:
         model = Marca
         fields = ["margen"]
@@ -30,6 +51,10 @@ class MargenMarcaForm(forms.ModelForm):
 
 
 class MargenCategoriaForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _minimo_cero(self.fields["margen"])
+
     class Meta:
         model = Categoria
         fields = ["margen"]
@@ -37,6 +62,19 @@ class MargenCategoriaForm(forms.ModelForm):
 
 
 class ConfiguracionGeneralForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for nombre in (
+            "margen_general",
+            "margen_mano_obra",
+            "flete_pct",
+            "costo_financiero_pct",
+            "margen_minimo_alerta",
+        ):
+            _minimo_cero(self.fields[nombre])
+        _minimo_uno(self.fields["dias_seguimiento_presupuesto_enviado"])
+        _minimo_uno(self.fields["dias_aviso_presupuesto_por_vencer"])
+
     class Meta:
         model = ConfiguracionGeneral
         fields = [

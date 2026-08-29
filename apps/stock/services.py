@@ -94,6 +94,9 @@ def registrar_movimiento(
     if salida_relacionada is not None and tipo != TipoMovimiento.DEVOLUCION:
         raise ValueError("salida_relacionada solo aplica a un movimiento de tipo Devolución.")
 
+    if tipo == TipoMovimiento.AJUSTE and cantidad == 0:
+        raise ValueError("La cantidad para un Ajuste no puede ser cero.")
+
     movimiento = MovimientoStock.objects.create(
         producto=producto,
         deposito=deposito,

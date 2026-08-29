@@ -37,6 +37,12 @@ class HistorialCosto(models.Model):
 
     class Meta:
         ordering = ["-vigente_desde"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(costo__gte=0),
+                name="historialcosto_costo_no_negativo",
+            ),
+        ]
         verbose_name = "Historial de costo"
         verbose_name_plural = "Historial de costos"
         permissions = [
@@ -104,6 +110,40 @@ class ConfiguracionGeneral(models.Model):
     )
 
     class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(margen_general__gte=0),
+                name="config_margen_general_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=models.Q(margen_mano_obra__gte=0),
+                name="config_margen_mano_obra_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=models.Q(flete_pct__gte=0),
+                name="config_flete_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=models.Q(costo_financiero_pct__gte=0),
+                name="config_costo_financiero_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=models.Q(margen_minimo_alerta__gte=0),
+                name="config_margen_alerta_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=models.Q(iva_pct__gte=0) & models.Q(iva_pct__lte=100),
+                name="config_iva_pct_0_100",
+            ),
+            models.CheckConstraint(
+                check=models.Q(dias_seguimiento_presupuesto_enviado__gt=0),
+                name="config_dias_seguimiento_positivo",
+            ),
+            models.CheckConstraint(
+                check=models.Q(dias_aviso_presupuesto_por_vencer__gt=0),
+                name="config_dias_aviso_positivo",
+            ),
+        ]
         verbose_name = "Configuración general de precios"
         verbose_name_plural = "Configuración general de precios"
         permissions = [

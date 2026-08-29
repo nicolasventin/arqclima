@@ -1,8 +1,17 @@
+from decimal import Decimal
+
 from django import forms
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 from apps.catalog.models import ProductoProveedor
 
-from .models import ItemPresupuesto, PlantillaCondiciones, Presupuesto, SeccionPresupuesto
+from .models import (
+    ItemPresupuesto,
+    PlantillaCondiciones,
+    Presupuesto,
+    SeccionPresupuesto,
+    TipoDescuento,
+)
 
 
 class PresupuestoForm(forms.ModelForm):
@@ -25,6 +34,13 @@ class PresupuestoForm(forms.ModelForm):
             else:
                 field.widget.attrs.setdefault("class", "form-control")
 
+        self.fields["cantidad_unidades"].validators.append(MinValueValidator(1))
+        self.fields["cantidad_unidades"].widget.attrs["min"] = "1"
+        self.fields["descuento_general_valor"].validators.append(
+            MinValueValidator(Decimal("0"))
+        )
+        self.fields["descuento_general_valor"].widget.attrs.update({"min": "0", "step": "0.01"})
+
         self.fields["plantilla_condiciones"].queryset = PlantillaCondiciones.objects.filter(activa=True)
         self.fields["plantilla_condiciones"].required = False
         if not self.instance.pk:
@@ -33,6 +49,21 @@ class PresupuestoForm(forms.ModelForm):
             ).first()
             if predeterminada:
                 self.initial["plantilla_condiciones"] = predeterminada.pk
+
+    def clean(self):
+        cleaned = super().clean()
+        tipo = cleaned.get("descuento_general_tipo")
+        valor = cleaned.get("descuento_general_valor")
+        if (
+            tipo == TipoDescuento.PORCENTAJE
+            and valor is not None
+            and valor > Decimal("100")
+        ):
+            self.add_error(
+                "descuento_general_valor",
+                "El descuento porcentual no puede superar el 100%.",
+            )
+        return cleaned
 
 
 class SeccionPresupuestoForm(forms.ModelForm):
@@ -54,6 +85,21 @@ def _estilar_campos(fields):
             field.widget.attrs["class"] = "form-select form-select-sm"
         else:
             field.widget.attrs.setdefault("class", "form-control form-control-sm")
+
+    fields["cantidad"].validators.append(MinValueValidator(Decimal("0.01")))
+    fields["cantidad"].widget.attrs.update({"min": "0.01", "step": "0.01"})
+    for nombre in ("precio_unitario", "costo_unitario"):
+        fields[nombre].validators.append(MinValueValidator(Decimal("0")))
+        fields[nombre].widget.attrs.update({"min": "0", "step": "0.01"})
+    fields["descuento_pct"].validators.extend(
+        [
+            MinValueValidator(Decimal("0")),
+            MaxValueValidator(Decimal("100")),
+        ]
+    )
+    fields["descuento_pct"].widget.attrs.update(
+        {"min": "0", "max": "100", "step": "0.01"}
+    )
 
 
 class ItemCatalogoForm(forms.ModelForm):

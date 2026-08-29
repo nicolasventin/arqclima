@@ -11,6 +11,12 @@ class Marca(models.Model):
 
     class Meta:
         ordering = ["nombre"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(margen__isnull=True) | models.Q(margen__gte=0),
+                name="marca_margen_no_negativo",
+            ),
+        ]
         verbose_name = "Marca"
         verbose_name_plural = "Marcas"
 
@@ -28,6 +34,12 @@ class Categoria(models.Model):
 
     class Meta:
         ordering = ["nombre"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(margen__isnull=True) | models.Q(margen__gte=0),
+                name="categoria_margen_no_negativo",
+            ),
+        ]
         verbose_name = "Categoría"
         verbose_name_plural = "Categorías"
 
@@ -128,6 +140,24 @@ class Producto(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["marca", "codigo"], name="producto_unico_por_marca_codigo"
+            ),
+            models.CheckConstraint(
+                check=models.Q(margen__isnull=True) | models.Q(margen__gte=0),
+                name="producto_margen_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(stock_minimo_general__isnull=True)
+                    | models.Q(stock_minimo_general__gte=0)
+                ),
+                name="producto_stock_min_general_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(stock_minimo_repuestos__isnull=True)
+                    | models.Q(stock_minimo_repuestos__gte=0)
+                ),
+                name="producto_stock_min_repuestos_no_negativo",
             ),
         ]
         permissions = [
