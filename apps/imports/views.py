@@ -7,7 +7,11 @@ from django.views.generic import DetailView, ListView
 
 from apps.audit.services import log_action
 
-from .forms import EditarFilaImportacionForm, NuevaImportacionForm
+from .forms import (
+    AsignarMarcaImportacionForm,
+    EditarFilaImportacionForm,
+    NuevaImportacionForm,
+)
 from .models import ImportacionFila, ImportacionImagen, ImportacionListaPrecios
 from .parsing import (
     ArchivoImportacionInvalido,
@@ -15,7 +19,12 @@ from .parsing import (
     tipo_archivo_por_nombre,
 )
 from .permissions import puede_importar
-from .services import confirmar_importacion, procesar_importacion, reclasificar_fila
+from .services import (
+    asignar_marca_filas_sin_marca,
+    confirmar_importacion,
+    procesar_importacion,
+    reclasificar_fila,
+)
 
 
 def _puede_ver_importacion(user, importacion):
@@ -143,6 +152,8 @@ class ImportacionDetailView(UserPassesTestMixin, DetailView):
                 ImportacionFila.Categoria.ERROR,
             ]
         ).count()
+        context["filas_sin_marca"] = filas.filter(marca_texto="").count()
+        context["form_marca_masiva"] = AsignarMarcaImportacionForm()
         context["filas_aplicables"] = filas.exclude(
             categoria__in=[
                 ImportacionFila.Categoria.PARA_REVISAR,
@@ -155,6 +166,51 @@ class ImportacionDetailView(UserPassesTestMixin, DetailView):
             and filas.exists()
         )
         return context
+
+
+
+
+class AsignarMarcaImportacionView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.importacion = get_object_or_404(
+            ImportacionListaPrecios,
+            pk=self.kwargs["pk"],
+        )
+        return (
+            _puede_ver_importacion(self.request.user, self.importacion)
+            and self.importacion.estado == ImportacionListaPrecios.Estado.PENDIENTE
+        )
+
+    def post(self, request, pk):
+        form = AsignarMarcaImportacionForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "Seleccioná una marca válida.")
+            return redirect("imports:detalle", pk=pk)
+
+        cantidad = asignar_marca_filas_sin_marca(
+            self.importacion,
+            request.user,
+            form.cleaned_data["marca"],
+        )
+        log_action(
+            request.user,
+            "asignar_marca_importacion",
+            self.importacion,
+            (
+                f"Marca '{form.cleaned_data['marca']}' asignada a "
+                f"{cantidad} fila(s) sin marca."
+            ),
+        )
+        messages.success(
+            request,
+            (
+                f"Marca {form.cleaned_data['marca']} aplicada a "
+                f"{cantidad} filas sin marca y preview reclasificado."
+            ),
+        )
+        return redirect("imports:detalle", pk=pk)
 
 
 class EditarFilaImportacionView(UserPassesTestMixin, View):
