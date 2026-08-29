@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
+from django.utils import timezone
 
 from apps.audit.services import log_action
 from apps.catalog.models import Producto
@@ -81,6 +82,15 @@ def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
         .get(pk=trabajo.pk)
     )
 
+    if trabajo_bloqueado.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        raise TransicionInvalidaError(
+            f"El trabajo está '{trabajo_bloqueado.estado}' y ya está cerrado."
+        )
+    if nuevo_estado == EstadoTrabajo.TERMINADO:
+        raise TransicionInvalidaError(
+            "Terminado es un cierre operativo: use finalizar_trabajo()."
+        )
+
     try:
         idx_actual = ORDEN_ESTADOS.index(trabajo_bloqueado.estado)
     except ValueError:
@@ -105,6 +115,9 @@ def cambiar_estado_trabajo(trabajo, nuevo_estado, usuario, detalle=""):
     accion = "cambiar_estado_trabajo"
     direccion = "avanzado" if idx_nuevo > idx_actual else "retrocedido"
 
+    # Pasar a Listo con material sin enviar sigue siendo una advertencia
+    # operativa y no un bloqueo: el bloqueo fuerte aparece al FINALIZAR
+    # el trabajo en 10F.
     # Regla de negocio 6/Etapa 7 aplicada acá: pasar a Listo con
     # material sin enviar NO bloquea (Contri puede tener razones para
     # marcarlo igual), pero queda auditado con el detalle de qué
@@ -149,16 +162,126 @@ def cancelar_trabajo(trabajo, usuario, motivo=""):
             f"No se puede cancelar un trabajo en estado '{trabajo_bloqueado.estado}'."
         )
 
+    motivo_limpio = (motivo or "").strip()
+    if not motivo_limpio:
+        raise ValueError("Debe indicar el motivo de la cancelación.")
+
     estado_anterior = trabajo_bloqueado.estado
     trabajo_bloqueado.estado = EstadoTrabajo.CANCELADO
-    trabajo_bloqueado.save(update_fields=["estado"])
+    trabajo_bloqueado.cancelado_por = usuario
+    trabajo_bloqueado.cancelado_en = timezone.now()
+    trabajo_bloqueado.motivo_cancelacion = motivo_limpio
+    trabajo_bloqueado.save(
+        update_fields=[
+            "estado",
+            "cancelado_por",
+            "cancelado_en",
+            "motivo_cancelacion",
+        ]
+    )
     log_action(
         usuario,
         "cancelar_trabajo",
         trabajo_bloqueado,
-        detail=motivo or f"Cancelado desde '{estado_anterior}'",
+        detail=f"Cancelado desde '{estado_anterior}'. Motivo: {motivo_limpio}",
     )
     trabajo.estado = EstadoTrabajo.CANCELADO
+    trabajo.cancelado_por = usuario
+    trabajo.cancelado_en = trabajo_bloqueado.cancelado_en
+    trabajo.motivo_cancelacion = motivo_limpio
+    return trabajo_bloqueado
+
+
+def motivos_bloqueo_finalizacion(trabajo):
+    """
+    Devuelve razones humanas por las que un trabajo todavía no se puede
+    cerrar como Terminado. No muta nada; la validación autoritativa se
+    repite bajo locks dentro de finalizar_trabajo().
+    """
+    motivos = []
+    if trabajo.estado != EstadoTrabajo.EN_EJECUCION:
+        motivos.append("El trabajo debe estar En ejecución antes de finalizarlo.")
+    if trabajo.tecnico_asignado_id is None:
+        motivos.append("El trabajo debe tener un técnico asignado.")
+
+    pendientes = materiales_pendientes_de_envio(trabajo)
+    if pendientes:
+        detalle = "; ".join(
+            f"{material} (faltan {cantidad_pendiente_envio(material)})"
+            for material in pendientes
+        )
+        motivos.append(f"Quedan materiales de catálogo sin enviar: {detalle}.")
+    return motivos
+
+
+@transaction.atomic
+def finalizar_trabajo(trabajo, usuario, observaciones=""):
+    """
+    Cierre operativo real de 10F.
+
+    Solo se finaliza desde En ejecución, con técnico asignado y sin
+    materiales de catálogo pendientes de envío. Se bloquean Trabajo y
+    sus MaterialTrabajo antes de recalcular pendientes, evitando que una
+    edición/envío concurrente cambie la foto durante el cierre.
+    """
+    trabajo_bloqueado = (
+        Trabajo.objects.select_for_update()
+        .select_related("presupuesto__cliente", "tecnico_asignado")
+        .get(pk=trabajo.pk)
+    )
+    if trabajo_bloqueado.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        raise TransicionInvalidaError("El trabajo ya está cerrado.")
+    if trabajo_bloqueado.estado != EstadoTrabajo.EN_EJECUCION:
+        raise TransicionInvalidaError(
+            "Solo se puede finalizar un trabajo que esté En ejecución."
+        )
+    if trabajo_bloqueado.tecnico_asignado_id is None:
+        raise ValueError("No se puede finalizar un trabajo sin técnico asignado.")
+
+    list(
+        MaterialTrabajo.objects.select_for_update()
+        .filter(trabajo_id=trabajo_bloqueado.pk)
+        .order_by("pk")
+    )
+    pendientes = materiales_pendientes_de_envio(trabajo_bloqueado)
+    if pendientes:
+        detalle = "; ".join(
+            f"{material} (faltan {cantidad_pendiente_envio(material)})"
+            for material in pendientes
+        )
+        raise ValueError(
+            "No se puede finalizar: quedan materiales de catálogo sin enviar: "
+            + detalle
+        )
+
+    ahora = timezone.now()
+    observaciones_limpias = (observaciones or "").strip()
+    trabajo_bloqueado.estado = EstadoTrabajo.TERMINADO
+    trabajo_bloqueado.terminado_por = usuario
+    trabajo_bloqueado.terminado_en = ahora
+    trabajo_bloqueado.observaciones_cierre = observaciones_limpias
+    trabajo_bloqueado.save(
+        update_fields=[
+            "estado",
+            "terminado_por",
+            "terminado_en",
+            "observaciones_cierre",
+        ]
+    )
+    log_action(
+        usuario,
+        "finalizar_trabajo",
+        trabajo_bloqueado,
+        detail=(
+            f"Trabajo finalizado. Técnico: {trabajo_bloqueado.tecnico_asignado}. "
+            f"Observaciones: {observaciones_limpias or 'sin observaciones'}"
+        ),
+    )
+
+    trabajo.estado = EstadoTrabajo.TERMINADO
+    trabajo.terminado_por = usuario
+    trabajo.terminado_en = ahora
+    trabajo.observaciones_cierre = observaciones_limpias
     return trabajo_bloqueado
 
 
@@ -189,6 +312,8 @@ def generar_listado_materiales(trabajo, usuario):
         .select_related("presupuesto")
         .get(pk=trabajo.pk)
     )
+    if trabajo_bloqueado.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        raise ValueError("No se puede modificar materiales de un trabajo cerrado.")
     if trabajo_bloqueado.materiales.exists() or trabajo_bloqueado.etapas.exists():
         raise ValueError("Este trabajo ya tiene un listado de materiales generado.")
 
@@ -288,6 +413,8 @@ def enviar_material(
     # select_related() produciría un LEFT OUTER JOIN sobre el que
     # PostgreSQL no permite FOR UPDATE.
     material_bloqueado = MaterialTrabajo.objects.select_for_update().get(pk=material.pk)
+    if material_bloqueado.trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        raise ValueError("No se puede enviar material de un trabajo cerrado.")
     if material_bloqueado.producto_id is None:
         raise ValueError("Este material no tiene producto de catálogo — no se puede enviar desde Stock.")
 
@@ -324,6 +451,10 @@ def enviar_materiales_pendientes(
     pendientes. Así el lote completo es atómico y el orden estable de
     locks evita deadlocks entre dos envíos masivos simultáneos.
     """
+    trabajo_actual = Trabajo.objects.select_for_update().get(pk=trabajo.pk)
+    if trabajo_actual.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        raise ValueError("No se puede enviar material de un trabajo cerrado.")
+
     materiales = list(
         MaterialTrabajo.objects.select_for_update()
         .filter(trabajo_id=trabajo.pk, producto__isnull=False)
@@ -378,6 +509,8 @@ def registrar_sobrante(material, cantidad_sobrante, usuario):
     # Igual que en enviar_material(): FOR UPDATE se aplica solamente a
     # la fila MaterialTrabajo; sus relaciones se leen después.
     material_bloqueado = MaterialTrabajo.objects.select_for_update().get(pk=material.pk)
+    if material_bloqueado.trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        raise ValueError("No se puede registrar sobrante de un trabajo cerrado.")
     if material_bloqueado.producto_id is None:
         raise ValueError("Este material no tiene producto de catálogo — no se puede devolver a Stock.")
 
