@@ -114,6 +114,26 @@ class Presupuesto(models.Model):
 
     class Meta:
         ordering = ["-numero"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(cantidad_unidades__gt=0),
+                name="presupuesto_cantidad_unidades_positiva",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        descuento_general_tipo=TipoDescuento.PORCENTAJE,
+                        descuento_general_valor__gte=0,
+                        descuento_general_valor__lte=100,
+                    )
+                    | models.Q(
+                        descuento_general_tipo=TipoDescuento.MONTO,
+                        descuento_general_valor__gte=0,
+                    )
+                ),
+                name="presupuesto_descuento_general_valido",
+            ),
+        ]
         permissions = [
             (
                 "revert_presupuesto_aceptado",
@@ -253,6 +273,25 @@ class ItemPresupuesto(models.Model):
                     | models.Q(producto__isnull=True, descripcion_manual__gt="")
                 ),
                 name="itempresupuesto_producto_xor_descripcion_manual",
+            ),
+            models.CheckConstraint(
+                check=models.Q(cantidad__gt=0),
+                name="itempresupuesto_cantidad_positiva",
+            ),
+            models.CheckConstraint(
+                check=models.Q(precio_unitario__gte=0),
+                name="itempresupuesto_precio_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(costo_unitario__isnull=True)
+                    | models.Q(costo_unitario__gte=0)
+                ),
+                name="itempresupuesto_costo_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=models.Q(descuento_pct__gte=0) & models.Q(descuento_pct__lte=100),
+                name="itempresupuesto_descuento_pct_0_100",
             ),
         ]
         verbose_name = "Ítem de presupuesto"
