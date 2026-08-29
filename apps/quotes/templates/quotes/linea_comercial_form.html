@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Agregar importe comercial — ARQCLIMA{% endblock %}
+{% block content %}
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Presupuesto #{{ view.presupuesto.numero }}</div>
+        <h1>Agregar importe comercial</h1>
+        <div class="detail-subtitle">Esto es lo que verá el cliente. Los ítems internos siguen separados.</div>
+    </div>
+    <div class="detail-actions"><a href="{% url 'quotes:detalle' view.presupuesto.pk %}" class="btn btn-sm btn-outline-secondary">Volver</a></div>
+</div>
+<form method="post" class="form-shell">
+    {% csrf_token %}
+    <div class="form-card">
+        <div class="form-card-header"><h2>Concepto comercial</h2><p>Ej. Materiales, Equipamiento, Mano de Obra o un adicional recomendado.</p></div>
+        <div class="form-card-body">
+            <div class="form-grid">
+                <div class="form-field form-field-half"><label>Etapa</label>{{ form.seccion }}{{ form.seccion.errors }}</div>
+                <div class="form-field form-field-half"><label>Etiqueta</label>{{ form.etiqueta }}{{ form.etiqueta.errors }}</div>
+                <div class="form-field"><label>Descripción opcional</label>{{ form.descripcion }}{{ form.descripcion.errors }}</div>
+                <div class="form-field form-field-half"><label>Monto</label>{{ form.monto }}{{ form.monto.errors }}</div>
+                <div class="form-field form-field-half"><label>IVA</label>{{ form.tipo_iva }}{{ form.tipo_iva.errors }}</div>
+                <div class="form-field form-field-half"><div class="form-check mt-4">{{ form.opcional }} <label class="form-check-label">Es opcional</label></div></div>
+                <div class="form-field form-field-half"><div class="form-check mt-4">{{ form.incluido }} <label class="form-check-label">Incluir en total</label></div></div>
+                <div class="form-field form-field-half"><div class="form-check mt-4">{{ form.recomendado }} <label class="form-check-label">Destacar como recomendado</label></div></div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Agregar importe</button>
+                <a href="{% url 'quotes:detalle' view.presupuesto.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
