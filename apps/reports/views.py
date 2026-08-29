@@ -91,8 +91,13 @@ class _ReporteMensualView(PermisoRequeridoMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         hoy = timezone.localdate()
-        anio = int(self.request.GET.get("anio", hoy.year))
-        mes = int(self.request.GET.get("mes", hoy.month))
+        try:
+            anio = int(self.request.GET.get("anio", hoy.year))
+            mes = int(self.request.GET.get("mes", hoy.month))
+        except (TypeError, ValueError):
+            anio, mes = hoy.year, hoy.month
+        if not 1 <= mes <= 12 or not 2000 <= anio <= 2100:
+            anio, mes = hoy.year, hoy.month
 
         context["anio"] = anio
         context["mes"] = mes
