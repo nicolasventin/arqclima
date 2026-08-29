@@ -23,7 +23,7 @@ class NavegacionVisualTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'class="app-sidebar d-none d-lg-flex"')
         self.assertContains(response, 'id="appMobileNav"')
-        self.assertContains(response, "img/arqclima-logo.svg", count=2)
+        self.assertContains(response, "img/arqclima-logo-oficial.svg", count=2)
         self.assertNotContains(response, "img/arqclima-mark.svg")
 
     def test_inicio_queda_marcado_como_activo(self):
@@ -58,8 +58,7 @@ class NavegacionVisualTests(TestCase):
 
     def test_assets_visuales_existen_en_staticfiles(self):
         self.assertIsNotNone(finders.find("css/app.css"))
-        self.assertIsNotNone(finders.find("img/arqclima-logo.svg"))
-        self.assertIsNotNone(finders.find("img/arqclima-mark.svg"))
+        self.assertIsNotNone(finders.find("img/arqclima-logo-oficial.svg"))
 
 
 class LoginVisualTests(TestCase):
@@ -67,6 +66,6 @@ class LoginVisualTests(TestCase):
         response = self.client.get(reverse("accounts:login"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "img/arqclima-logo.svg")
+        self.assertContains(response, "img/arqclima-logo-oficial.svg")
         self.assertContains(response, "Sistema interno de gestión")
         self.assertNotContains(response, 'class="app-sidebar')
