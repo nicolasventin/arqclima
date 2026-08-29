@@ -117,6 +117,16 @@ class LineaOrdenCompra(models.Model):
 
     class Meta:
         ordering = ["orden_id", "id"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(cantidad__gt=0),
+                name="lineaordencompra_cantidad_positiva",
+            ),
+            models.CheckConstraint(
+                check=models.Q(costo_esperado__gte=0),
+                name="lineaordencompra_costo_no_negativo",
+            ),
+        ]
         verbose_name = "Línea de orden de compra"
         verbose_name_plural = "Líneas de orden de compra"
 
