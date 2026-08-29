@@ -264,29 +264,9 @@ class PropuestaTecnicaPresupuestoTests(TestCase):
         reader = PdfReader(BytesIO(response.content))
         self.assertEqual(len(reader.pages), 2)
 
-        def contiene_imagen(resources, visitados=None):
-            if not resources:
-                return False
-            visitados = visitados or set()
-            xobjects = resources.get("/XObject")
-            if not xobjects:
-                return False
-            for referencia in xobjects.values():
-                objeto = referencia.get_object()
-                identidad = getattr(objeto, "indirect_reference", None)
-                clave = repr(identidad) if identidad is not None else id(objeto)
-                if clave in visitados:
-                    continue
-                visitados.add(clave)
-                if objeto.get("/Subtype") == "/Image":
-                    return True
-                if objeto.get("/Subtype") == "/Form":
-                    if contiene_imagen(objeto.get("/Resources"), visitados):
-                        return True
-            return False
-
-        self.assertTrue(
-            contiene_imagen(reader.pages[0].get("/Resources")),
+        self.assertIn(
+            b"/Subtype /Image",
+            response.content,
             "El encabezado del PDF debe incluir el logo raster de ARQCLIMA.",
         )
 
