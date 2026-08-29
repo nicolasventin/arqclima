@@ -8,7 +8,7 @@ from apps.accounts.models import User
 from apps.catalog.models import Marca, Producto
 from apps.clients.models import Cliente
 from apps.jobs.models import EstadoTrabajo
-from apps.jobs.services import cambiar_estado_trabajo, crear_trabajo
+from apps.jobs.services import cambiar_estado_trabajo, crear_trabajo, finalizar_trabajo
 from apps.quotes.models import EstadoPresupuesto, ItemPresupuesto, Presupuesto
 from apps.quotes.services import cambiar_estado, enviar_presupuesto
 from apps.stock.models import Deposito, TipoMovimiento
@@ -108,7 +108,12 @@ class HomeViewWidgetsTests(TestCase):
 
         activo_de_andres = _trabajo(self.andres)
         terminado_de_andres = _trabajo(self.andres)
-        cambiar_estado_trabajo(terminado_de_andres, EstadoTrabajo.TERMINADO, self.diego)
+        cambiar_estado_trabajo(
+            terminado_de_andres,
+            EstadoTrabajo.EN_EJECUCION,
+            self.diego,
+        )
+        finalizar_trabajo(terminado_de_andres, self.diego)
         _trabajo(self.diego)  # de otro técnico, no debe contarse para Andrés
 
         self._login("andres_dashboard")
