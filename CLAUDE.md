@@ -2,7 +2,7 @@
 
 ## Estado de avance del proyecto
 
-**Última actualización: 2026-08-28**, al cierre de la Etapa 9 — la última del plan original —, ya mergeada a `main`. Esta sección se actualiza al cerrar cada etapa para que una sesión nueva no tenga que reconstruir el contexto a mano.
+**Última actualización: 2026-08-29**, al cierre de la Etapa 9 — la última del plan original —, ya mergeada a `main`. Esta sección se actualiza al cerrar cada etapa para que una sesión nueva no tenga que reconstruir el contexto a mano.
 
 ### Etapas cerradas
 
@@ -241,6 +241,15 @@ La Etapa 11 se continúa en bloques pequeños y verificables, sin agrupar cambio
 - **11J — Interfaz cliqueable**: hacer cliqueable la fila o bloque completo en listados, preservando acciones internas.
 - **11K — Simplificar órdenes de compra**: eliminar aprobación obligatoria/checkbox y adaptar estados, dashboard, permisos y pruebas.\n\n**11K — Órdenes de compra sin aprobación obligatoria (implementado):**\n- Estados operativos: Borrador → Emitida → Enviada → Recepción parcial / Recibida → Cerrada; Cancelada antes de recepción.\n- Emitir congela las líneas mediante el trigger existente que solo permite editarlas en Borrador.\n- Emitida puede volver a Borrador antes del envío; la reapertura se audita y anula el hito de emisión vigente.\n- Se elimina `approve_ordendecompra` y las rutas/acciones de aprobar, rechazar y enviar a aprobación.\n- Estados históricos Pendiente/Aprobada migran a Emitida; Rechazada migra a Borrador conservando columnas legacy y AuditLog.\n- Dashboard de Dirección reemplaza “Compras por aprobar” por “Órdenes para enviar”.
 - **11L — Emisión y envío de OC**: generar PDF oficial y enviar/preparar correo al proveedor, guardando destinatario, usuario, fecha y documento enviado.
+
+**11L — PDF oficial + envío por correo (implementado):**
+- Una OC Emitida muestra “Ver PDF” y “Enviar por email”; desaparece la acción manual “Marcar enviada”.
+- El PDF usa el logo corporativo oficial, datos configurables de ARQCLIMA, proveedor, destino, productos, códigos, cantidades, costos y total.
+- El asunto usa un identificador humano estable `OC-AAAA-NNNN`; el PDF exacto enviado queda guardado en `MEDIA_ROOT/ordenes_compra/`.
+- Se persisten `enviada_a`, `estado_envio`, último intento/error y `pdf_generado`; `enviada_por`/`enviada_en` siguen siendo el hito exitoso.
+- `estado_envio=ENVIANDO` evita dobles clics concurrentes. Un fallo de PDF/SMTP deja la OC en Emitida y `ERROR`, permitiendo reintento sin perder trazabilidad.
+- El proveedor debe tener email. En producción se usa SMTP por defecto; las credenciales y datos corporativos salen de variables de entorno.
+- Volver una OC Emitida a Borrador invalida y limpia el snapshot PDF técnico previo para no enviar un documento viejo después de editar.
 - **11I — Reportes visuales**: incorporar KPIs y gráficos útiles, evitando gráficos decorativos sin información.
 - **11H — Importación masiva de productos**: Excel/CSV primero y luego PDF/Word, siempre con análisis, vista previa, validación y confirmación antes de modificar la base.
 - **11M — Auditoría de roles**: revisar la matriz real de permisos de Administrador, Ventas y Presupuestos, Service y Repuestos, Depósito y Técnico de Campo contra el trabajo real de la empresa.

@@ -47,10 +47,10 @@ Trabajo terminado
 ```
 
 Encima de ese flujo, dos cosas transversales: **órdenes de compra** (cuando
-falta reponer stock o comprar algo puntual para una obra, con aprobación
-obligatoria de Diego antes de enviarlas al proveedor) y **tareas** del
-equipo, algunas manuales y algunas que el sistema genera solo (ver más
-abajo).
+falta reponer stock o comprar algo puntual para una obra: se emiten, generan
+un PDF oficial y se envían por correo al proveedor, sin aprobación obligatoria
+intermedia) y **tareas** del equipo, algunas manuales y algunas que el sistema
+genera solo (ver más abajo).
 
 ## Quién lo usa
 
@@ -59,7 +59,7 @@ Diego puede ampliar puntualmente sin cambiarle el rol a nadie:
 
 | Persona | Rol | Qué hace en el sistema |
 |---|---|---|
-| Diego | Administrador | Acceso total: usuarios/permisos, aprueba presupuestos y órdenes de compra, configura márgenes y stock mínimo, auditoría. |
+| Diego | Administrador | Acceso total: usuarios/permisos, decisiones comerciales, compras, configura márgenes y stock mínimo, auditoría. |
 | Rodrigo | Ventas y Presupuestos | Clientes, presupuestos de punta a punta, crea órdenes de compra, pide materiales a depósito. |
 | Gabriel | Service y Repuestos | Línea de repuestos casi autónoma: catálogo propio, stock de repuestos, precios a técnicos, sus propias órdenes de compra. |
 | Contri | Depósito | Controla stock general (no repuestos), prepara materiales para los trabajos, entradas/salidas/ajustes. |
@@ -80,7 +80,7 @@ El detalle completo de reglas de negocio y permisos por rol está en
   simple y estándar por sobre algo moderno pero más complejo.
 - **Autenticación**: la de Django, con roles (`django.contrib.auth.Group`)
   + overrides individuales de permisos por usuario.
-- Excel de listas de precios: `openpyxl`. PDF de presupuestos: `xhtml2pdf`.
+- Excel de listas de precios: `openpyxl`. PDF de presupuestos y órdenes de compra: `xhtml2pdf`.
 
 ## Estructura del proyecto
 
@@ -117,6 +117,9 @@ retomar el proyecto sin tener que reconstruir el contexto a mano.
    ```
 3. Variables de entorno: copiar `.env.example` a `.env` y ajustar si hace
    falta (los valores por defecto ya coinciden con el `docker-compose.yml`).
+   Para enviar órdenes de compra reales por correo, en producción hay que
+   configurar las variables `DJANGO_EMAIL_*` y `ARQCLIMA_EMAIL_FROM` con
+   la cuenta SMTP de la empresa.
 4. Migraciones:
    ```
    python manage.py migrate

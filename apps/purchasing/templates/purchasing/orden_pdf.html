@@ -1,0 +1,200 @@
+{% load static %}
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    @page {
+        size: A4;
+        margin: 26mm 16mm 22mm 16mm;
+    }
+    body {
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 10px;
+        color: #1f2937;
+    }
+    .header-table {
+        width: 100%;
+        border: 0;
+        margin-bottom: 16px;
+    }
+    .header-table td {
+        border: 0;
+        vertical-align: top;
+    }
+    .logo {
+        width: 190px;
+    }
+    .doc-title {
+        text-align: right;
+        font-size: 19px;
+        font-weight: bold;
+        color: #075B9B;
+        margin-bottom: 4px;
+    }
+    .doc-number {
+        text-align: right;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .muted { color: #6b7280; }
+    .section-title {
+        margin-top: 16px;
+        margin-bottom: 6px;
+        font-size: 11px;
+        font-weight: bold;
+        color: #075B9B;
+        text-transform: uppercase;
+    }
+    .info-table, .lines-table, .total-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .info-table td {
+        border: 1px solid #d1d5db;
+        padding: 5px 7px;
+        vertical-align: top;
+    }
+    .info-label {
+        width: 23%;
+        font-weight: bold;
+        background-color: #f3f4f6;
+    }
+    .lines-table th, .lines-table td {
+        border: 1px solid #d1d5db;
+        padding: 5px 5px;
+        vertical-align: top;
+    }
+    .lines-table th {
+        background-color: #075B9B;
+        color: white;
+        font-size: 9px;
+    }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+    .total-table {
+        width: 42%;
+        margin-left: 58%;
+        margin-top: 10px;
+    }
+    .total-table td {
+        border: 1px solid #d1d5db;
+        padding: 6px 8px;
+    }
+    .total-label {
+        font-weight: bold;
+        background-color: #f3f4f6;
+    }
+    .grand-total {
+        font-size: 12px;
+        font-weight: bold;
+        color: #075B9B;
+    }
+    .notes {
+        border: 1px solid #d1d5db;
+        padding: 8px;
+        background-color: #fafafa;
+    }
+    .footer {
+        margin-top: 24px;
+        border-top: 1px solid #d1d5db;
+        padding-top: 7px;
+        font-size: 8px;
+        color: #6b7280;
+        text-align: center;
+    }
+</style>
+</head>
+<body>
+    <table class="header-table">
+        <tr>
+            <td style="width: 55%;">
+                <img src="{% static 'img/arqclima-logo.svg' %}" class="logo">
+                {% if empresa.razon_social %}<div>{{ empresa.razon_social }}</div>{% endif %}
+                {% if empresa.cuit %}<div>CUIT: {{ empresa.cuit }}</div>{% endif %}
+                {% if empresa.direccion %}<div>{{ empresa.direccion }}</div>{% endif %}
+                {% if empresa.telefono %}<div>{{ empresa.telefono }}</div>{% endif %}
+                {% if empresa.email %}<div>{{ empresa.email }}</div>{% endif %}
+            </td>
+            <td style="width: 45%;">
+                <div class="doc-title">ORDEN DE COMPRA</div>
+                <div class="doc-number">{{ documento_numero }}</div>
+                <div class="muted" style="text-align:right;">
+                    Emitida: {{ orden.emitida_en|default:orden.creado_en|date:"d/m/Y H:i" }}
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="section-title">Proveedor</div>
+    <table class="info-table">
+        <tr>
+            <td class="info-label">Proveedor</td>
+            <td>{{ orden.proveedor.nombre_comercial }}</td>
+            <td class="info-label">CUIT</td>
+            <td>{{ orden.proveedor.cuit|default:"—" }}</td>
+        </tr>
+        <tr>
+            <td class="info-label">Razón social</td>
+            <td>{{ orden.proveedor.razon_social|default:"—" }}</td>
+            <td class="info-label">Contacto</td>
+            <td>{{ orden.proveedor.contacto_nombre|default:"—" }}</td>
+        </tr>
+        <tr>
+            <td class="info-label">Email</td>
+            <td>{{ orden.proveedor.email|default:"—" }}</td>
+            <td class="info-label">Teléfono</td>
+            <td>{{ orden.proveedor.telefono|default:"—" }}</td>
+        </tr>
+        <tr>
+            <td class="info-label">Destino</td>
+            <td colspan="3">{{ orden.get_deposito_destino_display }}</td>
+        </tr>
+    </table>
+
+    <div class="section-title">Detalle</div>
+    <table class="lines-table">
+        <thead>
+            <tr>
+                <th style="width: 13%;">Código</th>
+                <th style="width: 35%;">Producto</th>
+                <th style="width: 13%;">Cód. proveedor</th>
+                <th style="width: 9%;">Unidad</th>
+                <th style="width: 8%;">Cant.</th>
+                <th style="width: 11%;">Costo unit.</th>
+                <th style="width: 11%;">Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for fila in lineas_documento %}
+            <tr>
+                <td>{{ fila.codigo }}</td>
+                <td>{{ fila.producto.nombre }}<br><span class="muted">{{ fila.producto.marca.nombre }}</span></td>
+                <td>{{ fila.codigo_proveedor|default:"—" }}</td>
+                <td>{{ fila.unidad }}</td>
+                <td class="text-right">{{ fila.linea.cantidad }}</td>
+                <td class="text-right">$ {{ fila.linea.costo_esperado }}</td>
+                <td class="text-right">$ {{ fila.subtotal }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <table class="total-table">
+        <tr>
+            <td class="total-label">Total orden</td>
+            <td class="text-right grand-total">$ {{ total_documento }}</td>
+        </tr>
+    </table>
+
+    {% if orden.notas %}
+    <div class="section-title">Observaciones</div>
+    <div class="notes">{{ orden.notas|linebreaksbr }}</div>
+    {% endif %}
+
+    <div class="footer">
+        {{ empresa.nombre }}{% if empresa.tagline %} · {{ empresa.tagline }}{% endif %}
+        · Documento generado por el sistema interno ARQCLIMA.
+    </div>
+</body>
+</html>

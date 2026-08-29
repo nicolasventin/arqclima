@@ -15,6 +15,13 @@ class EstadoOrdenCompra(models.TextChoices):
     CANCELADA = "cancelada", "Cancelada"
 
 
+class EstadoEnvioOrdenCompra(models.TextChoices):
+    PENDIENTE = "pendiente", "Pendiente"
+    ENVIANDO = "enviando", "Enviando"
+    ENVIADO = "enviado", "Enviado"
+    ERROR = "error", "Error"
+
+
 # Las transiciones a RECEPCION_PARCIAL y RECIBIDA son automáticas desde
 # recibir_linea(); CERRADA se ejecuta mediante cerrar_orden().
 TRANSICIONES_VALIDAS = {
@@ -57,6 +64,9 @@ class OrdenDeCompra(models.Model):
     Los campos legacy de aprobación se conservan por compatibilidad
     histórica: no participan del flujo nuevo y permiten no destruir
     trazabilidad de órdenes creadas antes de 11K.
+
+    Desde 11L, el envío por correo guarda el destinatario, estado técnico
+    del envío y una copia exacta del PDF enviado al proveedor.
     """
 
     numero = models.PositiveIntegerField(
@@ -126,6 +136,15 @@ class OrdenDeCompra(models.Model):
         related_name="ordenes_compra_enviadas",
     )
     enviada_en = models.DateTimeField(null=True, blank=True)
+    enviada_a = models.EmailField(blank=True)
+    estado_envio = models.CharField(
+        max_length=20,
+        choices=EstadoEnvioOrdenCompra.choices,
+        default=EstadoEnvioOrdenCompra.PENDIENTE,
+    )
+    ultimo_intento_envio_en = models.DateTimeField(null=True, blank=True)
+    ultimo_error_envio = models.TextField(blank=True)
+    pdf_generado = models.FileField(upload_to="ordenes_compra/", blank=True)
 
     primera_recepcion_en = models.DateTimeField(null=True, blank=True)
     recibida_en = models.DateTimeField(null=True, blank=True)

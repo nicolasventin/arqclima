@@ -103,3 +103,34 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "accounts:login"
 LOGIN_REDIRECT_URL = "dashboard:home"
 LOGOUT_REDIRECT_URL = "accounts:login"
+
+
+# Correo saliente. En desarrollo el backend por defecto imprime el mensaje
+# en consola para evitar envíos accidentales; prod.py cambia el default a SMTP.
+EMAIL_BACKEND = env(
+    "DJANGO_EMAIL_BACKEND",
+    default="django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = env("DJANGO_EMAIL_HOST", default="")
+EMAIL_PORT = env.int("DJANGO_EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("DJANGO_EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("DJANGO_EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("DJANGO_EMAIL_USE_TLS", default=True)
+EMAIL_USE_SSL = env.bool("DJANGO_EMAIL_USE_SSL", default=False)
+EMAIL_TIMEOUT = env.int("DJANGO_EMAIL_TIMEOUT", default=20)
+DEFAULT_FROM_EMAIL = env(
+    "ARQCLIMA_EMAIL_FROM",
+    default="ARQCLIMA <no-reply@localhost>",
+)
+
+# Datos opcionales para documentos oficiales. Solo se muestran los campos
+# configurados: no se inventa razón social, CUIT, dirección ni contacto.
+ARQCLIMA_COMPANY = {
+    "nombre": env("ARQCLIMA_NOMBRE", default="ARQCLIMA"),
+    "tagline": env("ARQCLIMA_TAGLINE", default="climatizando arquitectura"),
+    "razon_social": env("ARQCLIMA_RAZON_SOCIAL", default=""),
+    "cuit": env("ARQCLIMA_CUIT", default=""),
+    "direccion": env("ARQCLIMA_DIRECCION", default=""),
+    "telefono": env("ARQCLIMA_TELEFONO", default=""),
+    "email": env("ARQCLIMA_EMAIL", default=""),
+}
