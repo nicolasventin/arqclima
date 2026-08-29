@@ -20,5 +20,6 @@ urlpatterns = [
     path("<int:pk>/reabrir/", views.ReabrirOrdenView.as_view(), name="reabrir"),
     path("<int:pk>/marcar-enviada/", views.MarcarEnviadaView.as_view(), name="marcar_enviada"),
     path("<int:pk>/cancelar/", views.CancelarOrdenView.as_view(), name="cancelar"),
+    path("<int:pk>/cerrar/", views.CerrarOrdenView.as_view(), name="cerrar"),
     path("lineas/<int:linea_pk>/recibir/", views.RecibirLineaView.as_view(), name="recibir_linea"),
 ]
