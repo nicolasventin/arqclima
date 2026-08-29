@@ -50,7 +50,7 @@
             </thead>
             <tbody>
                 {% for proveedor in proveedores %}
-                <tr>
+                <tr {% if perms.catalog.change_proveedor %}data-row-href="{% url 'catalog:proveedor_editar' proveedor.pk %}" tabindex="0" role="link" aria-label="Editar proveedor {{ proveedor.nombre_comercial }}"{% endif %}>
                     <td><span class="table-primary-text">{{ proveedor.nombre_comercial }}</span></td>
                     <td>{{ proveedor.contacto_nombre|default:"—" }}</td>
                     <td>{{ proveedor.telefono|default:"—" }}</td>
