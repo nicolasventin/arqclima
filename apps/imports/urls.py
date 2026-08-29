@@ -15,6 +15,11 @@ urlpatterns = [
         name="imagen",
     ),
     path(
+        "<int:pk>/asignar-marca/",
+        views.AsignarMarcaImportacionView.as_view(),
+        name="asignar_marca",
+    ),
+    path(
         "<int:pk>/filas/<int:fila_pk>/editar/",
         views.EditarFilaImportacionView.as_view(),
         name="fila_editar",
