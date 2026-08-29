@@ -86,13 +86,8 @@ class CicloOrdenCompraTests(TestCase):
         actor = creador or self.diego
         cambiar_estado_orden(
             orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            EstadoOrdenCompra.EMITIDA,
             actor,
-        )
-        cambiar_estado_orden(
-            orden,
-            EstadoOrdenCompra.APROBADA,
-            self.diego,
         )
         cambiar_estado_orden(
             orden,
@@ -102,7 +97,7 @@ class CicloOrdenCompraTests(TestCase):
         orden.refresh_from_db()
         return orden, linea_a, linea_b
 
-    def test_no_se_puede_enviar_a_aprobacion_sin_lineas(self):
+    def test_no_se_puede_emitir_sin_lineas(self):
         orden = crear_orden(
             self.proveedor,
             Deposito.GENERAL,
@@ -112,89 +107,41 @@ class CicloOrdenCompraTests(TestCase):
         with self.assertRaisesMessage(ValueError, "sin líneas"):
             cambiar_estado_orden(
                 orden,
-                EstadoOrdenCompra.PENDIENTE_APROBACION,
+                EstadoOrdenCompra.EMITIDA,
                 self.rodrigo,
             )
 
         orden.refresh_from_db()
         self.assertEqual(orden.estado, EstadoOrdenCompra.BORRADOR)
 
-    def test_servicio_impide_que_rodrigo_apruebe(self):
+    def test_rodrigo_puede_emitir_sin_aprobacion_de_diego(self):
         orden, _, _ = self._orden(creador=self.rodrigo)
         cambiar_estado_orden(
             orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            EstadoOrdenCompra.EMITIDA,
             self.rodrigo,
         )
-
-        with self.assertRaises(PermissionError):
-            cambiar_estado_orden(
-                orden,
-                EstadoOrdenCompra.APROBADA,
-                self.rodrigo,
-            )
-
         orden.refresh_from_db()
-        self.assertEqual(
-            orden.estado,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
-        )
 
-    def test_solicitud_aprobacion_y_aprobacion_guardan_actor_y_fecha(self):
+        self.assertEqual(orden.estado, EstadoOrdenCompra.EMITIDA)
+        self.assertEqual(orden.emitida_por, self.rodrigo)
+        self.assertIsNotNone(orden.emitida_en)
+
+    def test_emitida_puede_reabrirse_a_borrador(self):
         orden, _, _ = self._orden(creador=self.rodrigo)
-
-        cambiar_estado_orden(
-            orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
-            self.rodrigo,
-        )
-        cambiar_estado_orden(
-            orden,
-            EstadoOrdenCompra.APROBADA,
-            self.diego,
-        )
-
-        orden.refresh_from_db()
-        self.assertEqual(orden.solicitud_aprobacion_por, self.rodrigo)
-        self.assertIsNotNone(orden.solicitud_aprobacion_en)
-        self.assertEqual(orden.aprobada_por, self.diego)
-        self.assertIsNotNone(orden.aprobada_en)
-
-    def test_rechazo_requiere_motivo_y_lo_guarda(self):
-        orden, _, _ = self._orden()
-        cambiar_estado_orden(
-            orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
-            self.diego,
-        )
-
-        with self.assertRaisesMessage(ValueError, "motivo del rechazo"):
-            cambiar_estado_orden(
-                orden,
-                EstadoOrdenCompra.RECHAZADA,
-                self.diego,
-            )
-
-        cambiar_estado_orden(
-            orden,
-            EstadoOrdenCompra.RECHAZADA,
-            self.diego,
-            motivo="Precio fuera de lo acordado",
-        )
+        cambiar_estado_orden(orden, EstadoOrdenCompra.EMITIDA, self.rodrigo)
+        cambiar_estado_orden(orden, EstadoOrdenCompra.BORRADOR, self.rodrigo)
         orden.refresh_from_db()
 
-        self.assertEqual(orden.rechazada_por, self.diego)
-        self.assertIsNotNone(orden.rechazada_en)
-        self.assertEqual(
-            orden.motivo_rechazo,
-            "Precio fuera de lo acordado",
-        )
+        self.assertEqual(orden.estado, EstadoOrdenCompra.BORRADOR)
+        self.assertIsNone(orden.emitida_por)
+        self.assertIsNone(orden.emitida_en)
 
     def test_cancelacion_requiere_motivo_y_lo_guarda(self):
         orden, _, _ = self._orden()
         cambiar_estado_orden(
             orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            EstadoOrdenCompra.EMITIDA,
             self.diego,
         )
 
@@ -224,13 +171,8 @@ class CicloOrdenCompraTests(TestCase):
         orden, _, _ = self._orden(creador=self.rodrigo)
         cambiar_estado_orden(
             orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            EstadoOrdenCompra.EMITIDA,
             self.rodrigo,
-        )
-        cambiar_estado_orden(
-            orden,
-            EstadoOrdenCompra.APROBADA,
-            self.diego,
         )
         cambiar_estado_orden(
             orden,
@@ -312,9 +254,7 @@ class CicloOrdenCompraTests(TestCase):
             self.contri,
         )
 
-        with self.assertRaises(
-            (TransicionInvalidaError, ValueError)
-        ):
+        with self.assertRaises((TransicionInvalidaError, ValueError)):
             cambiar_estado_orden(
                 orden,
                 EstadoOrdenCompra.CANCELADA,
@@ -389,17 +329,12 @@ class CicloOrdenCompraTests(TestCase):
         with self.assertRaises(PermissionError):
             cerrar_orden(orden, self.rodrigo)
 
-    def test_auditoria_distingue_hitos_del_ciclo(self):
+    def test_auditoria_distingue_emision_y_envio(self):
         orden, _, _ = self._orden(creador=self.rodrigo)
         cambiar_estado_orden(
             orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            EstadoOrdenCompra.EMITIDA,
             self.rodrigo,
-        )
-        cambiar_estado_orden(
-            orden,
-            EstadoOrdenCompra.APROBADA,
-            self.diego,
         )
         cambiar_estado_orden(
             orden,
@@ -412,12 +347,9 @@ class CicloOrdenCompraTests(TestCase):
                 object_id=str(orden.pk),
             ).values_list("accion", flat=True)
         )
-        self.assertIn(
-            "solicitar_aprobacion_orden_compra",
-            acciones,
-        )
-        self.assertIn("aprobar_orden_compra", acciones)
+        self.assertIn("emitir_orden_compra", acciones)
         self.assertIn("enviar_orden_compra_proveedor", acciones)
+        self.assertNotIn("aprobar_orden_compra", acciones)
 
 
 class TriggerCicloOrdenCompraTests(TestCase):
@@ -460,16 +392,20 @@ class TriggerCicloOrdenCompraTests(TestCase):
                     estado=EstadoOrdenCompra.ENVIADA
                 )
 
+    def test_db_rechaza_emitida_sin_metadatos(self):
+        orden = self._orden_con_linea()
+
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                OrdenDeCompra.objects.filter(pk=orden.pk).update(
+                    estado=EstadoOrdenCompra.EMITIDA
+                )
+
     def test_db_rechaza_recibida_sin_movimientos_reales(self):
         orden = self._orden_con_linea()
         cambiar_estado_orden(
             orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
-            self.diego,
-        )
-        cambiar_estado_orden(
-            orden,
-            EstadoOrdenCompra.APROBADA,
+            EstadoOrdenCompra.EMITIDA,
             self.diego,
         )
         cambiar_estado_orden(
@@ -488,7 +424,7 @@ class TriggerCicloOrdenCompraTests(TestCase):
         orden = self._orden_con_linea()
         cambiar_estado_orden(
             orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
+            EstadoOrdenCompra.EMITIDA,
             self.diego,
         )
 
@@ -529,16 +465,11 @@ class VistasCicloOrdenCompraTests(TestCase):
         )
         cambiar_estado_orden(
             self.orden,
-            EstadoOrdenCompra.PENDIENTE_APROBACION,
-            self.diego,
-        )
-        cambiar_estado_orden(
-            self.orden,
-            EstadoOrdenCompra.APROBADA,
+            EstadoOrdenCompra.EMITIDA,
             self.diego,
         )
 
-    def test_no_hay_recepcion_directa_mientras_esta_solo_aprobada(self):
+    def test_no_hay_recepcion_directa_mientras_esta_solo_emitida(self):
         self.client.login(
             username=self.contri.username,
             password="clave12345",
@@ -552,7 +483,7 @@ class VistasCicloOrdenCompraTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_detalle_muestra_hitos_y_estado_parcial(self):
+    def test_detalle_muestra_emision_hitos_y_estado_parcial(self):
         cambiar_estado_orden(
             self.orden,
             EstadoOrdenCompra.ENVIADA,
@@ -577,9 +508,11 @@ class VistasCicloOrdenCompraTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Emitida")
         self.assertContains(response, "Recepción parcial")
         self.assertContains(response, "Primera recepción")
         self.assertContains(response, "Motivo obligatorio del cierre parcial")
+        self.assertNotContains(response, "Aprobada")
 
     def test_cierre_parcial_desde_vista_exige_motivo(self):
         cambiar_estado_orden(
