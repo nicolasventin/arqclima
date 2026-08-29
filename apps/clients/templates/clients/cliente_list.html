@@ -53,7 +53,7 @@
             </thead>
             <tbody>
                 {% for cliente in clientes %}
-                <tr>
+                <tr {% if perms.clients.change_cliente %}data-row-href="{% url 'clients:editar' cliente.pk %}" tabindex="0" role="link" aria-label="Editar cliente {{ cliente.nombre }}"{% endif %}>
                     <td><span class="table-primary-text">{{ cliente.nombre }}</span></td>
                     <td>{{ cliente.get_tipo_display }}</td>
                     <td>{{ cliente.cuit_dni|default:"—" }}</td>

@@ -49,7 +49,7 @@
             </thead>
             <tbody>
                 {% for trabajo in trabajos %}
-                <tr>
+                <tr data-row-href="{% url 'jobs:detalle' trabajo.pk %}" tabindex="0" role="link" aria-label="Abrir trabajo #{{ trabajo.pk }}">
                     <td>
                         <a class="table-link" href="{% url 'jobs:detalle' trabajo.pk %}">#{{ trabajo.pk }}</a>
                         {% if trabajo.direccion %}<span class="table-secondary-text">{{ trabajo.direccion }}</span>{% endif %}

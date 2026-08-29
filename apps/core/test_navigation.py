@@ -25,6 +25,7 @@ class NavegacionVisualTests(TestCase):
         self.assertContains(response, 'id="appMobileNav"')
         self.assertContains(response, "img/arqclima-logo-oficial.svg", count=2)
         self.assertNotContains(response, "img/arqclima-mark.svg")
+        self.assertContains(response, "js/app.js")
 
     def test_inicio_queda_marcado_como_activo(self):
         response = self.client.get(reverse("dashboard:home"))
@@ -59,6 +60,7 @@ class NavegacionVisualTests(TestCase):
     def test_assets_visuales_existen_en_staticfiles(self):
         self.assertIsNotNone(finders.find("css/app.css"))
         self.assertIsNotNone(finders.find("img/arqclima-logo-oficial.svg"))
+        self.assertIsNotNone(finders.find("js/app.js"))
 
 
 class LoginVisualTests(TestCase):

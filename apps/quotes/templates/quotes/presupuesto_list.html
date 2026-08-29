@@ -57,7 +57,7 @@
             </thead>
             <tbody>
                 {% for presupuesto in presupuestos %}
-                <tr>
+                <tr data-row-href="{% url 'quotes:detalle' presupuesto.pk %}" tabindex="0" role="link" aria-label="Abrir presupuesto #{{ presupuesto.numero }}">
                     <td><a class="table-link" href="{% url 'quotes:detalle' presupuesto.pk %}">#{{ presupuesto.numero }}</a></td>
                     <td>
                         <span class="table-primary-text">{{ presupuesto.cliente.nombre }}</span>
