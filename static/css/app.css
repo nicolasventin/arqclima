@@ -452,3 +452,414 @@ a {
         background: #043c62;
     }
 }
+
+
+/* 11B · Dashboard por rol */
+.dashboard-hero {
+    position: relative;
+    overflow: hidden;
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+    padding: 2rem;
+    border-radius: 20px;
+    background:
+        linear-gradient(120deg, rgba(7,95,152,.98), rgba(4,60,98,.98)),
+        var(--app-brand);
+    color: #fff;
+    box-shadow: 0 16px 40px rgba(4,60,98,.16);
+}
+
+.dashboard-hero::after {
+    content: "";
+    position: absolute;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    right: -100px;
+    top: -150px;
+    background: rgba(255,255,255,.06);
+}
+
+.dashboard-hero-copy {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+}
+
+.dashboard-eyebrow,
+.dashboard-panel-kicker {
+    font-size: .7rem;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+
+.dashboard-eyebrow {
+    color: rgba(255,255,255,.62);
+    margin-bottom: .45rem;
+}
+
+.dashboard-hero h1 {
+    margin: 0;
+    font-size: clamp(1.7rem, 3vw, 2.45rem);
+    font-weight: 750;
+    letter-spacing: -.03em;
+}
+
+.dashboard-hero p {
+    max-width: 650px;
+    margin: .55rem 0 0;
+    color: rgba(255,255,255,.72);
+    font-size: 1rem;
+}
+
+.dashboard-role-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    margin-top: 1rem;
+    padding: .4rem .7rem;
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 999px;
+    background: rgba(255,255,255,.08);
+    color: rgba(255,255,255,.88);
+    font-size: .78rem;
+    font-weight: 600;
+}
+
+.dashboard-hero-mark {
+    position: relative;
+    z-index: 1;
+    width: 94px;
+    height: 94px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 24px;
+    background: rgba(255,255,255,.1);
+    border: 1px solid rgba(255,255,255,.12);
+    color: rgba(255,255,255,.9);
+    font-size: 2.7rem;
+}
+
+.dashboard-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.dashboard-metric {
+    position: relative;
+    min-width: 0;
+    display: flex;
+    gap: .9rem;
+    align-items: flex-start;
+    padding: 1.15rem;
+    border: 1px solid var(--app-border);
+    border-radius: 16px;
+    background: var(--app-surface);
+    box-shadow: 0 5px 20px rgba(18,52,71,.045);
+}
+
+.dashboard-metric-icon {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 12px;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+    font-size: 1.15rem;
+}
+
+.dashboard-metric-warning .dashboard-metric-icon {
+    background: #fff7e6;
+    color: #b76e00;
+}
+
+.dashboard-metric-danger .dashboard-metric-icon {
+    background: #feeceb;
+    color: #b42318;
+}
+
+.dashboard-metric-success .dashboard-metric-icon {
+    background: #e9f8ef;
+    color: #1d7a46;
+}
+
+.dashboard-metric-copy {
+    min-width: 0;
+}
+
+.dashboard-metric-label {
+    color: var(--app-muted);
+    font-size: .78rem;
+    font-weight: 600;
+}
+
+.dashboard-metric-value {
+    margin-top: .15rem;
+    font-size: 1.8rem;
+    line-height: 1.05;
+    font-weight: 760;
+    letter-spacing: -.03em;
+}
+
+.dashboard-metric-hint {
+    margin-top: .3rem;
+    color: var(--app-muted);
+    font-size: .72rem;
+}
+
+.dashboard-metric-link {
+    position: absolute;
+    top: .8rem;
+    right: .85rem;
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    color: var(--app-muted);
+    text-decoration: none;
+}
+
+.dashboard-metric-link:hover {
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+}
+
+.dashboard-panel {
+    padding: 1.25rem;
+    border: 1px solid var(--app-border);
+    border-radius: 18px;
+    background: var(--app-surface);
+    box-shadow: 0 5px 20px rgba(18,52,71,.04);
+}
+
+.dashboard-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.dashboard-panel-kicker {
+    color: var(--app-accent);
+    margin-bottom: .18rem;
+}
+
+.dashboard-panel h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 720;
+}
+
+.dashboard-task-list,
+.dashboard-jobs,
+.dashboard-alert-list,
+.dashboard-actions {
+    display: grid;
+    gap: .6rem;
+}
+
+.dashboard-task-row,
+.dashboard-job-row,
+.dashboard-alert-row {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    padding: .8rem .85rem;
+    border: 1px solid var(--app-border);
+    border-radius: 12px;
+    background: var(--app-surface-soft);
+}
+
+.dashboard-task-row.is-overdue {
+    border-color: #f3c5c1;
+    background: #fff8f7;
+}
+
+.dashboard-task-state {
+    color: var(--app-accent);
+}
+
+.dashboard-task-row.is-overdue .dashboard-task-state {
+    color: var(--app-danger);
+}
+
+.dashboard-task-copy,
+.dashboard-job-row > div:first-child,
+.dashboard-alert-row > div {
+    min-width: 0;
+    flex: 1;
+}
+
+.dashboard-task-copy strong,
+.dashboard-task-copy span,
+.dashboard-job-row strong,
+.dashboard-job-row span,
+.dashboard-alert-row strong,
+.dashboard-alert-row span {
+    display: block;
+}
+
+.dashboard-task-copy strong,
+.dashboard-job-row strong,
+.dashboard-alert-row strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: .87rem;
+}
+
+.dashboard-task-copy span,
+.dashboard-job-row span,
+.dashboard-alert-row span {
+    margin-top: .12rem;
+    color: var(--app-muted);
+    font-size: .72rem;
+}
+
+.dashboard-task-status {
+    color: var(--app-muted);
+    font-size: .72rem;
+    white-space: nowrap;
+}
+
+.dashboard-action {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    min-height: 48px;
+    padding: .65rem .75rem;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: var(--app-accent-soft);
+    color: var(--app-brand-strong);
+    text-decoration: none;
+    font-weight: 650;
+    font-size: .84rem;
+}
+
+.dashboard-action.is-outline {
+    background: #fff;
+    border-color: var(--app-border);
+}
+
+.dashboard-action:hover {
+    color: var(--app-brand-strong);
+    border-color: #c7dbe6;
+    transform: translateY(-1px);
+}
+
+.dashboard-action-icon {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 9px;
+    background: rgba(7,95,152,.1);
+    color: var(--app-accent);
+}
+
+.dashboard-team-link {
+    margin-top: 1rem;
+    padding-top: .9rem;
+    border-top: 1px solid var(--app-border);
+}
+
+.dashboard-team-link a {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    color: var(--app-muted);
+    text-decoration: none;
+    font-size: .78rem;
+    font-weight: 600;
+}
+
+.dashboard-empty {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: .35rem;
+    padding: 1.2rem;
+    border: 1px dashed #ccd5db;
+    border-radius: 12px;
+    color: var(--app-muted);
+    text-align: center;
+}
+
+.dashboard-empty i {
+    color: #74a8c4;
+    font-size: 1.7rem;
+}
+
+.dashboard-empty strong {
+    color: var(--app-text);
+    font-size: .9rem;
+}
+
+.dashboard-empty span {
+    font-size: .75rem;
+}
+
+.dashboard-empty.compact {
+    min-height: 100px;
+}
+
+.dashboard-job-row {
+    justify-content: space-between;
+    color: var(--app-text);
+    text-decoration: none;
+}
+
+.dashboard-job-row:hover {
+    border-color: #c6dbe7;
+    background: #f5fafc;
+    color: var(--app-text);
+}
+
+.dashboard-alert-icon {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 9px;
+    background: #feeceb;
+    color: var(--app-danger);
+}
+
+@media (max-width: 1199.98px) {
+    .dashboard-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 575.98px) {
+    .dashboard-hero {
+        min-height: 160px;
+        padding: 1.35rem;
+    }
+
+    .dashboard-hero-mark {
+        display: none;
+    }
+
+    .dashboard-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-task-status {
+        display: none;
+    }
+}
