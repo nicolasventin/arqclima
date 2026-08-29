@@ -11,12 +11,15 @@ class EstadoOrdenCompra(models.TextChoices):
     APROBADA = "aprobada", "Aprobada"
     RECHAZADA = "rechazada", "Rechazada"
     ENVIADA = "enviada", "Enviada"
+    RECEPCION_PARCIAL = "recepcion_parcial", "Recepción parcial"
+    RECIBIDA = "recibida", "Recibida"
+    CERRADA = "cerrada", "Cerrada"
     CANCELADA = "cancelada", "Cancelada"
 
 
-# Grafo explícito (a diferencia de Trabajo, acá no hay un único orden de
-# avance — Rechazada y Cancelada son ramas laterales, no posiciones en
-# una secuencia) — mismo criterio que Presupuesto en la Etapa 5.
+# Grafo de ciclo de vida. Las transiciones a RECEPCION_PARCIAL y
+# RECIBIDA son automáticas desde recibir_linea(); CERRADA se ejecuta
+# mediante cerrar_orden(). El resto son acciones explícitas del usuario.
 TRANSICIONES_VALIDAS = {
     EstadoOrdenCompra.BORRADOR: {EstadoOrdenCompra.PENDIENTE_APROBACION},
     EstadoOrdenCompra.PENDIENTE_APROBACION: {
@@ -26,34 +29,42 @@ TRANSICIONES_VALIDAS = {
         EstadoOrdenCompra.CANCELADA,
     },
     EstadoOrdenCompra.RECHAZADA: {EstadoOrdenCompra.BORRADOR},
-    EstadoOrdenCompra.APROBADA: {EstadoOrdenCompra.ENVIADA, EstadoOrdenCompra.CANCELADA},
-    EstadoOrdenCompra.ENVIADA: {EstadoOrdenCompra.CANCELADA},
+    EstadoOrdenCompra.APROBADA: {
+        EstadoOrdenCompra.ENVIADA,
+        EstadoOrdenCompra.CANCELADA,
+    },
+    EstadoOrdenCompra.ENVIADA: {
+        EstadoOrdenCompra.RECEPCION_PARCIAL,
+        EstadoOrdenCompra.RECIBIDA,
+        EstadoOrdenCompra.CANCELADA,
+    },
+    EstadoOrdenCompra.RECEPCION_PARCIAL: {
+        EstadoOrdenCompra.RECIBIDA,
+        EstadoOrdenCompra.CERRADA,
+    },
+    EstadoOrdenCompra.RECIBIDA: {EstadoOrdenCompra.CERRADA},
+    EstadoOrdenCompra.CERRADA: set(),
     EstadoOrdenCompra.CANCELADA: set(),
 }
 
 
 class OrdenDeCompra(models.Model):
     """
-    Regla de negocio 7: Rodrigo, Gabriel y Andrés pueden crear órdenes
-    de compra, pero Diego tiene que aprobarlas antes de que se envíen
-    al proveedor — bloqueo real, no una alerta. El bloqueo es
-    estructural: `Enviada` solo es alcanzable desde `Aprobada` en
-    TRANSICIONES_VALIDAS, nunca directo desde Borrador/Pendiente, y la
-    transición puntual Pendiente→Aprobada tiene su propio permiso
-    exclusivo de Diego (ver apps.purchasing.permissions).
+    Ciclo de compra:
+    Borrador → Pendiente de aprobación → Aprobada → Enviada →
+    Recepción parcial → Recibida → Cerrada.
 
-    `numero` sale de una secuencia de Postgres (migración 0001), mismo
-    criterio que Presupuesto.numero en la Etapa 5 — nunca max()+1.
+    Rechazada y Cancelada son ramas laterales. Diego debe aprobar antes
+    de que la orden pueda enviarse al proveedor. Una vez recibida
+    mercadería, la orden ya no se cancela: si el proveedor no entregará
+    el remanente, se cierra como recepción parcial dejando motivo.
 
-    `deposito_destino` es un campo explícito, no inferido del rol de
-    quien crea la orden: Diego puede crear/aprobar cualquier orden y
-    no tiene un depósito "por defecto" implícito.
+    Las líneas solo son editables en Borrador (trigger de PostgreSQL).
+    Por eso una aprobación siempre corresponde exactamente al contenido
+    que Diego revisó.
 
-    Aprobada/Enviada NO vuelven a Borrador — mismo motivo que
-    Presupuesto.Aceptado: si se pudiera reabrir después de aprobada, la
-    aprobación de Diego quedaría aplicada a datos que ya cambiaron. Si
-    hace falta modificar algo después de aprobada, se cancela y se
-    crea una orden nueva.
+    Los campos de usuario/fecha guardan el hito operativo actual de
+    manera consultable. El historial completo sigue viviendo en AuditLog.
     """
 
     numero = models.PositiveIntegerField(
@@ -77,6 +88,66 @@ class OrdenDeCompra(models.Model):
     )
     creado_en = models.DateTimeField(auto_now_add=True)
 
+    solicitud_aprobacion_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ordenes_compra_solicitadas_aprobacion",
+    )
+    solicitud_aprobacion_en = models.DateTimeField(null=True, blank=True)
+
+    aprobada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ordenes_compra_aprobadas",
+    )
+    aprobada_en = models.DateTimeField(null=True, blank=True)
+
+    rechazada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ordenes_compra_rechazadas",
+    )
+    rechazada_en = models.DateTimeField(null=True, blank=True)
+    motivo_rechazo = models.TextField(blank=True)
+
+    enviada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ordenes_compra_enviadas",
+    )
+    enviada_en = models.DateTimeField(null=True, blank=True)
+
+    primera_recepcion_en = models.DateTimeField(null=True, blank=True)
+    recibida_en = models.DateTimeField(null=True, blank=True)
+
+    cerrada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ordenes_compra_cerradas",
+    )
+    cerrada_en = models.DateTimeField(null=True, blank=True)
+    motivo_cierre = models.TextField(blank=True)
+
+    cancelada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ordenes_compra_canceladas",
+    )
+    cancelada_en = models.DateTimeField(null=True, blank=True)
+    motivo_cancelacion = models.TextField(blank=True)
+
     class Meta:
         ordering = ["-numero"]
         verbose_name = "Orden de compra"
@@ -91,21 +162,13 @@ class OrdenDeCompra(models.Model):
 
 class LineaOrdenCompra(models.Model):
     """
-    `producto_proveedor` resuelve explícitamente de qué proveedor
-    puntual sale cada línea (regla de negocio 2: nunca auto-elegir),
-    mismo mecanismo que ItemPresupuesto.producto_proveedor.
+    producto_proveedor resuelve explícitamente de qué proveedor puntual
+    sale cada línea. costo_esperado se sugiere desde pricing pero sigue
+    siendo editable mientras la orden está en Borrador.
 
-    `costo_esperado` se sugiere desde pricing.services.costo_actual()
-    al agregar la línea, pero es editable — nunca se autocompleta sin
-    mostrar (regla 4).
-
-    Dos garantías viven en triggers de Postgres (migración 0002), no
-    en validación de aplicación:
-    - la línea solo se puede editar/crear/borrar si la orden dueña
-      está en Borrador (mismo patrón que ItemPresupuesto en quotes);
-    - producto_proveedor.proveedor tiene que coincidir siempre con
-      orden.proveedor (comparación cross-table, no expresable con un
-      CheckConstraint simple).
+    Dos garantías viven en triggers de Postgres:
+    - la línea solo se puede editar/crear/borrar si la orden está en Borrador;
+    - producto_proveedor.proveedor debe coincidir con orden.proveedor.
     """
 
     orden = models.ForeignKey(OrdenDeCompra, on_delete=models.CASCADE, related_name="lineas")
