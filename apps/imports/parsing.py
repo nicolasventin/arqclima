@@ -486,6 +486,18 @@ def _extraer_filas_excel_por_bloques(matriz, origen):
             continue
 
         categoria = _categoria_bloque(fila_cabecera, indice_precio)
+        indices_precio_fallback = [indice_precio]
+        for indice, valor in enumerate(fila_cabecera):
+            normalizado = _normalizar(valor)
+            if indice == indice_precio:
+                continue
+            if (
+                normalizado in _ALIAS_NORMALIZADOS["costo"]
+                or normalizado.startswith("precio")
+                or normalizado.startswith("costo")
+            ):
+                indices_precio_fallback.append(indice)
+
         bloques_validos += 1
 
         for numero, valores in filas_bloque:
@@ -504,11 +516,18 @@ def _extraer_filas_excel_por_bloques(matriz, origen):
 
             codigo = _texto_celda(valores[indice_codigo])
             nombre = _texto_celda(valores[indice_nombre])
-            costo_crudo = valores[indice_precio]
+            costo_crudo = None
+            for indice_costo in indices_precio_fallback:
+                if indice_costo >= len(valores):
+                    continue
+                candidato = valores[indice_costo]
+                if parsear_costo(candidato) is not None:
+                    costo_crudo = candidato
+                    break
 
             if not _parece_codigo(codigo) or not _parece_nombre_producto(nombre):
                 continue
-            if parsear_costo(costo_crudo) is None:
+            if costo_crudo is None:
                 continue
 
             filas_resultado.append(
