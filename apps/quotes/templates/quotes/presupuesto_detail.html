@@ -23,7 +23,7 @@
         {% if puede_editar_estructura %}
         <a href="{% url 'quotes:editar' presupuesto.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil me-1"></i>Editar propuesta</a>
         {% endif %}
-        <a href="{% url 'quotes:pdf' presupuesto.pk %}" class="btn btn-sm btn-outline-secondary" target="_blank"><i class="bi bi-file-earmark-pdf me-1"></i>Vista PDF</a>
+        <a href="{% url 'quotes:pdf' presupuesto.pk %}" class="btn btn-sm btn-outline-secondary" target="_blank"><i class="bi bi-file-earmark-pdf me-1"></i>Exportar PDF</a>
         {% if perms.quotes.add_presupuesto %}<form method="post" action="{% url 'quotes:duplicar' presupuesto.pk %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-copy me-1"></i>Duplicar</button></form>{% endif %}
         <a href="{% url 'quotes:lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a>
     </div>
