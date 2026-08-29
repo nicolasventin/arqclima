@@ -405,29 +405,32 @@ a {
 
 /* Identidad visual ARQCLIMA */
 .app-brand-desktop {
-    min-height: 128px;
+    min-height: 122px;
     justify-content: center;
-    padding: 1rem 1.25rem;
+    padding: .8rem 1rem;
 }
 
 .app-brand-desktop img {
     display: block;
-    width: 178px;
+    width: 216px;
     max-width: 100%;
     height: auto;
-    border-radius: 14px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.14);
 }
 
 .app-brand-mobile {
-    gap: .75rem;
+    min-width: 0;
+    flex: 1 1 auto;
 }
 
 .app-brand-mobile img {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    flex: 0 0 auto;
+    display: block;
+    width: 190px;
+    max-width: calc(100% - .5rem);
+    height: auto;
+    border-radius: 8px;
+    flex: 0 1 auto;
 }
 
 .auth-brand img {
