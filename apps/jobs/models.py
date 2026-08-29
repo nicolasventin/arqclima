@@ -67,6 +67,26 @@ class Trabajo(models.Model):
     )
     creado_en = models.DateTimeField(auto_now_add=True)
 
+    terminado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trabajos_terminados",
+    )
+    terminado_en = models.DateTimeField(null=True, blank=True)
+    observaciones_cierre = models.TextField(blank=True)
+
+    cancelado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trabajos_cancelados",
+    )
+    cancelado_en = models.DateTimeField(null=True, blank=True)
+    motivo_cancelacion = models.TextField(blank=True)
+
     class Meta:
         ordering = ["-creado_en"]
         verbose_name = "Trabajo"
@@ -79,6 +99,27 @@ class Trabajo(models.Model):
             (
                 "manage_ejecucion_propia",
                 "Puede cambiar el estado de sus propios trabajos asignados a En ejecución / Terminado",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    ~models.Q(("estado", EstadoTrabajo.TERMINADO)),
+                    models.Q(("terminado_en__isnull", False)),
+                    _connector="OR",
+                ),
+                name="trabajo_terminado_requiere_metadata",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    ~models.Q(("estado", EstadoTrabajo.CANCELADO)),
+                    models.Q(
+                        models.Q(("cancelado_en__isnull", False)),
+                        ~models.Q(("motivo_cancelacion", "")),
+                    ),
+                    _connector="OR",
+                ),
+                name="trabajo_cancelado_requiere_metadata",
             ),
         ]
 

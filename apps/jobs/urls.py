@@ -15,6 +15,7 @@ urlpatterns = [
     path("<int:pk>/estado/", views.CambiarEstadoTrabajoView.as_view(), name="cambiar_estado"),
     path("<int:pk>/tecnico/", views.AsignarTecnicoView.as_view(), name="asignar_tecnico"),
     path("<int:pk>/cancelar/", views.CancelarTrabajoView.as_view(), name="cancelar"),
+    path("<int:pk>/finalizar/", views.FinalizarTrabajoView.as_view(), name="finalizar"),
     path(
         "<int:pk>/materiales/generar/",
         views.GenerarListadoMaterialesView.as_view(),

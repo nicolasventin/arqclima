@@ -13,6 +13,7 @@ from apps.jobs.models import EstadoTrabajo
 from apps.jobs.services import (
     cambiar_estado_trabajo,
     crear_trabajo,
+    finalizar_trabajo,
     enviar_materiales_pendientes,
     generar_listado_materiales,
     registrar_sobrante,
@@ -468,11 +469,20 @@ class TrabajosTerminadosEnTests(TestCase):
         )
         enviar_presupuesto(presupuesto, self.diego)
         cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, self.diego)
-        return crear_trabajo(presupuesto, self.diego)
+        return crear_trabajo(
+            presupuesto,
+            self.diego,
+            tecnico_asignado=self.diego,
+        )
 
     def test_incluye_solo_terminados_de_presupuestos_realizados_en_el_periodo(self):
         terminado = self._trabajo()
-        cambiar_estado_trabajo(terminado, EstadoTrabajo.TERMINADO, self.diego)
+        cambiar_estado_trabajo(
+            terminado,
+            EstadoTrabajo.EN_EJECUCION,
+            self.diego,
+        )
+        finalizar_trabajo(terminado, self.diego)
         pendiente = self._trabajo()
 
         resultado = trabajos_terminados_en(self.hoy.year, self.hoy.month)
@@ -543,7 +553,11 @@ class MontosRentabilidadTests(TestCase):
         )
         enviar_presupuesto(presupuesto, self.diego)
         cambiar_estado(presupuesto, EstadoPresupuesto.ACEPTADO, self.diego)
-        trabajo = crear_trabajo(presupuesto, self.diego)
+        trabajo = crear_trabajo(
+            presupuesto,
+            self.diego,
+            tecnico_asignado=self.diego,
+        )
         generar_listado_materiales(trabajo, self.diego)
         registrar_movimiento(
             producto=producto,
@@ -553,7 +567,12 @@ class MontosRentabilidadTests(TestCase):
             usuario=self.diego,
         )
         enviar_materiales_pendientes(trabajo, self.diego)
-        cambiar_estado_trabajo(trabajo, EstadoTrabajo.TERMINADO, self.diego)
+        cambiar_estado_trabajo(
+            trabajo,
+            EstadoTrabajo.EN_EJECUCION,
+            self.diego,
+        )
+        finalizar_trabajo(trabajo, self.diego)
 
         montos = montos_rentabilidad(self.hoy.year, self.hoy.month)
         self.assertEqual(len(montos["ganancia_presupuestos"]), 1)
@@ -917,7 +936,12 @@ class TrabajosActivosPorEmpleadoTests(TestCase):
     def test_cuenta_solo_trabajos_no_resueltos(self):
         self._trabajo(tecnico=self.andres)
         terminado = self._trabajo(tecnico=self.andres)
-        cambiar_estado_trabajo(terminado, EstadoTrabajo.TERMINADO, self.diego)
+        cambiar_estado_trabajo(
+            terminado,
+            EstadoTrabajo.EN_EJECUCION,
+            self.diego,
+        )
+        finalizar_trabajo(terminado, self.diego)
 
         resultado = trabajos_activos_por_empleado()
         self.assertEqual(resultado[self.andres], 1)

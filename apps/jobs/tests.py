@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth.models import Group, Permission
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
@@ -19,6 +19,7 @@ from .permissions import (
     puede_cambiar_estado_trabajo,
     puede_cancelar_trabajo,
     puede_crear_trabajo,
+    puede_finalizar_trabajo,
     puede_gestionar_materiales,
     puede_registrar_consumo_material,
     queryset_trabajos_visibles,
@@ -33,6 +34,7 @@ from .services import (
     crear_trabajo,
     enviar_material,
     enviar_materiales_pendientes,
+    finalizar_trabajo,
     generar_listado_materiales,
     materiales_pendientes_de_envio,
     registrar_sobrante,
@@ -133,10 +135,15 @@ class TransicionesTrabajoTests(TestCase):
         self.trabajo.refresh_from_db()
         self.assertEqual(self.trabajo.estado, EstadoTrabajo.LISTO)
 
-    def test_permite_saltar_hasta_terminado(self):
-        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.TERMINADO, self.diego)
+    def test_terminado_no_es_una_transicion_generica(self):
+        with self.assertRaisesMessage(TransicionInvalidaError, "cierre operativo"):
+            cambiar_estado_trabajo(
+                self.trabajo,
+                EstadoTrabajo.TERMINADO,
+                self.diego,
+            )
         self.trabajo.refresh_from_db()
-        self.assertEqual(self.trabajo.estado, EstadoTrabajo.TERMINADO)
+        self.assertEqual(self.trabajo.estado, EstadoTrabajo.PENDIENTE)
 
     def test_permite_retroceder_para_corregir_un_error(self):
         """
@@ -191,10 +198,15 @@ class PermisosTrabajoTests(TestCase):
         self.assertFalse(puede_crear_trabajo(self.contri))
         self.assertFalse(puede_crear_trabajo(self.andres))
 
-    def test_diego_puede_cualquier_transicion(self):
-        self.assertTrue(
-            puede_cambiar_estado_trabajo(self.diego, self.trabajo, EstadoTrabajo.TERMINADO)
+    def test_diego_finaliza_por_flujo_dedicado_no_transicion_generica(self):
+        self.assertFalse(
+            puede_cambiar_estado_trabajo(
+                self.diego,
+                self.trabajo,
+                EstadoTrabajo.TERMINADO,
+            )
         )
+        self.assertTrue(puede_finalizar_trabajo(self.diego, self.trabajo))
 
     def test_rodrigo_no_puede_cambiar_estado(self):
         self.assertFalse(
@@ -214,7 +226,14 @@ class PermisosTrabajoTests(TestCase):
         self.assertTrue(
             puede_cambiar_estado_trabajo(self.andres, self.trabajo, EstadoTrabajo.EN_EJECUCION)
         )
-        self.assertTrue(puede_cambiar_estado_trabajo(self.andres, self.trabajo, EstadoTrabajo.TERMINADO))
+        self.assertFalse(
+            puede_cambiar_estado_trabajo(
+                self.andres,
+                self.trabajo,
+                EstadoTrabajo.TERMINADO,
+            )
+        )
+        self.assertTrue(puede_finalizar_trabajo(self.andres, self.trabajo))
 
     def test_andres_no_puede_ejecucion_de_trabajo_ajeno(self):
         self.assertFalse(
@@ -232,11 +251,20 @@ class PermisosTrabajoTests(TestCase):
             puede_cambiar_estado_trabajo(self.contri, self.trabajo, EstadoTrabajo.PREPARANDO_MATERIALES)
         )
 
-    def test_andres_puede_retroceder_dentro_de_su_propio_rango(self):
-        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.TERMINADO, self.diego)
-        self.assertTrue(
-            puede_cambiar_estado_trabajo(self.andres, self.trabajo, EstadoTrabajo.EN_EJECUCION)
+    def test_andres_puede_corregir_dentro_de_su_rango_antes_del_cierre(self):
+        cambiar_estado_trabajo(
+            self.trabajo,
+            EstadoTrabajo.EN_EJECUCION,
+            self.diego,
         )
+        self.assertFalse(
+            puede_cambiar_estado_trabajo(
+                self.andres,
+                self.trabajo,
+                EstadoTrabajo.TERMINADO,
+            )
+        )
+        self.assertTrue(puede_finalizar_trabajo(self.andres, self.trabajo))
 
     def test_andres_no_puede_retroceder_al_territorio_de_contri(self):
         cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.EN_EJECUCION, self.diego)
@@ -401,24 +429,55 @@ class CancelarTrabajoTests(TestCase):
 
     def test_cancela_desde_en_ejecucion(self):
         cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.EN_EJECUCION, self.diego)
-        cancelar_trabajo(self.trabajo, self.diego)
+        cancelar_trabajo(
+            self.trabajo,
+            self.diego,
+            motivo="Obra suspendida",
+        )
         self.trabajo.refresh_from_db()
         self.assertEqual(self.trabajo.estado, EstadoTrabajo.CANCELADO)
 
     def test_no_se_puede_cancelar_un_terminado(self):
-        cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.TERMINADO, self.diego)
+        self.trabajo.tecnico_asignado = self.diego
+        self.trabajo.save(update_fields=["tecnico_asignado"])
+        cambiar_estado_trabajo(
+            self.trabajo,
+            EstadoTrabajo.EN_EJECUCION,
+            self.diego,
+        )
+        finalizar_trabajo(self.trabajo, self.diego)
         with self.assertRaises(TransicionInvalidaError):
-            cancelar_trabajo(self.trabajo, self.diego)
+            cancelar_trabajo(
+                self.trabajo,
+                self.diego,
+                motivo="Intento inválido",
+            )
 
     def test_no_se_puede_cancelar_dos_veces(self):
-        cancelar_trabajo(self.trabajo, self.diego)
+        cancelar_trabajo(
+            self.trabajo,
+            self.diego,
+            motivo="Cancelación inicial",
+        )
         with self.assertRaises(TransicionInvalidaError):
-            cancelar_trabajo(self.trabajo, self.diego)
+            cancelar_trabajo(
+                self.trabajo,
+                self.diego,
+                motivo="Segundo intento",
+            )
 
     def test_un_cancelado_no_participa_de_avanzar_ni_retroceder(self):
-        cancelar_trabajo(self.trabajo, self.diego)
+        cancelar_trabajo(
+            self.trabajo,
+            self.diego,
+            motivo="Cancelación definitiva",
+        )
         with self.assertRaises(TransicionInvalidaError):
-            cambiar_estado_trabajo(self.trabajo, EstadoTrabajo.PENDIENTE, self.diego)
+            cambiar_estado_trabajo(
+                self.trabajo,
+                EstadoTrabajo.PENDIENTE,
+                self.diego,
+            )
 
     def test_solo_diego_puede_cancelar(self):
         self.assertTrue(puede_cancelar_trabajo(self.diego))

@@ -595,7 +595,11 @@ def actividad_administrativa_por_empleado(anio, mes):
         trabajo_ids = (
             AuditLog.objects.filter(
                 usuario=usuario,
-                accion__in=["cambiar_estado_trabajo", "trabajo_marcado_listo_con_pendientes"],
+                accion__in=[
+                    "cambiar_estado_trabajo",
+                    "trabajo_marcado_listo_con_pendientes",
+                    "finalizar_trabajo",
+                ],
                 content_type=content_type_trabajo,
                 creado_en__year=anio,
                 creado_en__month=mes,

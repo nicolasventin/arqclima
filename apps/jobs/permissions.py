@@ -1,7 +1,7 @@
 from .models import EstadoTrabajo
 
 ESTADOS_PREPARACION = {EstadoTrabajo.PREPARANDO_MATERIALES, EstadoTrabajo.LISTO}
-ESTADOS_EJECUCION = {EstadoTrabajo.EN_EJECUCION, EstadoTrabajo.TERMINADO}
+ESTADOS_EJECUCION = {EstadoTrabajo.EN_EJECUCION}
 
 
 def puede_crear_trabajo(user):
@@ -47,6 +47,8 @@ def puede_registrar_consumo_material(user, material):
     trabajo, mismo alcance que manage_ejecucion_propia (Parte 1). No es
     un permiso nuevo: es la misma responsabilidad de ejecución de obra.
     """
+    if material.trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        return False
     if user.has_perm("jobs.change_trabajo"):
         return True
     return (
@@ -73,6 +75,10 @@ def puede_cambiar_estado_trabajo(user, trabajo, nuevo_estado):
     puede retroceder más allá de su propio rango (ej. no puede volver
     a "Preparando materiales", que es territorio de Contri).
     """
+    if trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        return False
+    if nuevo_estado == EstadoTrabajo.TERMINADO:
+        return False
     if user.has_perm("jobs.change_trabajo"):
         return True
     if nuevo_estado in ESTADOS_PREPARACION:
@@ -99,3 +105,23 @@ def queryset_trabajos_visibles(user, queryset):
     ):
         return queryset
     return queryset.filter(tecnico_asignado=user)
+
+
+
+def puede_finalizar_trabajo(user, trabajo):
+    """
+    Terminar un trabajo deja de ser una transición genérica en 10F.
+    Diego puede finalizar cualquiera; el técnico de campo solo el suyo.
+    """
+    if trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO):
+        return False
+    if user.has_perm("jobs.change_trabajo"):
+        return True
+    return (
+        user.has_perm("jobs.manage_ejecucion_propia")
+        and trabajo.tecnico_asignado_id == user.id
+    )
+
+
+def trabajo_esta_cerrado(trabajo):
+    return trabajo.estado in (EstadoTrabajo.TERMINADO, EstadoTrabajo.CANCELADO)
