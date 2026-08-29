@@ -80,7 +80,7 @@ El detalle completo de reglas de negocio y permisos por rol está en
   simple y estándar por sobre algo moderno pero más complejo.
 - **Autenticación**: la de Django, con roles (`django.contrib.auth.Group`)
   + overrides individuales de permisos por usuario.
-- Excel de listas de precios: `openpyxl`. PDF de presupuestos y órdenes de compra: `xhtml2pdf`.
+- Importación de listas de precios: `openpyxl` (.xlsx), `xlrd` (.xls), CSV estándar, `python-docx` (.docx) y `pypdf` (.pdf); `Pillow` valida y conserva imágenes embebidas. PDF de presupuestos y órdenes de compra: `xhtml2pdf`.
 
 ## Estructura del proyecto
 
@@ -91,7 +91,7 @@ Una app de Django por concepto de negocio, no por capa técnica:
 - `apps/dashboard` — pantalla de inicio por usuario.
 - `apps/catalog` — productos, marcas, categorías, proveedores.
 - `apps/pricing` — costos, historial de costos, márgenes, configuración general (flete, financiero, IVA, umbrales de las automatizaciones).
-- `apps/imports` — carga de listas de precios de proveedores (Excel) con vista previa antes de confirmar.
+- `apps/imports` — carga asistida de listas de proveedores desde Excel/CSV/PDF/Word, con análisis, imágenes de evidencia, corrección de filas y confirmación manual antes de tocar catálogo/costos.
 - `apps/clients` — clientes.
 - `apps/quotes` — presupuestos (secciones, ítems, plantillas de condiciones, máquina de estados).
 - `apps/tasks` — tareas del equipo, manuales y generadas automáticamente.
