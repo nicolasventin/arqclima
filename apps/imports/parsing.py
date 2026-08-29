@@ -339,6 +339,7 @@ def _normalizar_imagen(contenido, origen, nombre="", numero_fila=None):
                 imagen.save(salida, format="JPEG", quality=86, optimize=True)
                 extension = "jpg"
             data = salida.getvalue()
+            ancho_final, alto_final = imagen.size
     except (
         Image.UnidentifiedImageError,
         Image.DecompressionBombError,
@@ -355,8 +356,8 @@ def _normalizar_imagen(contenido, origen, nombre="", numero_fila=None):
             origen=origen,
             nombre_original=nombre,
             numero_fila_origen=numero_fila,
-            ancho=imagen.width,
-            alto=imagen.height,
+            ancho=ancho_final,
+            alto=alto_final,
             huella_sha256=hashlib.sha256(data).hexdigest(),
         ),
         None,
@@ -491,12 +492,11 @@ def _analizar_csv(datos):
     texto, encoding = _decodificar_csv(datos)
     muestra = texto[:8192]
     try:
-        dialecto = csv.Sniffer().sniff(muestra, delimiters=",;\t|")
+        delimitador = csv.Sniffer().sniff(muestra, delimiters=",;\t|").delimiter
     except csv.Error:
-        dialecto = csv.excel
-        dialecto.delimiter = ";"
+        delimitador = ";"
 
-    lector = csv.reader(texto.splitlines(), dialect=dialecto)
+    lector = csv.reader(texto.splitlines(), delimiter=delimitador)
     matriz = []
     for numero, fila in enumerate(lector, start=1):
         if numero > MAX_FILAS + 30:
