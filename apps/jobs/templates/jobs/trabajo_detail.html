@@ -100,10 +100,40 @@
     {% endif %}
 {% else %}
     {% if puede_enviar_pendientes %}
-    <form method="post" action="{% url 'jobs:enviar_materiales_pendientes' trabajo.pk %}" class="mb-3">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-primary">Enviar todo lo pendiente</button>
-    </form>
+        {% if batch_requiere_forzado %}
+            {% if puede_forzar_stock_negativo %}
+            <div class="alert alert-warning">
+                <strong>Stock insuficiente para el envío completo.</strong>
+                Como administrador podés forzarlo, pero el motivo es obligatorio y la acción queda auditada.
+                <form method="post" action="{% url 'jobs:enviar_materiales_pendientes' trabajo.pk %}" class="row g-2 mt-1">
+                    {% csrf_token %}
+                    <input type="hidden" name="forzar_stock_negativo" value="on">
+                    <div class="col-md-8">
+                        <input
+                            type="text"
+                            name="motivo_forzado"
+                            class="form-control form-control-sm"
+                            placeholder="Motivo obligatorio para forzar el envío"
+                            required
+                        >
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-sm btn-danger">Forzar envío pendiente</button>
+                    </div>
+                </form>
+            </div>
+            {% else %}
+            <div class="alert alert-warning">
+                <strong>No se puede enviar todo lo pendiente:</strong>
+                el stock disponible no alcanza para uno o más productos.
+            </div>
+            {% endif %}
+        {% else %}
+        <form method="post" action="{% url 'jobs:enviar_materiales_pendientes' trabajo.pk %}" class="mb-3">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-primary">Enviar todo lo pendiente</button>
+        </form>
+        {% endif %}
     {% endif %}
 
     {% for grupo in etapas %}
