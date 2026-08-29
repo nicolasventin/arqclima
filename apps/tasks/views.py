@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
@@ -32,10 +33,19 @@ class TareaListView(PermisoRequeridoMixin, ListView):
     def get_queryset(self):
         qs = Tarea.objects.select_related("asignado_a", "asignado_por")
         estado = self.request.GET.get("estado")
+        q = (self.request.GET.get("q") or "").strip()
         if estado:
             qs = qs.filter(estado=estado)
         else:
             qs = qs.exclude(estado=EstadoTarea.COMPLETADA)
+        if q:
+            qs = qs.filter(
+                Q(titulo__icontains=q)
+                | Q(descripcion__icontains=q)
+                | Q(asignado_a__username__icontains=q)
+                | Q(asignado_a__first_name__icontains=q)
+                | Q(asignado_a__last_name__icontains=q)
+            )
         return queryset_tareas_visibles(self.request.user, qs)
 
     def get_context_data(self, **kwargs):
