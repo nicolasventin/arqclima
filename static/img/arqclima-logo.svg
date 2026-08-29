@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720" role="img" aria-labelledby="title desc">
+  <title id="title">ARQCLIMA</title>
+  <desc id="desc">Logo corporativo ARQCLIMA calefacción y refrigeración</desc>
+  <rect width="720" height="720" rx="44" fill="#075f98"/>
+  <g fill="#fff">
+    <path d="M360 105l35 35-21 21v58l41-41v-30h50v50h-30l-41 41h58l21-21 35 35-21 21h-60l-41 41h58l21-21 35 35-35 35-21-21h-58l41 41h30v50h-50v-30l-41-41v58l21 21-35 35-35-35 21-21v-58l-41 41v30h-50v-50h30l41-41h-58l-21 21-35-35 35-35 21 21h58l-41-41h-60l-21-21 35-35 21 21h58l-41-41h-30v-50h50v30l41 41v-58l-21-21z"/>
+  </g>
+  <text x="360" y="585" text-anchor="middle" fill="#fff"
+        font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="800"
+        letter-spacing="8">ARQCLIMA</text>
+  <text x="360" y="635" text-anchor="middle" fill="#fff"
+        font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="600"
+        letter-spacing="3">CALEFACCIÓN · REFRIGERACIÓN</text>
+</svg>
