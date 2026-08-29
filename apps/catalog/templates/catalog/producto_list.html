@@ -1,85 +1,108 @@
 {% extends "base.html" %}
 
-{% block title %}Catálogo — ARQCLIMA{% endblock %}
+{% block title %}Productos — ARQCLIMA{% endblock %}
+{% block page_heading %}Productos{% endblock %}
+{% block page_subheading %}Catálogo, líneas y disponibilidad{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Catálogo de productos</h1>
-    {% if puede_crear %}
-    <a href="{% url 'catalog:producto_nuevo' %}" class="btn btn-primary btn-sm">+ Nuevo producto</a>
-    {% endif %}
+<div class="page-heading">
+    <div class="page-heading-copy">
+        <div class="page-heading-kicker">Catálogo</div>
+        <h1>Productos</h1>
+        <p>Identidad por marca y código oficial, con clasificación general o repuestos.</p>
+    </div>
+    <div class="page-actions">
+        {% if puede_crear %}
+        <a href="{% url 'catalog:producto_nuevo' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle me-1"></i>Nuevo producto
+        </a>
+        {% endif %}
+    </div>
 </div>
 
-<form method="get" class="row g-2 mb-3">
-    <div class="col-auto">
-        <input type="text" name="q" value="{{ request.GET.q }}" class="form-control form-control-sm" placeholder="Buscar por código o nombre">
+<form method="get" class="filter-bar">
+    <div class="filter-field filter-field-search">
+        <label for="producto-q">Buscar</label>
+        <input id="producto-q" type="text" name="q" value="{{ request.GET.q }}"
+               class="form-control form-control-sm" placeholder="Código o nombre">
     </div>
-    <div class="col-auto">
-        <select name="marca" class="form-select form-select-sm">
-            <option value="">Todas las marcas</option>
+    <div class="filter-field">
+        <label for="producto-marca">Marca</label>
+        <select id="producto-marca" name="marca" class="form-select form-select-sm">
+            <option value="">Todas</option>
             {% for marca in marcas %}
             <option value="{{ marca.id }}" {% if request.GET.marca == marca.id|stringformat:"s" %}selected{% endif %}>{{ marca.nombre }}</option>
             {% endfor %}
         </select>
     </div>
-    <div class="col-auto">
-        <select name="categoria" class="form-select form-select-sm">
-            <option value="">Todas las categorías</option>
+    <div class="filter-field">
+        <label for="producto-categoria">Categoría</label>
+        <select id="producto-categoria" name="categoria" class="form-select form-select-sm">
+            <option value="">Todas</option>
             {% for categoria in categorias %}
             <option value="{{ categoria.id }}" {% if request.GET.categoria == categoria.id|stringformat:"s" %}selected{% endif %}>{{ categoria.nombre }}</option>
             {% endfor %}
         </select>
     </div>
-    <div class="col-auto">
-        <select name="linea" class="form-select form-select-sm">
-            <option value="">Todas las líneas</option>
-            <option value="general" {% if request.GET.linea == "general" %}selected{% endif %}>Catálogo general</option>
+    <div class="filter-field">
+        <label for="producto-linea">Línea</label>
+        <select id="producto-linea" name="linea" class="form-select form-select-sm">
+            <option value="">Todas</option>
+            <option value="general" {% if request.GET.linea == "general" %}selected{% endif %}>General</option>
             <option value="repuestos" {% if request.GET.linea == "repuestos" %}selected{% endif %}>Repuestos</option>
         </select>
     </div>
-    <div class="col-auto">
-        <button type="submit" class="btn btn-outline-secondary btn-sm">Filtrar</button>
+    <div class="filter-actions">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+        {% if request.GET.q or request.GET.marca or request.GET.categoria or request.GET.linea %}
+        <a href="{% url 'catalog:producto_lista' %}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        {% endif %}
     </div>
 </form>
 
-<table class="table table-sm table-hover bg-white">
-    <thead>
-        <tr>
-            <th>Marca</th>
-            <th>Código</th>
-            <th>Nombre</th>
-            <th>Categoría</th>
-            <th>Línea</th>
-            <th>Activo</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for producto in productos %}
-        <tr>
-            <td><a href="{% url 'catalog:producto_detalle' producto.pk %}">{{ producto.marca.nombre }}</a></td>
-            <td>{{ producto.codigo }}</td>
-            <td>{{ producto.nombre }}</td>
-            <td>{{ producto.categoria|default:"—" }}</td>
-            <td>{% if producto.es_repuesto %}<span class="badge bg-info text-dark">Repuesto</span>{% endif %}</td>
-            <td>{% if producto.activo %}✓{% else %}—{% endif %}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="6" class="text-muted">No hay productos cargados todavía.</td></tr>
-        {% endfor %}
-    </tbody>
-</table>
-
-{% if is_paginated %}
-<nav>
-    <ul class="pagination pagination-sm">
-        {% if page_obj.has_previous %}
-        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a></li>
-        {% endif %}
-        <li class="page-item disabled"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
-        {% if page_obj.has_next %}
-        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Siguiente</a></li>
-        {% endif %}
-    </ul>
-</nav>
-{% endif %}
+<div class="data-panel">
+    <div class="table-responsive">
+        <table class="table data-table table-hover">
+            <thead>
+                <tr>
+                    <th>Producto</th>
+                    <th>Marca</th>
+                    <th>Código</th>
+                    <th>Categoría</th>
+                    <th>Línea</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for producto in productos %}
+                <tr>
+                    <td>
+                        <a class="table-link" href="{% url 'catalog:producto_detalle' producto.pk %}">{{ producto.nombre }}</a>
+                    </td>
+                    <td>{{ producto.marca.nombre }}</td>
+                    <td><span class="table-primary-text">{{ producto.codigo }}</span></td>
+                    <td>{{ producto.categoria|default:"—" }}</td>
+                    <td>
+                        {% if producto.es_repuesto %}
+                        <span class="status-pill status-pill-info"><i class="bi bi-wrench-adjustable"></i>Repuesto</span>
+                        {% else %}
+                        <span class="status-pill status-pill-neutral">General</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if producto.activo %}
+                        <span class="status-pill status-pill-success">Activo</span>
+                        {% else %}
+                        <span class="status-pill status-pill-neutral">Inactivo</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="empty-table"><i class="bi bi-snow"></i>No hay productos que coincidan con los filtros.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% include "includes/pagination.html" %}
 {% endblock %}
