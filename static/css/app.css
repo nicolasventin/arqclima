@@ -1801,3 +1801,29 @@ a {
         width: 100%;
     }
 }
+
+
+/* 11J · Filas completamente cliqueables */
+.data-table tbody tr[data-row-href] {
+    cursor: pointer;
+}
+
+.data-table tbody tr[data-row-href] td {
+    transition: background-color .14s ease;
+}
+
+.data-table tbody tr[data-row-href]:hover td {
+    background: #f4f9fc;
+}
+
+.data-table tbody tr[data-row-href]:focus-visible {
+    outline: none;
+}
+
+.data-table tbody tr[data-row-href]:focus-visible td {
+    background: #f4f9fc;
+}
+
+.data-table tbody tr[data-row-href]:focus-visible td:first-child {
+    box-shadow: inset 3px 0 0 var(--app-accent);
+}
