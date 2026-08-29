@@ -22,6 +22,8 @@ def _admin(username="diego_11d"):
 
 
 class DetallesYFormulariosEtapa11DTests(TestCase):
+    """Regresiones de render del sistema visual 11D sobre los flujos principales."""
+
     def setUp(self):
         self.diego = _admin()
         self.client.login(username="diego_11d", password="clave12345")
