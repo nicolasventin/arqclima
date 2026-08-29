@@ -213,9 +213,14 @@ class PresupuestoDetailView(PermisoRequeridoMixin, DetailView):
                 "es_borrador": es_borrador,
                 "puede_editar_estructura": es_borrador
                 and self.request.user.has_perm("quotes.change_presupuesto"),
+                "puede_agregar_importes": es_borrador
+                and self.request.user.has_perm("quotes.add_itempresupuesto"),
                 "puede_revertir": puede_revertir_aceptado(self.request.user, presupuesto)
                 and presupuesto.estado == EstadoPresupuesto.ACEPTADO,
                 "seccion_form": SeccionPresupuestoForm(),
+                "linea_comercial_form": LineaComercialPresupuestoForm(
+                    presupuesto=presupuesto
+                ),
                 "lineas_comerciales_sin_seccion": presupuesto.lineas_comerciales.filter(
                     seccion__isnull=True
                 ).order_by("orden", "pk"),

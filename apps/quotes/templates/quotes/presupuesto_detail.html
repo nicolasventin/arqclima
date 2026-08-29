@@ -96,8 +96,16 @@
                         <strong>Importes que verá el cliente</strong>
                         <div class="field-help">Separados del detalle interno de productos y costos.</div>
                     </div>
-                    {% if puede_editar_estructura %}
-                    <a href="{% url 'quotes:agregar_linea_comercial' presupuesto.pk %}?seccion={{ grupo.seccion.pk }}" class="btn btn-sm btn-primary">+ Importe comercial</a>
+                    {% if puede_agregar_importes %}
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-primary js-open-commercial-modal"
+                        data-bs-toggle="modal"
+                        data-bs-target="#importeComercialModal"
+                        data-seccion="{{ grupo.seccion.pk }}"
+                        data-seccion-titulo="{{ grupo.seccion.titulo|escape }}">
+                        <i class="bi bi-plus-lg me-1"></i>Importe comercial
+                    </button>
                     {% endif %}
                 </div>
 
@@ -171,7 +179,20 @@
                     <div class="form-field"><label>Título</label>{{ seccion_form.titulo }}</div>
                     <div class="form-field"><label>Descripción pública</label>{{ seccion_form.descripcion_publica }}<div class="field-help">Un punto por línea; esto aparece en el PDF.</div></div>
                 </div>
-                <div class="form-actions"><button type="submit" class="btn btn-primary">+ Agregar etapa</button><a href="{% url 'quotes:agregar_linea_comercial' presupuesto.pk %}" class="btn btn-outline-primary">+ Importe sin etapa</a></div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Agregar etapa</button>
+                    {% if puede_agregar_importes %}
+                    <button
+                        type="button"
+                        class="btn btn-outline-primary js-open-commercial-modal"
+                        data-bs-toggle="modal"
+                        data-bs-target="#importeComercialModal"
+                        data-seccion=""
+                        data-seccion-titulo="Conceptos generales">
+                        <i class="bi bi-cash-stack me-1"></i>Importe sin etapa
+                    </button>
+                    {% endif %}
+                </div>
             </form>
         </section>
         {% endif %}
@@ -223,5 +244,119 @@
         </section>
         {% endif %}
     </aside>
+
 </div>
+
+{% if puede_agregar_importes %}
+<div class="modal fade" id="importeComercialModal" tabindex="-1" aria-labelledby="importeComercialModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'quotes:agregar_linea_comercial' presupuesto.pk %}" id="importe-comercial-form">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <div>
+                        <div class="detail-kicker">Presupuesto #{{ presupuesto.numero }}</div>
+                        <h2 class="modal-title fs-5" id="importeComercialModalLabel">Agregar importe comercial</h2>
+                        <div class="text-muted small" id="importe-comercial-context">Seleccioná dónde debe aparecer en el PDF.</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <div class="form-field form-field-half">
+                            <label for="{{ linea_comercial_form.seccion.id_for_label }}">Etapa</label>
+                            {{ linea_comercial_form.seccion }}
+                        </div>
+                        <div class="form-field form-field-half">
+                            <label for="{{ linea_comercial_form.etiqueta.id_for_label }}">Concepto</label>
+                            {{ linea_comercial_form.etiqueta }}
+                            <div class="field-help">Ej. Materiales, Equipamiento o Mano de Obra.</div>
+                        </div>
+                        <div class="form-field">
+                            <label for="{{ linea_comercial_form.descripcion.id_for_label }}">Descripción opcional</label>
+                            {{ linea_comercial_form.descripcion }}
+                        </div>
+                        <div class="form-field form-field-half">
+                            <label for="{{ linea_comercial_form.monto.id_for_label }}">Monto</label>
+                            {{ linea_comercial_form.monto }}
+                        </div>
+                        <div class="form-field form-field-half">
+                            <label for="{{ linea_comercial_form.tipo_iva.id_for_label }}">IVA</label>
+                            {{ linea_comercial_form.tipo_iva }}
+                        </div>
+
+                        <div class="form-field quote-choice-card">
+                            <div class="form-check">
+                                {{ linea_comercial_form.opcional }}
+                                <label class="form-check-label" for="{{ linea_comercial_form.opcional.id_for_label }}">Es un opcional</label>
+                            </div>
+                            <div class="field-help">Los opcionales pueden mostrarse sin sumarse al total.</div>
+                        </div>
+                        <div class="form-field quote-choice-card">
+                            <div class="form-check">
+                                {{ linea_comercial_form.incluido }}
+                                <label class="form-check-label" for="{{ linea_comercial_form.incluido.id_for_label }}">Incluir en el total</label>
+                            </div>
+                        </div>
+                        <div class="form-field quote-choice-card">
+                            <div class="form-check">
+                                {{ linea_comercial_form.recomendado }}
+                                <label class="form-check-label" for="{{ linea_comercial_form.recomendado.id_for_label }}">Destacar como recomendado</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="{% url 'quotes:agregar_linea_comercial' presupuesto.pk %}" class="btn btn-link me-auto">Abrir formulario completo</a>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Agregar importe</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if puede_agregar_importes %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const modal = document.getElementById("importeComercialModal");
+    const sectionSelect = document.getElementById("id_seccion");
+    const context = document.getElementById("importe-comercial-context");
+
+    if (!modal || !sectionSelect || !context) {
+        return;
+    }
+
+    document.querySelectorAll(".js-open-commercial-modal").forEach((button) => {
+        button.addEventListener("click", () => {
+            sectionSelect.value = button.dataset.seccion || "";
+            context.textContent = button.dataset.seccionTitulo
+                ? "Se agregará en: " + button.dataset.seccionTitulo
+                : "Se agregará como concepto general.";
+        });
+    });
+
+    const optional = document.getElementById("id_opcional");
+    const included = document.getElementById("id_incluido");
+    const recommended = document.getElementById("id_recomendado");
+
+    if (optional && included && recommended) {
+        const syncOptional = () => {
+            if (!optional.checked) {
+                included.checked = true;
+                recommended.checked = false;
+                recommended.disabled = true;
+            } else {
+                recommended.disabled = false;
+            }
+        };
+        optional.addEventListener("change", syncOptional);
+        syncOptional();
+    }
+});
+</script>
+{% endif %}
 {% endblock %}

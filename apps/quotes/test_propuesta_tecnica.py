@@ -243,7 +243,7 @@ class PropuestaTecnicaPresupuestoTests(TestCase):
 
         reader = PdfReader(BytesIO(response.content))
         texto = "\n".join(page.extract_text() or "" for page in reader.pages)
-        self.assertIn("PRESUPUESTO", texto)
+        self.assertIn("PROPUESTA TÉCNICO-COMERCIAL", texto)
         self.assertIn("PISO RADIANTE", texto)
         self.assertIn("1ERA ETAPA", texto)
         self.assertIn("FORMA DE PAGO", texto)
@@ -290,6 +290,33 @@ class PropuestaTecnicaPresupuestoTests(TestCase):
         self.assertContains(response, "Editar propuesta")
         self.assertContains(response, "Materiales")
         self.assertContains(response, "Opcional")
+
+
+
+    def test_formulario_de_presupuesto_se_organiza_en_cuatro_pasos(self):
+        self.client.login(username=self.usuario.username, password="clave12345")
+
+        response = self.client.get(reverse("quotes:nuevo"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Cliente y obra")
+        self.assertContains(response, "Propuesta técnica")
+        self.assertContains(response, "Reglas comerciales")
+        self.assertContains(response, "Condiciones que recibe el cliente")
+        self.assertContains(response, "Crear y agregar etapas")
+        self.assertContains(response, 'class="quote-form-steps"')
+
+    def test_detalle_ofrece_alta_de_importe_comercial_en_modal(self):
+        presupuesto = self._presupuesto_muestra()
+        self.client.login(username=self.usuario.username, password="clave12345")
+
+        response = self.client.get(reverse("quotes:detalle", args=[presupuesto.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="importeComercialModal"')
+        self.assertContains(response, "Importe comercial")
+        self.assertContains(response, "Abrir formulario completo")
+        self.assertContains(response, 'data-seccion="')
 
     def test_puede_agregar_importe_comercial_a_una_etapa(self):
         presupuesto = Presupuesto.objects.create(

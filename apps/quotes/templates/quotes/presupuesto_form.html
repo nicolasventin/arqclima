@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{% if modo_edicion %}Editar presupuesto{% else %}Nuevo presupuesto{% endif %} — ARQCLIMA{% endblock %}
-{% block page_heading %}Nuevo presupuesto{% endblock %}
+{% block page_heading %}{% if modo_edicion %}Editar presupuesto{% else %}Nuevo presupuesto{% endif %}{% endblock %}
 {% block page_subheading %}Datos comerciales y condiciones de la propuesta{% endblock %}
 
 {% block content %}
@@ -17,28 +17,35 @@
     </div>
 </div>
 
-<form method="post" class="form-shell">
+<nav class="quote-form-steps" aria-label="Secciones del presupuesto">
+    <a href="#datos-cliente"><span>1</span>Cliente y obra</a>
+    <a href="#propuesta-tecnica"><span>2</span>Propuesta técnica</a>
+    <a href="#condiciones-comerciales"><span>3</span>Comercial</a>
+    <a href="#condiciones-cliente"><span>4</span>Condiciones</a>
+</nav>
+
+<form method="post" class="form-shell quote-form-shell">
     {% csrf_token %}
-    <div class="form-card">
+
+    {% if form.non_field_errors %}
+    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <section class="form-card" id="datos-cliente">
         <div class="form-card-header">
-            <h2>Datos del presupuesto</h2>
-            <p>Cliente, obra, vigencia y reglas generales de la cotización.</p>
+            <div>
+                <div class="detail-kicker">Paso 1</div>
+                <h2>Cliente y obra</h2>
+            </div>
+            <p>Identificá rápidamente a quién se cotiza y dónde se ejecutará el trabajo.</p>
         </div>
         <div class="form-card-body">
-            {% if form.non_field_errors %}
-                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-            {% endif %}
-
             <div class="form-grid">
                 <div class="form-field">
                     <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
                         <label class="mb-0">Cliente</label>
                         {% if puede_crear_cliente %}
-                        <button
-                            type="button"
-                            class="btn btn-sm btn-outline-primary"
-                            data-bs-toggle="modal"
-                            data-bs-target="#clienteRapidoModal">
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#clienteRapidoModal">
                             <i class="bi bi-person-plus me-1"></i>Crear cliente
                         </button>
                         {% endif %}
@@ -46,41 +53,20 @@
 
                     {{ form.cliente }}
 
-                    <div
-                        class="client-picker"
-                        id="client-picker"
-                        data-search-url="{% url 'clients:buscar' %}">
+                    <div class="client-picker" id="client-picker" data-search-url="{% url 'clients:buscar' %}">
                         <div class="input-group">
-                            <span class="input-group-text bg-white text-muted">
-                                <i class="bi bi-search"></i>
-                            </span>
-                            <input
-                                type="search"
-                                class="form-control"
-                                id="cliente-search"
-                                placeholder="Buscar por nombre, CUIT/DNI, teléfono o email..."
-                                autocomplete="off"
-                                aria-label="Buscar cliente"
-                                aria-controls="cliente-results">
+                            <span class="input-group-text bg-white text-muted"><i class="bi bi-search"></i></span>
+                            <input type="search" class="form-control" id="cliente-search"
+                                   placeholder="Buscar por nombre, CUIT/DNI, teléfono o email..."
+                                   autocomplete="off" aria-label="Buscar cliente" aria-controls="cliente-results">
                         </div>
-
-                        <div
-                            class="client-picker-results d-none"
-                            id="cliente-results"
-                            role="listbox"
-                            aria-live="polite"></div>
+                        <div class="client-picker-results d-none" id="cliente-results" role="listbox" aria-live="polite"></div>
                     </div>
 
-                    <div
-                        class="client-picker-selected {% if not cliente_seleccionado %}d-none{% endif %}"
-                        id="cliente-selected">
-                        <div class="client-picker-selected-icon">
-                            <i class="bi bi-person-check"></i>
-                        </div>
+                    <div class="client-picker-selected {% if not cliente_seleccionado %}d-none{% endif %}" id="cliente-selected">
+                        <div class="client-picker-selected-icon"><i class="bi bi-person-check"></i></div>
                         <div class="client-picker-selected-copy">
-                            <strong id="cliente-selected-name">
-                                {% if cliente_seleccionado %}{{ cliente_seleccionado.nombre }}{% endif %}
-                            </strong>
+                            <strong id="cliente-selected-name">{% if cliente_seleccionado %}{{ cliente_seleccionado.nombre }}{% endif %}</strong>
                             <span id="cliente-selected-detail">
                                 {% if cliente_seleccionado %}
                                     {% if cliente_seleccionado.cuit_dni %}CUIT/DNI {{ cliente_seleccionado.cuit_dni }}{% endif %}
@@ -89,97 +75,170 @@
                                 {% endif %}
                             </span>
                         </div>
-                        <button
-                            type="button"
-                            class="btn btn-sm btn-light border"
-                            id="cliente-clear"
-                            aria-label="Quitar cliente seleccionado">
-                            Cambiar
-                        </button>
+                        <button type="button" class="btn btn-sm btn-light border" id="cliente-clear">Cambiar</button>
                     </div>
 
-                    <div class="field-help">
-                        Escribí al menos 2 caracteres. La búsqueda se realiza en el servidor y no carga toda la base de clientes.
-                    </div>
+                    <div class="field-help">Escribí al menos 2 caracteres. Si no existe, podés crearlo sin salir del presupuesto.</div>
                     {{ form.cliente.errors }}
                 </div>
 
                 <div class="form-field form-field-half">
                     <label>{{ form.obra.label }}</label>
                     {{ form.obra }}{{ form.obra.errors }}
+                    <div class="field-help">Ej. Proyecto 3 casas, ampliación local, vivienda particular.</div>
                 </div>
+
                 <div class="form-field form-field-half">
                     <label>{{ form.direccion.label }}</label>
                     {{ form.direccion }}{{ form.direccion.errors }}
                 </div>
+
                 <div class="form-field">
                     <label>{{ form.referencia.label }}</label>
                     {{ form.referencia }}{{ form.referencia.errors }}
-                    <div class="field-help">Resumen de lo cotizado, como la línea “Ref:” del presupuesto tradicional.</div>
+                    <div class="field-help">Una frase que resuma qué se está cotizando. Sale en la cabecera del PDF.</div>
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="form-card" id="propuesta-tecnica">
+        <div class="form-card-header">
+            <div>
+                <div class="detail-kicker">Paso 2</div>
+                <h2>Propuesta técnica</h2>
+            </div>
+            <p>Definí el título y el alcance general. Las etapas y sus importes se agregan después.</p>
+        </div>
+        <div class="form-card-body">
+            <div class="form-grid">
                 <div class="form-field form-field-half">
                     <label>{{ form.titulo_propuesta.label }}</label>
                     {{ form.titulo_propuesta }}{{ form.titulo_propuesta.errors }}
-                </div>
-                <div class="form-field">
-                    <label>{{ form.alcance_tecnico.label }}</label>
-                    {{ form.alcance_tecnico }}{{ form.alcance_tecnico.errors }}
-                    <div class="field-help">Un punto por línea. En el PDF se presenta como alcance técnico.</div>
-                </div>
-
-                <div class="form-field form-field-half">
-                    <label>Fecha de vencimiento</label>
-                    {{ form.fecha_vencimiento }}
-                    {{ form.fecha_vencimiento.errors }}
+                    <div class="field-help">Ej. PISO RADIANTE, AIRE ACONDICIONADO, REFORMA SALA DE MÁQUINAS.</div>
                 </div>
 
                 <div class="form-field form-field-half">
                     <label>Cantidad de unidades</label>
-                    {{ form.cantidad_unidades }}
-                    {{ form.cantidad_unidades.errors }}
-                    <div class="field-help">Multiplica el total cuando se cotiza por unidad habitacional.</div>
+                    {{ form.cantidad_unidades }}{{ form.cantidad_unidades.errors }}
+                    <div class="field-help">Usalo cuando el mismo precio aplica a varias casas/unidades.</div>
+                </div>
+
+                <div class="form-field">
+                    <label>{{ form.alcance_tecnico.label }}</label>
+                    {{ form.alcance_tecnico }}{{ form.alcance_tecnico.errors }}
+                    <div class="field-help">Un punto por línea. Después podés dividir el trabajo en 1ERA ETAPA, 2DA ETAPA, etc.</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="form-card" id="condiciones-comerciales">
+        <div class="form-card-header">
+            <div>
+                <div class="detail-kicker">Paso 3</div>
+                <h2>Reglas comerciales</h2>
+            </div>
+            <p>Vigencia, descuentos y cómo deben interpretarse los importes del presupuesto.</p>
+        </div>
+        <div class="form-card-body">
+            <div class="form-grid">
+                <div class="form-field form-field-half">
+                    <label>Fecha de vencimiento</label>
+                    {{ form.fecha_vencimiento }}{{ form.fecha_vencimiento.errors }}
+                </div>
+
+                <div class="form-field form-field-half quote-choice-card">
+                    <div class="form-check">{{ form.importes_por_unidad }}
+                        <label class="form-check-label" for="{{ form.importes_por_unidad.id_for_label }}">Importes expresados por unidad/casa</label>
+                    </div>
+                    <div class="field-help">El PDF aclara que materiales, equipamiento y mano de obra son por unidad.</div>
                 </div>
 
                 <div class="form-field form-field-half">
                     <label>Descuento general</label>
-                    {{ form.descuento_general_tipo }}
-                    {{ form.descuento_general_tipo.errors }}
+                    {{ form.descuento_general_tipo }}{{ form.descuento_general_tipo.errors }}
                 </div>
 
                 <div class="form-field form-field-half">
                     <label>Valor del descuento</label>
-                    {{ form.descuento_general_valor }}
-                    {{ form.descuento_general_valor.errors }}
+                    {{ form.descuento_general_valor }}{{ form.descuento_general_valor.errors }}
                 </div>
 
-                <div class="form-field form-field-half">
-                    <div class="form-check mt-4">{{ form.importes_por_unidad }} <label class="form-check-label" for="{{ form.importes_por_unidad.id_for_label }}">Importes expresados por unidad/casa</label></div>
+                <div class="form-field quote-choice-card">
+                    <div class="form-check">{{ form.mostrar_total_general }}
+                        <label class="form-check-label" for="{{ form.mostrar_total_general.id_for_label }}">Mostrar total general en PDF</label>
+                    </div>
+                    <div class="field-help">Desmarcalo si querés mostrar solo los importes de cada etapa, como en el presupuesto de referencia.</div>
                 </div>
-                <div class="form-field form-field-half">
-                    <div class="form-check mt-4">{{ form.mostrar_total_general }} <label class="form-check-label" for="{{ form.mostrar_total_general.id_for_label }}">Mostrar total general en PDF</label></div>
-                </div>
+            </div>
+        </div>
+    </section>
 
+    <section class="form-card" id="condiciones-cliente">
+        <div class="form-card-header">
+            <div>
+                <div class="detail-kicker">Paso 4</div>
+                <h2>Condiciones que recibe el cliente</h2>
+            </div>
+            <p>Estos bloques forman la segunda parte del PDF. Podés dejar vacíos los que no correspondan.</p>
+        </div>
+        <div class="form-card-body">
+            <div class="form-grid">
                 <div class="form-field">
-                    <label>Plantilla de condiciones</label>
-                    {{ form.plantilla_condiciones }}
-                    {{ form.plantilla_condiciones.errors }}
-                    <div class="field-help">El texto se copia al presupuesto y luego queda congelado/editable ahí.</div>
+                    <label>{{ form.notas_cliente.label }}</label>
+                    {{ form.notas_cliente }}{{ form.notas_cliente.errors }}
                 </div>
-
-                <div class="form-field"><label>{{ form.notas_cliente.label }}</label>{{ form.notas_cliente }}{{ form.notas_cliente.errors }}</div>
-                <div class="form-field"><label>{{ form.forma_pago.label }}</label>{{ form.forma_pago }}{{ form.forma_pago.errors }}</div>
-                <div class="form-field"><label>{{ form.garantia.label }}</label>{{ form.garantia }}{{ form.garantia.errors }}</div>
-                <div class="form-field"><label>{{ form.exclusiones.label }}</label>{{ form.exclusiones }}{{ form.exclusiones.errors }}</div>
-                <div class="form-field form-field-half"><label>{{ form.firma_texto.label }}</label>{{ form.firma_texto }}{{ form.firma_texto.errors }}</div>
-                <div class="form-field"><label>{{ form.notas_generales.label }}</label>{{ form.notas_generales }}{{ form.notas_generales.errors }}<div class="field-help">Solo para uso interno; no aparece en el PDF nuevo.</div></div>
+                <div class="form-field">
+                    <label>{{ form.forma_pago.label }}</label>
+                    {{ form.forma_pago }}{{ form.forma_pago.errors }}
+                </div>
+                <div class="form-field form-field-half">
+                    <label>{{ form.garantia.label }}</label>
+                    {{ form.garantia }}{{ form.garantia.errors }}
+                </div>
+                <div class="form-field form-field-half">
+                    <label>{{ form.exclusiones.label }}</label>
+                    {{ form.exclusiones }}{{ form.exclusiones.errors }}
+                </div>
+                <div class="form-field form-field-half">
+                    <label>{{ form.firma_texto.label }}</label>
+                    {{ form.firma_texto }}{{ form.firma_texto.errors }}
+                </div>
             </div>
 
-            <div class="form-actions">
-                <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-file-earmark-plus me-1"></i>{% if modo_edicion %}Guardar propuesta{% else %}Crear presupuesto{% endif %}
-                </button>
-                <a href="{% url 'quotes:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
-            </div>
+            <details class="quote-advanced-options">
+                <summary><i class="bi bi-sliders me-1"></i>Opciones avanzadas e internas</summary>
+                <div class="form-grid mt-3">
+                    <div class="form-field">
+                        <label>Plantilla de condiciones</label>
+                        {{ form.plantilla_condiciones }}{{ form.plantilla_condiciones.errors }}
+                        <div class="field-help">Copia una plantilla general al presupuesto para conservarla como snapshot.</div>
+                    </div>
+                    <div class="form-field">
+                        <label>{{ form.notas_generales.label }}</label>
+                        {{ form.notas_generales }}{{ form.notas_generales.errors }}
+                        <div class="field-help">Solo para ARQCLIMA. No aparece en el PDF.</div>
+                    </div>
+                </div>
+            </details>
+        </div>
+    </section>
+
+    <div class="quote-form-submitbar">
+        <div>
+            <strong>{% if modo_edicion %}Guardar cambios{% else %}Siguiente: armar etapas e importes{% endif %}</strong>
+            <span>{% if modo_edicion %}Volvés al constructor del presupuesto.{% else %}Después agregás las etapas, importes comerciales y detalle interno.{% endif %}</span>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'quotes:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-primary">
+                {% if modo_edicion %}
+                <i class="bi bi-check2-circle me-1"></i>Guardar propuesta
+                {% else %}
+                <i class="bi bi-arrow-right-circle me-1"></i>Crear y agregar etapas
+                {% endif %}
+            </button>
         </div>
     </div>
 </form>

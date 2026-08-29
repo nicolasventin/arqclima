@@ -2617,3 +2617,149 @@ a {
         position: static;
     }
 }
+
+
+/* Presupuestos · UX de armado v2 */
+.quote-form-shell {
+    display: grid;
+    gap: 1rem;
+}
+
+.quote-form-steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .65rem;
+    margin-bottom: 1rem;
+}
+
+.quote-form-steps a {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .7rem .8rem;
+    border: 1px solid var(--app-border);
+    border-radius: 12px;
+    background: var(--app-surface);
+    color: var(--app-muted);
+    font-size: .72rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.quote-form-steps a:hover {
+    border-color: #b9d8e8;
+    color: var(--app-brand);
+    background: #f7fbfd;
+}
+
+.quote-form-steps span {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+    font-size: .68rem;
+    font-weight: 800;
+}
+
+.quote-choice-card {
+    padding: .8rem .9rem;
+    border: 1px solid var(--app-border);
+    border-radius: 12px;
+    background: var(--app-surface-soft);
+}
+
+.quote-choice-card .form-check {
+    margin: 0;
+}
+
+.quote-choice-card .form-check-label {
+    font-size: .76rem;
+    font-weight: 700;
+}
+
+.quote-advanced-options {
+    margin-top: .9rem;
+    padding: .8rem .9rem;
+    border: 1px dashed var(--app-border);
+    border-radius: 12px;
+    background: #fbfcfd;
+}
+
+.quote-advanced-options summary {
+    cursor: pointer;
+    color: var(--app-muted);
+    font-size: .74rem;
+    font-weight: 750;
+}
+
+.quote-form-submitbar {
+    position: sticky;
+    bottom: .7rem;
+    z-index: 25;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .85rem 1rem;
+    border: 1px solid #cbdce5;
+    border-radius: 14px;
+    background: rgba(255,255,255,.96);
+    box-shadow: 0 12px 30px rgba(18,52,71,.12);
+    backdrop-filter: blur(8px);
+}
+
+.quote-form-submitbar strong,
+.quote-form-submitbar span {
+    display: block;
+}
+
+.quote-form-submitbar strong {
+    font-size: .8rem;
+}
+
+.quote-form-submitbar span {
+    margin-top: .15rem;
+    color: var(--app-muted);
+    font-size: .68rem;
+}
+
+#importeComercialModal .modal-content {
+    border: 0;
+    border-radius: 16px;
+    box-shadow: 0 18px 60px rgba(18,52,71,.18);
+}
+
+#importeComercialModal .modal-header,
+#importeComercialModal .modal-footer {
+    border-color: var(--app-border);
+}
+
+@media (max-width: 767.98px) {
+    .quote-form-steps {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .quote-form-submitbar {
+        position: static;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .quote-form-submitbar > .d-flex {
+        width: 100%;
+    }
+
+    .quote-form-submitbar .btn {
+        flex: 1;
+    }
+}
+
+@media (max-width: 479.98px) {
+    .quote-form-steps {
+        grid-template-columns: 1fr;
+    }
+}

@@ -322,3 +322,14 @@ Antes de programar, decime si tenés alguna duda sobre el modelo de datos, los r
 - notas_generales se considera interna y no se imprime en el PDF nuevo.
 - El PDF puede ocultar el total general para cotizaciones que muestran solamente importes por etapa/unidad.
 - La propuesta, las etapas y las líneas comerciales solo se editan en Borrador; la tabla de líneas comerciales también queda protegida por el trigger PostgreSQL.
+
+
+### Presupuestos — UX de armado v2 (2026-08-29)
+
+- El alta/edición de la cabecera del presupuesto se organiza en cuatro pasos visibles: Cliente y obra, Propuesta técnica, Reglas comerciales y Condiciones para el cliente.
+- Las opciones internas/avanzadas (plantilla general y notas internas) quedan plegadas para no cargar visualmente el flujo principal.
+- Al crear un presupuesto, la acción principal comunica que el siguiente paso es agregar etapas e importes.
+- En el constructor del presupuesto, los importes comerciales se pueden agregar en un modal sin abandonar la página; el formulario completo sigue disponible como fallback.
+- El modal preselecciona la etapa desde la que fue abierto y solo se muestra a usuarios con permiso `quotes.add_itempresupuesto`.
+- El PDF reduce la repetición del número de presupuesto en el cuerpo: la franja principal pasa a decir “PROPUESTA TÉCNICO-COMERCIAL”; el número sigue identificado en encabezado y pie.
+- La firma del PDF usa una línea física de tabla para que xhtml2pdf la renderice de forma consistente.

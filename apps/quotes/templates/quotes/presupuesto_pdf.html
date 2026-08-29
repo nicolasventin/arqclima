@@ -246,17 +246,21 @@
         font-weight: bold;
     }
 
-    .signature {
-        margin-top: 5mm;
-        text-align: right;
+    .signature-table {
+        width: 58mm;
+        margin: 5mm 0 0 auto;
+        border-collapse: collapse;
         page-break-inside: avoid;
     }
 
-    .signature-line {
-        display: inline-block;
-        min-width: 55mm;
-        padding-top: 2mm;
+    .signature-rule {
+        height: 1px;
+        padding: 0;
         border-top: 1px solid #7d8a91;
+    }
+
+    .signature-copy {
+        padding-top: 1.7mm;
         text-align: left;
         font-size: 8pt;
     }
@@ -286,7 +290,7 @@
     {% if presupuesto.referencia %}<tr><td class="meta-label">Ref:</td><td>{{ presupuesto.referencia|linebreaksbr }}</td></tr>{% endif %}
 </table>
 
-<div class="quote-number">PRESUPUESTO Nº {{ presupuesto.numero }}</div>
+<div class="quote-number">PROPUESTA TÉCNICO-COMERCIAL</div>
 
 {% if presupuesto.titulo_propuesta %}
 <div class="proposal-title">{{ presupuesto.titulo_propuesta }}</div>
@@ -452,12 +456,15 @@
 </div>
 {% endif %}
 
-<div class="signature">
-    <div class="signature-line">
-        <strong>Por ARQCLIMA</strong><br>
-        {% if presupuesto.firma_texto %}{{ presupuesto.firma_texto }}{% else %}Responsable comercial{% endif %}
-    </div>
-</div>
+<table class="signature-table">
+    <tr><td class="signature-rule"></td></tr>
+    <tr>
+        <td class="signature-copy">
+            <strong>Por ARQCLIMA</strong><br>
+            {% if presupuesto.firma_texto %}{{ presupuesto.firma_texto }}{% else %}Responsable comercial{% endif %}
+        </td>
+    </tr>
+</table>
 
 </body>
 </html>
