@@ -277,11 +277,10 @@ def enviar_material(material, usuario):
     antes), no pide una cantidad. Si cantidad_necesaria se edita hacia
     arriba después de un envío, un nuevo envío manda solo el delta.
     """
-    material_bloqueado = (
-        MaterialTrabajo.objects.select_for_update()
-        .select_related("producto", "trabajo__presupuesto__cliente")
-        .get(pk=material.pk)
-    )
+    # Bloquear solo MaterialTrabajo. producto es nullable y un
+    # select_related() produciría un LEFT OUTER JOIN sobre el que
+    # PostgreSQL no permite FOR UPDATE.
+    material_bloqueado = MaterialTrabajo.objects.select_for_update().get(pk=material.pk)
     if material_bloqueado.producto_id is None:
         raise ValueError("Este material no tiene producto de catálogo — no se puede enviar desde Stock.")
 
@@ -313,7 +312,6 @@ def enviar_materiales_pendientes(trabajo, usuario):
     materiales = list(
         MaterialTrabajo.objects.select_for_update()
         .filter(trabajo_id=trabajo.pk, producto__isnull=False)
-        .select_related("producto", "trabajo__presupuesto__cliente")
         .order_by("pk")
     )
     movimientos = []
@@ -348,11 +346,9 @@ def registrar_sobrante(material, cantidad_sobrante, usuario):
     if cantidad_sobrante <= 0:
         raise ValueError("La cantidad de sobrante tiene que ser mayor a cero.")
 
-    material_bloqueado = (
-        MaterialTrabajo.objects.select_for_update()
-        .select_related("producto", "trabajo__presupuesto__cliente")
-        .get(pk=material.pk)
-    )
+    # Igual que en enviar_material(): FOR UPDATE se aplica solamente a
+    # la fila MaterialTrabajo; sus relaciones se leen después.
+    material_bloqueado = MaterialTrabajo.objects.select_for_update().get(pk=material.pk)
     if material_bloqueado.producto_id is None:
         raise ValueError("Este material no tiene producto de catálogo — no se puede devolver a Stock.")
 
