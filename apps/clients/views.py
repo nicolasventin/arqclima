@@ -84,7 +84,7 @@ class ClienteUpdateView(PermisoRequeridoMixin, UpdateView):
 class ClienteSearchView(PermisoRequeridoMixin, View):
     """Búsqueda server-side para selectores que pueden crecer a miles de clientes."""
 
-    permission_required = "clients.view_cliente"
+    permission_required = "quotes.add_presupuesto"
 
     def get(self, request):
         q = (request.GET.get("q") or "").strip()
