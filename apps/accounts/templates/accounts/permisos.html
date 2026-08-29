@@ -4,9 +4,9 @@
 
 {% block content %}
 <h1 class="h3 mb-1">Usuarios y permisos</h1>
-<p class="text-muted">
-    Cada usuario tiene un rol (que trae permisos por defecto). Además podés
-    tildarle permisos individuales puntuales por fuera de su rol.
+<p class="text-muted mb-4">
+    Cada usuario tiene uno de los cinco roles de ARQCLIMA. Además podés
+    otorgarle permisos individuales extra por fuera de su rol.
 </p>
 
 <div class="accordion" id="acordeonUsuarios">
@@ -25,46 +25,61 @@
                     {% csrf_token %}
                     <input type="hidden" name="user_id" value="{{ fila.usuario.id }}">
 
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label fw-bold">Rol</label>
-                        <select name="group_id" class="form-select" style="max-width: 320px;">
-                            <option value="">— Sin rol —</option>
+                        <select name="group_id" class="form-select" style="max-width: 360px;" required>
                             {% for grupo in grupos %}
                             <option value="{{ grupo.id }}" {% if grupo.id == fila.grupo_actual_id %}selected{% endif %}>
                                 {{ grupo.name }}
                             </option>
                             {% endfor %}
                         </select>
-                    </div>
-
-                    <label class="form-label fw-bold">Permisos individuales (overrides)</label>
-                    <p class="text-muted small">
-                        Los marcados como "por rol" ya los tiene por su rol actual; no hace falta tildarlos.
-                    </p>
-                    <div class="row">
-                        {% for permiso in fila.permisos %}
-                        <div class="col-md-6">
-                            <div class="form-check">
-                                <input
-                                    class="form-check-input"
-                                    type="checkbox"
-                                    name="permissions"
-                                    value="{{ permiso.id }}"
-                                    id="perm-{{ fila.usuario.id }}-{{ permiso.id }}"
-                                    {% if permiso.activo %}checked{% endif %}
-                                    {% if permiso.por_rol %}disabled{% endif %}>
-                                <label class="form-check-label" for="perm-{{ fila.usuario.id }}-{{ permiso.id }}">
-                                    {{ permiso.nombre }}
-                                    {% if permiso.por_rol %}
-                                        <span class="badge bg-light text-dark border">por rol</span>
-                                    {% endif %}
-                                </label>
-                            </div>
+                        <div class="form-text">
+                            Solo se pueden asignar los cinco roles definidos por ARQCLIMA.
                         </div>
-                        {% endfor %}
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-sm mt-3">Guardar cambios</button>
+                    <div class="mb-2">
+                        <label class="form-label fw-bold mb-0">Permisos individuales extra</label>
+                        <p class="text-muted small mb-3">
+                            Los permisos marcados como <strong>por rol</strong> ya vienen heredados y no se pueden
+                            quitar desde esta pantalla. Los demás se pueden agregar o revocar individualmente.
+                        </p>
+                    </div>
+
+                    {% for modulo in fila.permisos_por_app %}
+                    <div class="border rounded p-3 mb-3">
+                        <div class="fw-semibold mb-2">{{ modulo.nombre }}</div>
+                        <div class="row g-2">
+                            {% for permiso in modulo.permisos %}
+                            <div class="col-lg-6">
+                                <div class="form-check">
+                                    <input
+                                        class="form-check-input"
+                                        type="checkbox"
+                                        name="permissions"
+                                        value="{{ permiso.id }}"
+                                        id="perm-{{ fila.usuario.id }}-{{ permiso.id }}"
+                                        {% if permiso.activo %}checked{% endif %}
+                                        {% if permiso.por_rol %}disabled{% endif %}>
+                                    <label class="form-check-label" for="perm-{{ fila.usuario.id }}-{{ permiso.id }}">
+                                        {{ permiso.nombre }}
+                                        {% if permiso.por_rol %}
+                                            <span class="badge bg-light text-dark border">por rol</span>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="alert alert-warning">
+                        No se encontraron permisos administrables para los módulos propios.
+                    </div>
+                    {% endfor %}
+
+                    <button type="submit" class="btn btn-primary btn-sm mt-1">Guardar cambios</button>
                 </form>
             </div>
         </div>
