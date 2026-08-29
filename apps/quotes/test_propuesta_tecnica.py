@@ -118,6 +118,109 @@ class PropuestaTecnicaPresupuestoTests(TestCase):
         )
         return presupuesto
 
+
+    def _presupuesto_largo_pdf(self):
+        presupuesto = self._presupuesto_muestra()
+        presupuesto.alcance_tecnico = "\n".join(
+            [
+                "Se ha contemplado la provisión e instalación de un sistema de piso radiante para el proyecto según plano adjunto.",
+                "La Caldera se ha previsto ubicarla sobre muro de gabinete exterior junto a churrasquera, según plano.",
+                "El termostato será ubicado sobre pared interna lejos de ventanas.",
+                "El colector será ubicado sobre muro de ingreso a Dormitorio Norte.",
+                "Balance térmico: se contempla sistema de construcción tradicional y aberturas simples.",
+                "Trabajos a realizar: se propone ejecutar el proyecto en dos etapas.",
+                "Tiempo de ejecución 1era etapa: 3 a 4 días, máximo.",
+                "Tiempo de ejecución 2da etapa: se resuelve en el día.",
+                "La temperatura exterior considerada: -4° C.",
+                "La temperatura interior de confort: 21° C.",
+            ]
+        )
+        presupuesto.notas_cliente = "\n".join(
+            [
+                "Mano de obra 1° y 2° etapa sujeta a cambios por inflación al momento de ejecución.",
+                "En el caso que ventilación estándar de caldera no sea suficiente, contemplar accesorios adicionales.",
+                "Montos son por unidad habitacional. Sumar según corresponda.",
+                "Cantidad y ubicación de colector es tentativo, a consensuar con propietarios o arquitecto/a.",
+                "Se deja presupuesto abierto a posibles modificaciones por cambios en listas de precios.",
+            ]
+        )
+        presupuesto.forma_pago = "\n".join(
+            [
+                "Contado o transferencia: 8% de descuento sobre materiales y equipamiento de ambas etapas.",
+                "Echeqs 0-30-60 sin recargo.",
+                "Consultar financiación.",
+            ]
+        )
+        presupuesto.garantia = (
+            "Se garantizan los equipos antes mencionados, los materiales utilizados y "
+            "la instalación a realizar por el término de un año, para lo cual deberán "
+            "utilizarse de acuerdo al manual de uso y mantenimiento."
+        )
+        presupuesto.exclusiones = "\n".join(
+            [
+                "Electricidad al pie de los equipos según se indique.",
+                "Cañería y tendido de cables entre termostatos y equipo.",
+                "Alimentación de agua al pie del equipo según se indique.",
+                "Colocación de Gabinetes losa radiante en caso que vayan embutidos.",
+                "Canaletas en piso en caso que esté el contrapiso terminado.",
+                "Trabajos de terminaciones, impermeabilizaciones y albañilería.",
+                "Contrapiso nivelado para recibir sándwich de aislación y malla sujeción caño PEX.",
+                "Roturas de cañería se cobrarán como adicionales de obra.",
+            ]
+        )
+        presupuesto.save(
+            update_fields=[
+                "alcance_tecnico",
+                "notas_cliente",
+                "forma_pago",
+                "garantia",
+                "exclusiones",
+            ]
+        )
+
+        etapa1 = presupuesto.secciones.get(titulo="1ERA ETAPA CALEFACCIÓN")
+        etapa1.descripcion_publica = "\n".join(
+            [
+                "1 colector de bronce de 6 circuitos con válvulas de corte, grifo y purgador automático.",
+                "Cañería PEX 20 mm marca SALADILLO, total 550 mts.",
+                "Cañería de interconexión de colector hasta caldera en IPS MAXUM.",
+                "Aislación de piso con manta térmica SALADILLO.",
+                "NO SE COTIZA MALLA SIMA.",
+            ]
+        )
+        etapa1.save(update_fields=["descripcion_publica"])
+
+        etapa2 = SeccionPresupuesto.objects.create(
+            presupuesto=presupuesto,
+            titulo="2DA ETAPA CALEFACCIÓN",
+            orden=1,
+            descripcion_publica="\n".join(
+                [
+                    "1 Caldera mural CALDAIA modelo ECCO 24 DS TF.",
+                    "1 Kit de conexiones hidráulicas.",
+                    "Salida de humos con codo coaxial y tramo de 1 ml.",
+                    "1 Termostato común ASUA.",
+                ]
+            ),
+        )
+        LineaComercialPresupuesto.objects.create(
+            presupuesto=presupuesto,
+            seccion=etapa2,
+            etiqueta="Equipamiento",
+            monto=Decimal("2298500"),
+            tipo_iva=TipoIVA.INCLUIDO,
+            orden=3,
+        )
+        LineaComercialPresupuesto.objects.create(
+            presupuesto=presupuesto,
+            seccion=etapa2,
+            etiqueta="Mano de Obra",
+            monto=Decimal("385000"),
+            tipo_iva=TipoIVA.MAS_IVA,
+            orden=4,
+        )
+        return presupuesto
+
     def test_totales_comerciales_reemplazan_a_items_para_total_cliente(self):
         presupuesto = self._presupuesto_muestra()
 
@@ -149,6 +252,34 @@ class PropuestaTecnicaPresupuestoTests(TestCase):
         self.assertIn("Materiales", texto)
         self.assertIn("Mano de Obra", texto)
         self.assertNotIn("10909860", texto.replace(".", "").replace(",", ""))
+
+
+    def test_pdf_largo_es_compacto_y_renderiza_logo(self):
+        presupuesto = self._presupuesto_largo_pdf()
+        self.client.login(username=self.usuario.username, password="clave12345")
+
+        response = self.client.get(reverse("quotes:pdf", args=[presupuesto.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        reader = PdfReader(BytesIO(response.content))
+        self.assertEqual(len(reader.pages), 2)
+
+        resources = reader.pages[0].get("/Resources")
+        xobjects = resources.get("/XObject") if resources else None
+        hay_imagen = False
+        if xobjects:
+            for referencia in xobjects.values():
+                objeto = referencia.get_object()
+                if objeto.get("/Subtype") == "/Image":
+                    hay_imagen = True
+                    break
+        self.assertTrue(hay_imagen, "El encabezado del PDF debe incluir el logo raster de ARQCLIMA.")
+
+        texto = "\n".join(page.extract_text() or "" for page in reader.pages)
+        self.assertIn("Echeqs 0-30-60 sin recargo", texto)
+        self.assertIn("Consultar financiación", texto)
+        self.assertIn("GARANT", texto)
+        self.assertIn("EXCLUSIONES", texto)
 
     def test_detalle_separa_importes_cliente_de_items_internos(self):
         presupuesto = self._presupuesto_muestra()
