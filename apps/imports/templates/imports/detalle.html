@@ -2,16 +2,295 @@
 {% block title %}Importación #{{ importacion.pk }} — ARQCLIMA{% endblock %}
 {% block page_heading %}Importación #{{ importacion.pk }}{% endblock %}
 {% block page_subheading %}{{ importacion.proveedor.nombre_comercial }}{% endblock %}
+
 {% block content %}
-<div class="detail-header"><div class="detail-header-copy"><div class="detail-kicker">Importaciones</div><h1>Importación #{{ importacion.pk }}</h1><div class="detail-subtitle">{{ importacion.proveedor.nombre_comercial }} · cargada por {{ importacion.cargado_por|default:"—" }} el {{ importacion.cargado_en|date:"d/m/Y H:i" }}</div></div><div class="detail-actions">{% if importacion.estado == "pendiente" %}<span class="status-pill status-pill-warning">Pendiente de confirmar</span>{% elif importacion.estado == "confirmada" %}<span class="status-pill status-pill-success">Confirmada</span>{% else %}<span class="status-pill status-pill-neutral">Descartada</span>{% endif %}<a href="{% url 'imports:lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a></div></div>
+<div class="detail-header">
+    <div class="detail-header-copy">
+        <div class="detail-kicker">Importaciones</div>
+        <h1>Importación #{{ importacion.pk }}</h1>
+        <div class="detail-subtitle">
+            {{ importacion.proveedor.nombre_comercial }} · {{ importacion.get_tipo_archivo_display }}
+            · cargada por {{ importacion.cargado_por|default:"—" }} el {{ importacion.cargado_en|date:"d/m/Y H:i" }}
+        </div>
+    </div>
+    <div class="detail-actions">
+        {% if importacion.estado == "pendiente" %}
+            <span class="status-pill status-pill-warning">Pendiente de confirmar</span>
+        {% elif importacion.estado == "confirmada" %}
+            <span class="status-pill status-pill-success">Confirmada</span>
+        {% else %}
+            <span class="status-pill status-pill-neutral">Descartada</span>
+        {% endif %}
 
-<div class="d-flex flex-wrap gap-2 mb-3">{% for etiqueta, cantidad in resumen.items %}<span class="status-pill status-pill-neutral">{{ etiqueta }}: {{ cantidad }}</span>{% endfor %}</div>
+        {% if importacion.estado_analisis == "requiere_revision" %}
+            <span class="status-pill status-pill-warning"><i class="bi bi-eye"></i>Requiere revisión</span>
+        {% else %}
+            <span class="status-pill status-pill-success"><i class="bi bi-check2"></i>Analizada</span>
+        {% endif %}
 
-<form method="post" action="{% url 'imports:confirmar' importacion.pk %}">{% csrf_token %}
-<div class="data-panel"><div class="table-responsive"><table class="table data-table"><thead><tr>{% if importacion.estado == "pendiente" %}<th>Incluir</th>{% endif %}<th>Fila</th><th>Marca</th><th>Código</th><th>Nombre</th><th>Costo</th><th>Categoría</th><th>Detalle</th></tr></thead><tbody>
-{% for fila in filas %}<tr class="{% if fila.categoria == 'error' %}table-danger{% elif fila.categoria == 'para_revisar' %}table-warning{% elif fila.categoria == 'nuevo_producto' or fila.categoria == 'nuevo_vinculo' %}table-info{% elif fila.categoria == 'actualiza_costo' %}table-success{% endif %}">{% if importacion.estado == "pendiente" %}<td>{% if fila.categoria != "error" %}<input type="checkbox" name="incluir" value="{{ fila.pk }}" {% if fila.incluir %}checked{% endif %}>{% endif %}</td>{% endif %}<td>{{ fila.numero_fila }}</td><td>{{ fila.marca_texto }}</td><td>{{ fila.codigo }}</td><td>{{ fila.nombre_texto }}</td><td>{% if fila.costo %}&#36;{{ fila.costo }}{% else %}—{% endif %}</td><td>{{ fila.get_categoria_display }}</td><td class="text-muted">{{ fila.detalle }}</td></tr>{% empty %}<tr><td colspan="8" class="empty-table">El archivo no tenía filas con datos.</td></tr>{% endfor %}
-</tbody></table></div></div>
-{% if importacion.estado == "pendiente" %}<div class="form-actions"><button type="submit" class="btn btn-primary">Confirmar importación</button></div>{% endif %}
+        <a href="{% url 'imports:archivo' importacion.pk %}" target="_blank" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-file-earmark-arrow-down me-1"></i>Ver original
+        </a>
+        <a href="{% url 'imports:lista' %}" class="btn btn-sm btn-outline-secondary">Volver</a>
+    </div>
+</div>
+
+<div class="import-flow mb-3" aria-label="Flujo de importación">
+    <div class="import-flow-step is-done"><span><i class="bi bi-check"></i></span><strong>Archivo</strong><small>Documento recibido</small></div>
+    <div class="import-flow-step is-done"><span><i class="bi bi-check"></i></span><strong>Análisis</strong><small>{{ filas|length }} filas detectadas</small></div>
+    <div class="import-flow-step {% if importacion.estado == 'pendiente' %}is-active{% else %}is-done{% endif %}"><span>3</span><strong>Revisión</strong><small>{{ filas_revisar }} con atención</small></div>
+    <div class="import-flow-step {% if importacion.estado == 'confirmada' %}is-done{% endif %}"><span>4</span><strong>Confirmación</strong><small>Aplicar al catálogo</small></div>
+</div>
+
+<div class="report-kpi-grid import-kpi-grid">
+    <article class="report-kpi report-kpi-info">
+        <span class="report-kpi-label">Filas detectadas</span>
+        <strong>{{ filas|length }}</strong>
+        <small>{{ filas_aplicables }} con cambio potencial.</small>
+    </article>
+    <article class="report-kpi {% if filas_revisar %}report-kpi-warning{% else %}report-kpi-success{% endif %}">
+        <span class="report-kpi-label">Para revisar / error</span>
+        <strong>{{ filas_revisar }}</strong>
+        <small>Estas filas nunca se aplican sin corrección.</small>
+    </article>
+    <article class="report-kpi">
+        <span class="report-kpi-label">Imágenes extraídas</span>
+        <strong>{{ imagenes|length }}</strong>
+        <small>Evidencia visual, no identificación automática.</small>
+    </article>
+    <article class="report-kpi">
+        <span class="report-kpi-label">Análisis</span>
+        <strong>{{ importacion.get_estado_analisis_display }}</strong>
+        <small>{% if importacion.analizado_en %}{{ importacion.analizado_en|date:"d/m/Y H:i" }}{% else %}—{% endif %}</small>
+    </article>
+</div>
+
+{% if importacion.advertencias_analisis %}
+<section class="detail-card import-warning-card mb-3">
+    <div class="detail-card-title">
+        <h2><i class="bi bi-exclamation-triangle me-1"></i>Advertencias del análisis</h2>
+        <span>{{ importacion.advertencias_analisis|length }}</span>
+    </div>
+    <ul class="import-warning-list">
+        {% for advertencia in importacion.advertencias_analisis %}
+        <li>{{ advertencia }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+    {% for etiqueta, cantidad in resumen.items %}
+    {% if cantidad %}
+    <span class="status-pill status-pill-neutral">{{ etiqueta }}: {{ cantidad }}</span>
+    {% endif %}
+    {% endfor %}
+    {% for etiqueta, cantidad in resumen_confianza.items %}
+    {% if cantidad %}
+    <span class="status-pill status-pill-info">Confianza {{ etiqueta|lower }}: {{ cantidad }}</span>
+    {% endif %}
+    {% endfor %}
+</div>
+
+{% if imagenes %}
+<section class="detail-card mb-3">
+    <div class="detail-card-title">
+        <h2>Imágenes detectadas</h2>
+        <span>{{ imagenes|length }} conservadas para revisión</span>
+    </div>
+    <div class="import-image-grid">
+        {% for imagen in imagenes %}
+        <a
+            class="import-image-card"
+            href="{% url 'imports:imagen' importacion.pk imagen.pk %}"
+            target="_blank"
+            title="Abrir imagen">
+            <img src="{% url 'imports:imagen' importacion.pk imagen.pk %}" alt="Imagen extraída de {{ imagen.origen }}">
+            <span>
+                <strong>{{ imagen.origen|default:"Archivo" }}</strong>
+                <small>
+                    {% if imagen.numero_fila_origen %}Fila {{ imagen.numero_fila_origen }} · {% endif %}
+                    {% if imagen.ancho and imagen.alto %}{{ imagen.ancho }}×{{ imagen.alto }}{% endif %}
+                </small>
+            </span>
+        </a>
+        {% endfor %}
+    </div>
+    <div class="field-help mt-2">
+        Las imágenes no se asignan automáticamente a productos. Sirven para comparar visualmente la tabla extraída con el documento original.
+    </div>
+</section>
+{% endif %}
+
+{% if filas %}
+<form method="post" action="{% url 'imports:confirmar' importacion.pk %}" id="import-confirm-form">
+    {% csrf_token %}
+    {% if importacion.estado == "pendiente" %}
+    <div class="import-review-toolbar">
+        <div>
+            <strong>Vista previa de cambios</strong>
+            <span>Las filas de confianza media/baja vienen destildadas. Las filas “Para revisar” y “Error” deben corregirse antes.</span>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="import-select-safe">Seleccionar aplicables</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="import-clear-safe">Destildar todas</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="data-panel">
+        <div class="table-responsive">
+            <table class="table data-table import-preview-table">
+                <thead>
+                    <tr>
+                        {% if importacion.estado == "pendiente" %}<th>Aplicar</th>{% endif %}
+                        <th>Origen</th>
+                        <th>Marca</th>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Costo</th>
+                        <th>Confianza</th>
+                        <th>Resultado</th>
+                        <th>Detalle</th>
+                        {% if importacion.estado == "pendiente" %}<th class="text-end">Revisar</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                {% for fila in filas %}
+                    <tr class="{% if fila.categoria == 'error' %}table-danger-soft{% elif fila.categoria == 'para_revisar' %}import-row-review{% elif fila.categoria == 'nuevo_producto' or fila.categoria == 'nuevo_vinculo' %}import-row-new{% elif fila.categoria == 'actualiza_costo' %}import-row-update{% endif %}">
+                        {% if importacion.estado == "pendiente" %}
+                        <td>
+                            {% if fila.categoria != "error" and fila.categoria != "para_revisar" and fila.categoria != "sin_cambios" %}
+                            <input
+                                class="form-check-input import-safe-checkbox"
+                                type="checkbox"
+                                name="incluir"
+                                value="{{ fila.pk }}"
+                                {% if fila.incluir %}checked{% endif %}
+                                aria-label="Aplicar fila {{ fila.numero_fila }}">
+                            {% else %}
+                            <i class="bi bi-lock text-muted" title="Debe corregirse o no requiere cambios"></i>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        <td>
+                            <span class="table-primary-text">{{ fila.origen|default:"Archivo" }}</span>
+                            <span class="table-secondary-text">Fila {{ fila.numero_fila }}</span>
+                        </td>
+                        <td>{{ fila.marca_texto|default:"—" }}</td>
+                        <td>
+                            <span class="table-primary-text">{{ fila.codigo|default:"—" }}</span>
+                            {% if fila.codigo_proveedor_texto %}
+                            <span class="table-secondary-text">Prov.: {{ fila.codigo_proveedor_texto }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ fila.nombre_texto|default:"—" }}
+                            {% if fila.unidad_texto or fila.categoria_texto %}
+                            <span class="table-secondary-text">
+                                {% if fila.unidad_texto %}{{ fila.unidad_texto }}{% endif %}
+                                {% if fila.unidad_texto and fila.categoria_texto %} · {% endif %}
+                                {% if fila.categoria_texto %}{{ fila.categoria_texto }}{% endif %}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>{% if fila.costo %}<strong>$ {{ fila.costo }}</strong>{% else %}—{% endif %}</td>
+                        <td>
+                            {% if fila.confianza == "revisada" %}
+                            <span class="status-pill status-pill-success">Revisada</span>
+                            {% elif fila.confianza == "alta" %}
+                            <span class="status-pill status-pill-success">Alta</span>
+                            {% elif fila.confianza == "media" %}
+                            <span class="status-pill status-pill-warning">Media</span>
+                            {% else %}
+                            <span class="status-pill status-pill-danger">Baja</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if fila.categoria == "nuevo_producto" %}
+                            <span class="status-pill status-pill-info">Producto nuevo</span>
+                            {% elif fila.categoria == "nuevo_vinculo" %}
+                            <span class="status-pill status-pill-info">Nuevo vínculo</span>
+                            {% elif fila.categoria == "actualiza_costo" %}
+                            <span class="status-pill status-pill-success">Actualiza costo</span>
+                            {% elif fila.categoria == "sin_cambios" %}
+                            <span class="status-pill status-pill-neutral">Sin cambios</span>
+                            {% elif fila.categoria == "para_revisar" %}
+                            <span class="status-pill status-pill-warning">Para revisar</span>
+                            {% else %}
+                            <span class="status-pill status-pill-danger">Error</span>
+                            {% endif %}
+                        </td>
+                        <td class="import-detail-cell">{{ fila.detalle|default:"—" }}</td>
+                        {% if importacion.estado == "pendiente" %}
+                        <td class="text-end">
+                            <a href="{% url 'imports:fila_editar' importacion.pk fila.pk %}" class="btn btn-sm {% if fila.categoria == 'para_revisar' or fila.categoria == 'error' %}btn-warning{% else %}btn-outline-secondary{% endif %}">
+                                <i class="bi bi-pencil me-1"></i>{% if fila.categoria == "para_revisar" or fila.categoria == "error" %}Corregir{% else %}Editar{% endif %}
+                            </a>
+                        </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if importacion.estado == "pendiente" %}
+    <div class="form-actions import-confirm-actions">
+        {% if puede_confirmar %}
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-database-check me-1"></i>Confirmar filas seleccionadas
+        </button>
+        <span class="field-help">
+            Al confirmar se vuelven a validar permisos, identidad del producto y costo actual antes de escribir.
+        </span>
+        {% else %}
+        <div class="alert alert-warning mb-0">
+            No hay filas para confirmar. Revisá las advertencias o el documento original.
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
 </form>
-{% if importacion.estado == "pendiente" %}<div class="detail-card danger-zone mt-3"><div class="detail-card-title"><h2>Descartar importación</h2><span>No aplica cambios</span></div><form method="post" action="{% url 'imports:descartar' importacion.pk %}">{% csrf_token %}<button type="submit" class="btn btn-outline-danger btn-sm">Descartar sin aplicar cambios</button></form></div>{% endif %}
+{% else %}
+<div class="report-empty">
+    <i class="bi bi-table"></i>
+    No se detectaron filas tabulares. Si el archivo era un PDF escaneado, revisá las imágenes y el original.
+</div>
+{% endif %}
+
+{% if importacion.estado == "pendiente" %}
+<div class="detail-card danger-zone mt-3">
+    <div class="detail-card-title">
+        <h2>Descartar importación</h2>
+        <span>No aplica ningún cambio</span>
+    </div>
+    <form method="post" action="{% url 'imports:descartar' importacion.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-danger btn-sm">Descartar sin aplicar cambios</button>
+    </form>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const checkboxes = Array.from(document.querySelectorAll(".import-safe-checkbox"));
+    const selectButton = document.getElementById("import-select-safe");
+    const clearButton = document.getElementById("import-clear-safe");
+
+    if (selectButton) {
+        selectButton.addEventListener("click", () => {
+            checkboxes.forEach((checkbox) => { checkbox.checked = true; });
+        });
+    }
+    if (clearButton) {
+        clearButton.addEventListener("click", () => {
+            checkboxes.forEach((checkbox) => { checkbox.checked = false; });
+        });
+    }
+});
+</script>
 {% endblock %}
