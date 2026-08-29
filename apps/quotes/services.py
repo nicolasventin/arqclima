@@ -6,7 +6,15 @@ from apps.audit.services import log_action
 from apps.pricing.models import ConfiguracionGeneral
 from apps.pricing.services import calcular_precio_venta, costo_actual
 
-from .models import EstadoPresupuesto, ItemPresupuesto, Presupuesto, SeccionPresupuesto, TipoDescuento, TipoIVA
+from .models import (
+    EstadoPresupuesto,
+    ItemPresupuesto,
+    LineaComercialPresupuesto,
+    Presupuesto,
+    SeccionPresupuesto,
+    TipoDescuento,
+    TipoIVA,
+)
 
 
 class TransicionInvalidaError(ValueError):
@@ -108,25 +116,50 @@ def calcular_totales(presupuesto):
     monto fijo.
     """
     config = ConfiguracionGeneral.obtener()
-    items = presupuesto.items.filter(incluido=True)
+    lineas_comerciales = presupuesto.lineas_comerciales.filter(incluido=True)
+    usa_lineas_comerciales = lineas_comerciales.exists()
 
-    subtotal_general = sum((_neto_item(item, config.iva_pct) for item in items), Decimal("0"))
+    if usa_lineas_comerciales:
+        def neto_linea(linea):
+            monto = linea.monto
+            if linea.tipo_iva == TipoIVA.MAS_IVA:
+                monto = monto * (Decimal("1") + config.iva_pct / Decimal("100"))
+            return monto
+
+        subtotal_general = sum(
+            (neto_linea(linea) for linea in lineas_comerciales),
+            Decimal("0"),
+        )
+    else:
+        items = presupuesto.items.filter(incluido=True)
+        subtotal_general = sum(
+            (_neto_item(item, config.iva_pct) for item in items),
+            Decimal("0"),
+        )
 
     if presupuesto.descuento_general_tipo == TipoDescuento.PORCENTAJE:
         subtotal_con_descuento = subtotal_general * (
             Decimal("1") - presupuesto.descuento_general_valor / Decimal("100")
         )
+        total_por_unidad = subtotal_con_descuento
         total_final = subtotal_con_descuento * presupuesto.cantidad_unidades
     else:
-        total_final = (
-            subtotal_general * presupuesto.cantidad_unidades
-        ) - presupuesto.descuento_general_valor
+        base_multiplicada = subtotal_general * presupuesto.cantidad_unidades
+        total_final = base_multiplicada - presupuesto.descuento_general_valor
+        total_por_unidad = (
+            total_final / presupuesto.cantidad_unidades
+            if presupuesto.cantidad_unidades
+            else total_final
+        )
 
     return {
         "subtotal_general": subtotal_general.quantize(Decimal("0.01")),
         "descuento_general_tipo": presupuesto.descuento_general_tipo,
         "descuento_general_valor": presupuesto.descuento_general_valor,
         "cantidad_unidades": presupuesto.cantidad_unidades,
+        "importes_por_unidad": presupuesto.importes_por_unidad,
+        "usa_lineas_comerciales": usa_lineas_comerciales,
+        "total_por_unidad": total_por_unidad.quantize(Decimal("0.01")),
         "total_final": total_final.quantize(Decimal("0.01")),
     }
 
@@ -216,7 +249,18 @@ def duplicar_presupuesto(original, usuario):
 
     nuevo = Presupuesto.objects.create(
         cliente=original.cliente,
+        obra=original.obra,
         direccion=original.direccion,
+        referencia=original.referencia,
+        titulo_propuesta=original.titulo_propuesta,
+        alcance_tecnico=original.alcance_tecnico,
+        notas_cliente=original.notas_cliente,
+        forma_pago=original.forma_pago,
+        garantia=original.garantia,
+        exclusiones=original.exclusiones,
+        firma_texto=original.firma_texto,
+        importes_por_unidad=original.importes_por_unidad,
+        mostrar_total_general=original.mostrar_total_general,
         cantidad_unidades=original.cantidad_unidades,
         descuento_general_tipo=original.descuento_general_tipo,
         descuento_general_valor=original.descuento_general_valor,
@@ -228,7 +272,10 @@ def duplicar_presupuesto(original, usuario):
 
     mapa_secciones = {
         seccion.pk: SeccionPresupuesto.objects.create(
-            presupuesto=nuevo, titulo=seccion.titulo, orden=seccion.orden
+            presupuesto=nuevo,
+            titulo=seccion.titulo,
+            descripcion_publica=seccion.descripcion_publica,
+            orden=seccion.orden,
         )
         for seccion in original.secciones.all()
     }
@@ -259,6 +306,20 @@ def duplicar_presupuesto(original, usuario):
             opcional=item.opcional,
             incluido=item.incluido,
             orden=item.orden,
+        )
+
+    for linea in original.lineas_comerciales.all():
+        LineaComercialPresupuesto.objects.create(
+            presupuesto=nuevo,
+            seccion=mapa_secciones.get(linea.seccion_id),
+            etiqueta=linea.etiqueta,
+            descripcion=linea.descripcion,
+            monto=linea.monto,
+            tipo_iva=linea.tipo_iva,
+            opcional=linea.opcional,
+            incluido=linea.incluido,
+            recomendado=linea.recomendado,
+            orden=linea.orden,
         )
 
     log_action(usuario, "duplicar_presupuesto", nuevo, detail=f"Duplicado desde {original}")
