@@ -16,6 +16,7 @@ from .forms import (
     AsignarTecnicoForm,
     CancelarTrabajoForm,
     CrearTrabajoForm,
+    FinalizarTrabajoForm,
     EtapaTrabajoForm,
     MaterialCatalogoForm,
     MaterialManualForm,
@@ -27,9 +28,11 @@ from .permissions import (
     puede_cambiar_estado_trabajo,
     puede_cancelar_trabajo,
     puede_crear_trabajo,
+    puede_finalizar_trabajo,
     puede_gestionar_materiales,
     puede_registrar_consumo_material,
     queryset_trabajos_visibles,
+    trabajo_esta_cerrado,
 )
 from .services import (
     TransicionInvalidaError,
@@ -41,8 +44,10 @@ from .services import (
     crear_trabajo,
     enviar_material,
     enviar_materiales_pendientes,
+    finalizar_trabajo,
     generar_listado_materiales,
     materiales_pendientes_de_envio,
+    motivos_bloqueo_finalizacion,
     registrar_sobrante,
 )
 
@@ -81,13 +86,21 @@ class TrabajoDetailView(PermisoRequeridoMixin, DetailView):
                     if puede_cambiar_estado_trabajo(self.request.user, trabajo, estado)
                 ]
 
-            context["estados_para_avanzar"] = _opciones(ORDEN_ESTADOS[idx_actual + 1 :])
+            context["estados_para_avanzar"] = _opciones(
+                estado
+                for estado in ORDEN_ESTADOS[idx_actual + 1 :]
+                if estado != EstadoTrabajo.TERMINADO
+            )
             context["estados_para_retroceder"] = _opciones(ORDEN_ESTADOS[:idx_actual])
         else:
             context["estados_para_avanzar"] = []
             context["estados_para_retroceder"] = []
 
-        context["puede_asignar_tecnico"] = puede_asignar_tecnico(self.request.user)
+        cerrado = trabajo_esta_cerrado(trabajo)
+        context["trabajo_cerrado"] = cerrado
+        context["puede_asignar_tecnico"] = (
+            puede_asignar_tecnico(self.request.user) and not cerrado
+        )
         if context["puede_asignar_tecnico"]:
             context["asignar_tecnico_form"] = AsignarTecnicoForm(
                 initial={"tecnico_asignado": trabajo.tecnico_asignado_id}
@@ -100,7 +113,7 @@ class TrabajoDetailView(PermisoRequeridoMixin, DetailView):
         if context["puede_cancelar"]:
             context["cancelar_trabajo_form"] = CancelarTrabajoForm()
 
-        puede_materiales = puede_gestionar_materiales(self.request.user)
+        puede_materiales = puede_gestionar_materiales(self.request.user) and not cerrado
         puede_forzar = puede_forzar_stock_negativo(self.request.user)
         context["puede_gestionar_materiales"] = puede_materiales
         context["puede_forzar_stock_negativo"] = puede_forzar
@@ -186,6 +199,21 @@ class TrabajoDetailView(PermisoRequeridoMixin, DetailView):
         )
         context["materiales_pendientes_envio"] = pendientes
 
+        puede_finalizar = (
+            puede_finalizar_trabajo(self.request.user, trabajo)
+            and not cerrado
+        )
+        context["puede_finalizar"] = puede_finalizar
+        context["motivos_bloqueo_finalizacion"] = (
+            motivos_bloqueo_finalizacion(trabajo) if puede_finalizar else []
+        )
+        context["listo_para_finalizar"] = (
+            puede_finalizar
+            and not context["motivos_bloqueo_finalizacion"]
+        )
+        if puede_finalizar:
+            context["finalizar_trabajo_form"] = FinalizarTrabajoForm()
+
         return context
 
 
@@ -239,7 +267,10 @@ class AsignarTecnicoView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
-        return puede_asignar_tecnico(self.request.user)
+        return (
+            puede_asignar_tecnico(self.request.user)
+            and not trabajo_esta_cerrado(self.trabajo)
+        )
 
     def post(self, request, pk):
         form = AsignarTecnicoForm(request.POST)
@@ -269,8 +300,33 @@ class CancelarTrabajoView(UserPassesTestMixin, View):
         try:
             cancelar_trabajo(self.trabajo, request.user, motivo=motivo)
             messages.success(request, f"Trabajo #{self.trabajo.pk} cancelado.")
-        except TransicionInvalidaError as exc:
+        except (TransicionInvalidaError, ValueError) as exc:
             messages.error(request, str(exc))
+        return redirect("jobs:detalle", pk=pk)
+
+
+class FinalizarTrabajoView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
+        return puede_finalizar_trabajo(self.request.user, self.trabajo)
+
+    def post(self, request, pk):
+        form = FinalizarTrabajoForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "No se pudo finalizar el trabajo.")
+            return redirect("jobs:detalle", pk=pk)
+        try:
+            finalizar_trabajo(
+                self.trabajo,
+                request.user,
+                observaciones=form.cleaned_data["observaciones"],
+            )
+        except (TransicionInvalidaError, ValueError) as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, f"Trabajo #{self.trabajo.pk} finalizado.")
         return redirect("jobs:detalle", pk=pk)
 
 
@@ -279,7 +335,10 @@ class GenerarListadoMaterialesView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
-        return puede_gestionar_materiales(self.request.user)
+        return (
+            puede_gestionar_materiales(self.request.user)
+            and not trabajo_esta_cerrado(self.trabajo)
+        )
 
     def post(self, request, pk):
         try:
@@ -295,7 +354,10 @@ class AgregarEtapaView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
-        return puede_gestionar_materiales(self.request.user)
+        return (
+            puede_gestionar_materiales(self.request.user)
+            and not trabajo_esta_cerrado(self.trabajo)
+        )
 
     def post(self, request, pk):
         form = EtapaTrabajoForm(request.POST)
@@ -314,7 +376,10 @@ class EliminarEtapaView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.etapa = get_object_or_404(EtapaTrabajo, pk=self.kwargs["etapa_pk"])
-        return puede_gestionar_materiales(self.request.user)
+        return (
+            puede_gestionar_materiales(self.request.user)
+            and not trabajo_esta_cerrado(self.etapa.trabajo)
+        )
 
     def post(self, request, etapa_pk):
         trabajo_pk = self.etapa.trabajo_id
@@ -333,7 +398,10 @@ class AgregarMaterialCatalogoView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
-        return puede_gestionar_materiales(self.request.user)
+        return (
+            puede_gestionar_materiales(self.request.user)
+            and not trabajo_esta_cerrado(self.trabajo)
+        )
 
     def post(self, request, pk):
         form = MaterialCatalogoForm(request.POST, trabajo=self.trabajo)
@@ -352,7 +420,10 @@ class AgregarMaterialManualView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
-        return puede_gestionar_materiales(self.request.user)
+        return (
+            puede_gestionar_materiales(self.request.user)
+            and not trabajo_esta_cerrado(self.trabajo)
+        )
 
     def post(self, request, pk):
         form = MaterialManualForm(request.POST, trabajo=self.trabajo)
@@ -371,7 +442,10 @@ class ActualizarCantidadMaterialView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.material = get_object_or_404(MaterialTrabajo, pk=self.kwargs["material_pk"])
-        return puede_gestionar_materiales(self.request.user)
+        return (
+            puede_gestionar_materiales(self.request.user)
+            and not trabajo_esta_cerrado(self.material.trabajo)
+        )
 
     def post(self, request, material_pk):
         form = ActualizarCantidadMaterialForm(request.POST, instance=self.material)
@@ -385,7 +459,10 @@ class EliminarMaterialView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.material = get_object_or_404(MaterialTrabajo, pk=self.kwargs["material_pk"])
-        return puede_gestionar_materiales(self.request.user)
+        return (
+            puede_gestionar_materiales(self.request.user)
+            and not trabajo_esta_cerrado(self.material.trabajo)
+        )
 
     def post(self, request, material_pk):
         trabajo_pk = self.material.trabajo_id
@@ -398,7 +475,10 @@ class EnviarMaterialView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.material = get_object_or_404(MaterialTrabajo, pk=self.kwargs["material_pk"])
-        return puede_gestionar_materiales(self.request.user)
+        return (
+            puede_gestionar_materiales(self.request.user)
+            and not trabajo_esta_cerrado(self.material.trabajo)
+        )
 
     def post(self, request, material_pk):
         try:
@@ -419,7 +499,10 @@ class EnviarMaterialesPendientesView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.trabajo = get_object_or_404(Trabajo, pk=self.kwargs["pk"])
-        return puede_gestionar_materiales(self.request.user)
+        return (
+            puede_gestionar_materiales(self.request.user)
+            and not trabajo_esta_cerrado(self.trabajo)
+        )
 
     def post(self, request, pk):
         try:
