@@ -5,8 +5,10 @@ from django.conf import settings
 from django.contrib.staticfiles import finders
 from django.template.loader import render_to_string
 from pypdf import PdfReader, PdfWriter
+from reportlab.graphics import renderPDF
 from reportlab.lib.colors import HexColor
 from reportlab.pdfgen import canvas
+from svglib.svglib import svg2rlg
 from xhtml2pdf import pisa
 
 from .services import calcular_totales
@@ -57,19 +59,17 @@ def _overlay_encabezado(presupuesto, ancho, alto):
     margen_superior = 11.34  # 4 mm
     linea_y = alto - 65.20  # ~23 mm desde arriba
 
-    logo = finders.find("img/arqclima-logo-pdf.png")
-    if logo:
+    logo = finders.find("img/arqclima-logo-oficial.svg")
+    dibujo_logo = svg2rlg(logo) if logo else None
+    if dibujo_logo and dibujo_logo.width and dibujo_logo.height:
         ancho_logo = 113.39  # 40 mm
-        alto_logo = ancho_logo * 191 / 420
-        pdf.drawImage(
-            logo,
-            margen_x,
-            alto - margen_superior - alto_logo,
-            width=ancho_logo,
-            height=alto_logo,
-            preserveAspectRatio=True,
-            mask="auto",
-        )
+        escala = ancho_logo / float(dibujo_logo.width)
+        alto_logo = float(dibujo_logo.height) * escala
+        pdf.saveState()
+        pdf.translate(margen_x, alto - margen_superior - alto_logo)
+        pdf.scale(escala, escala)
+        renderPDF.draw(dibujo_logo, pdf, 0, 0)
+        pdf.restoreState()
     else:
         pdf.setFillColor(HexColor("#075b9b"))
         pdf.setFont("Helvetica-Bold", 13)
