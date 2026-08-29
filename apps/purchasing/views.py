@@ -12,13 +12,21 @@ from apps.stock.permissions import puede_registrar_entrada_salida
 
 from .forms import CrearOrdenForm, LineaOrdenCompraForm, RecibirLineaForm
 from .models import EstadoOrdenCompra, LineaOrdenCompra, OrdenDeCompra
-from .permissions import puede_aprobar_orden, puede_cancelar_orden, puede_gestionar_orden
+from .permissions import (
+    puede_aprobar_orden,
+    puede_cancelar_orden,
+    puede_cerrar_orden,
+    puede_gestionar_orden,
+)
 from .services import (
     TransicionInvalidaError,
     cambiar_estado_orden,
     cantidad_pendiente_recepcion,
     cantidad_recibida,
+    cerrar_orden,
     crear_orden,
+    lineas_pendientes_recepcion,
+    orden_tiene_recepciones,
     recibir_linea,
 )
 
@@ -49,41 +57,109 @@ class OrdenDetailView(PermisoRequeridoMixin, DetailView):
     template_name = "purchasing/orden_detail.html"
     context_object_name = "orden"
 
+    def get_queryset(self):
+        return OrdenDeCompra.objects.select_related(
+            "proveedor",
+            "creado_por",
+            "solicitud_aprobacion_por",
+            "aprobada_por",
+            "rechazada_por",
+            "enviada_por",
+            "cerrada_por",
+            "cancelada_por",
+        )
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         orden = self.object
         user = self.request.user
 
         es_borrador = orden.estado == EstadoOrdenCompra.BORRADOR
-        puede_recibir = puede_registrar_entrada_salida(user, orden.deposito_destino)
+        tiene_lineas = orden.lineas.exists()
+        tiene_recepciones = orden_tiene_recepciones(orden)
+        puede_recibir_deposito = puede_registrar_entrada_salida(
+            user, orden.deposito_destino
+        )
+
+        estados_recepcion = (
+            EstadoOrdenCompra.ENVIADA,
+            EstadoOrdenCompra.RECEPCION_PARCIAL,
+        )
 
         filas = []
-        for linea in orden.lineas.select_related("producto_proveedor__producto", "producto_proveedor__proveedor"):
-            filas.append({
-                "linea": linea,
-                "recibido": cantidad_recibida(linea),
-                "pendiente": cantidad_pendiente_recepcion(linea),
-                "puede_recibir": puede_recibir and orden.estado in (
-                    EstadoOrdenCompra.APROBADA, EstadoOrdenCompra.ENVIADA,
-                ) and cantidad_pendiente_recepcion(linea) > 0,
-            })
+        for linea in orden.lineas.select_related(
+            "producto_proveedor__producto",
+            "producto_proveedor__proveedor",
+        ):
+            recibido = cantidad_recibida(linea)
+            pendiente = cantidad_pendiente_recepcion(linea)
+            filas.append(
+                {
+                    "linea": linea,
+                    "recibido": recibido,
+                    "pendiente": pendiente,
+                    "puede_recibir": (
+                        puede_recibir_deposito
+                        and orden.estado in estados_recepcion
+                        and pendiente > 0
+                    ),
+                }
+            )
         context["filas"] = filas
 
         context["puede_gestionar"] = puede_gestionar_orden(user)
         context["puede_editar_lineas"] = es_borrador and puede_gestionar_orden(user)
         context["puede_aprobar"] = (
-            puede_aprobar_orden(user) and orden.estado == EstadoOrdenCompra.PENDIENTE_APROBACION
+            puede_aprobar_orden(user)
+            and orden.estado == EstadoOrdenCompra.PENDIENTE_APROBACION
         )
-        context["puede_enviar_a_aprobacion"] = puede_gestionar_orden(user) and es_borrador
-        context["puede_reabrir"] = puede_gestionar_orden(user) and orden.estado in (
-            EstadoOrdenCompra.PENDIENTE_APROBACION, EstadoOrdenCompra.RECHAZADA,
+        context["puede_enviar_a_aprobacion"] = (
+            puede_gestionar_orden(user) and es_borrador and tiene_lineas
+        )
+        context["puede_reabrir"] = (
+            puede_gestionar_orden(user)
+            and orden.estado
+            in (
+                EstadoOrdenCompra.PENDIENTE_APROBACION,
+                EstadoOrdenCompra.RECHAZADA,
+            )
         )
         context["puede_marcar_enviada"] = (
-            puede_gestionar_orden(user) and orden.estado == EstadoOrdenCompra.APROBADA
+            puede_gestionar_orden(user)
+            and orden.estado == EstadoOrdenCompra.APROBADA
         )
-        context["puede_cancelar"] = puede_cancelar_orden(user) and orden.estado in (
-            EstadoOrdenCompra.PENDIENTE_APROBACION, EstadoOrdenCompra.APROBADA, EstadoOrdenCompra.ENVIADA,
+        context["puede_cancelar"] = (
+            puede_cancelar_orden(user)
+            and orden.estado
+            in (
+                EstadoOrdenCompra.PENDIENTE_APROBACION,
+                EstadoOrdenCompra.APROBADA,
+                EstadoOrdenCompra.ENVIADA,
+            )
+            and not tiene_recepciones
         )
+        context["puede_cerrar"] = (
+            puede_cerrar_orden(user)
+            and orden.estado
+            in (
+                EstadoOrdenCompra.RECEPCION_PARCIAL,
+                EstadoOrdenCompra.RECIBIDA,
+            )
+        )
+        context["cierre_requiere_motivo"] = (
+            orden.estado == EstadoOrdenCompra.RECEPCION_PARCIAL
+        )
+        context["lineas_pendientes"] = (
+            lineas_pendientes_recepcion(orden)
+            if orden.estado
+            in (
+                EstadoOrdenCompra.RECEPCION_PARCIAL,
+                EstadoOrdenCompra.RECIBIDA,
+                EstadoOrdenCompra.CERRADA,
+            )
+            else []
+        )
+        context["tiene_lineas"] = tiene_lineas
 
         if context["puede_editar_lineas"]:
             context["linea_form"] = LineaOrdenCompraForm(orden=orden)
@@ -122,7 +198,10 @@ class AgregarLineaView(UserPassesTestMixin, View):
 
     def test_func(self):
         self.orden = get_object_or_404(OrdenDeCompra, pk=self.kwargs["pk"])
-        return puede_gestionar_orden(self.request.user) and self.orden.estado == EstadoOrdenCompra.BORRADOR
+        return (
+            puede_gestionar_orden(self.request.user)
+            and self.orden.estado == EstadoOrdenCompra.BORRADOR
+        )
 
     def get(self, request, pk):
         initial = {}
@@ -135,7 +214,11 @@ class AgregarLineaView(UserPassesTestMixin, View):
                 if historial is not None:
                     initial["costo_esperado"] = historial.costo
         form = LineaOrdenCompraForm(initial=initial, orden=self.orden)
-        return render(request, self.template_name, {"form": form, "orden": self.orden})
+        return render(
+            request,
+            self.template_name,
+            {"form": form, "orden": self.orden},
+        )
 
     def post(self, request, pk):
         form = LineaOrdenCompraForm(request.POST, orden=self.orden)
@@ -151,7 +234,11 @@ class AgregarLineaView(UserPassesTestMixin, View):
             messages.success(request, "Línea agregada.")
         else:
             messages.error(request, "No se pudo agregar la línea.")
-            return render(request, self.template_name, {"form": form, "orden": self.orden})
+            return render(
+                request,
+                self.template_name,
+                {"form": form, "orden": self.orden},
+            )
         return redirect("purchasing:detalle", pk=pk)
 
 
@@ -159,8 +246,13 @@ class EliminarLineaView(UserPassesTestMixin, View):
     raise_exception = True
 
     def test_func(self):
-        self.linea = get_object_or_404(LineaOrdenCompra, pk=self.kwargs["linea_pk"])
-        return puede_gestionar_orden(self.request.user) and self.linea.orden.estado == EstadoOrdenCompra.BORRADOR
+        self.linea = get_object_or_404(
+            LineaOrdenCompra, pk=self.kwargs["linea_pk"]
+        )
+        return (
+            puede_gestionar_orden(self.request.user)
+            and self.linea.orden.estado == EstadoOrdenCompra.BORRADOR
+        )
 
     def post(self, request, linea_pk):
         orden_pk = self.linea.orden_id
@@ -174,16 +266,26 @@ class _TransicionOrdenView(UserPassesTestMixin, View):
     permiso_check = staticmethod(puede_gestionar_orden)
 
     def test_func(self):
-        self.orden = get_object_or_404(OrdenDeCompra, pk=self.kwargs["pk"])
+        self.orden = get_object_or_404(
+            OrdenDeCompra, pk=self.kwargs["pk"]
+        )
         return self.permiso_check(self.request.user)
 
     def post(self, request, pk):
         try:
-            cambiar_estado_orden(self.orden, self.nuevo_estado, request.user)
-        except TransicionInvalidaError as exc:
+            cambiar_estado_orden(
+                self.orden,
+                self.nuevo_estado,
+                request.user,
+                motivo=request.POST.get("motivo", ""),
+            )
+        except (TransicionInvalidaError, ValueError, PermissionError) as exc:
             messages.error(request, str(exc))
         else:
-            messages.success(request, f"Orden #{self.orden.numero}: {self.orden.get_estado_display()}.")
+            messages.success(
+                request,
+                f"Orden #{self.orden.numero}: {self.orden.get_estado_display()}.",
+            )
         return redirect("purchasing:detalle", pk=pk)
 
 
@@ -214,21 +316,66 @@ class CancelarOrdenView(_TransicionOrdenView):
     permiso_check = staticmethod(puede_cancelar_orden)
 
 
+class CerrarOrdenView(UserPassesTestMixin, View):
+    raise_exception = True
+
+    def test_func(self):
+        self.orden = get_object_or_404(
+            OrdenDeCompra, pk=self.kwargs["pk"]
+        )
+        return puede_cerrar_orden(self.request.user)
+
+    def post(self, request, pk):
+        try:
+            cerrar_orden(
+                self.orden,
+                request.user,
+                motivo=request.POST.get("motivo", ""),
+            )
+        except (TransicionInvalidaError, ValueError, PermissionError) as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(request, f"Orden #{self.orden.numero} cerrada.")
+        return redirect("purchasing:detalle", pk=pk)
+
+
 class RecibirLineaView(UserPassesTestMixin, View):
     template_name = "purchasing/recibir_form.html"
     raise_exception = True
 
     def test_func(self):
-        self.linea = get_object_or_404(LineaOrdenCompra, pk=self.kwargs["linea_pk"])
-        return puede_registrar_entrada_salida(self.request.user, self.linea.orden.deposito_destino)
+        self.linea = get_object_or_404(
+            LineaOrdenCompra.objects.select_related("orden"),
+            pk=self.kwargs["linea_pk"],
+        )
+        return (
+            puede_registrar_entrada_salida(
+                self.request.user,
+                self.linea.orden.deposito_destino,
+            )
+            and self.linea.orden.estado
+            in (
+                EstadoOrdenCompra.ENVIADA,
+                EstadoOrdenCompra.RECEPCION_PARCIAL,
+            )
+        )
 
     def get(self, request, linea_pk):
         pendiente = cantidad_pendiente_recepcion(self.linea)
         form = RecibirLineaForm(
-            initial={"cantidad": pendiente, "costo_real": self.linea.costo_esperado}
+            initial={
+                "cantidad": pendiente,
+                "costo_real": self.linea.costo_esperado,
+            }
         )
         return render(
-            request, self.template_name, {"form": form, "linea": self.linea, "pendiente": pendiente}
+            request,
+            self.template_name,
+            {
+                "form": form,
+                "linea": self.linea,
+                "pendiente": pendiente,
+            },
         )
 
     def post(self, request, linea_pk):
@@ -237,16 +384,31 @@ class RecibirLineaView(UserPassesTestMixin, View):
         if form.is_valid():
             cantidad = form.cleaned_data["cantidad"]
             if cantidad > pendiente:
-                form.add_error("cantidad", f"No puede superar lo pendiente ({pendiente}).")
+                form.add_error(
+                    "cantidad",
+                    f"No puede superar lo pendiente ({pendiente}).",
+                )
             else:
                 try:
                     recibir_linea(
-                        self.linea, cantidad, form.cleaned_data["costo_real"], request.user
+                        self.linea,
+                        cantidad,
+                        form.cleaned_data["costo_real"],
+                        request.user,
                     )
                     messages.success(request, "Recepción registrada.")
-                    return redirect("purchasing:detalle", pk=self.linea.orden_id)
+                    return redirect(
+                        "purchasing:detalle",
+                        pk=self.linea.orden_id,
+                    )
                 except ValueError as exc:
                     messages.error(request, str(exc))
         return render(
-            request, self.template_name, {"form": form, "linea": self.linea, "pendiente": pendiente}
+            request,
+            self.template_name,
+            {
+                "form": form,
+                "linea": self.linea,
+                "pendiente": pendiente,
+            },
         )
