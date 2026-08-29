@@ -179,10 +179,10 @@ Fuera de alcance (decisión tomada): **no hay módulo de facturación**. Eso se 
 Estos son los usuarios reales de ARQCLIMA, no roles genéricos. El modelo de permisos debe ser: **cada usuario tiene un rol base con permisos por defecto, y el Administrador puede otorgarle a cualquier usuario permisos puntuales adicionales por fuera de su rol**, sin tener que crear un rol nuevo cada vez. Es decir: permisos = rol base + overrides individuales configurables por el admin.
 
 ### Diego — Administrador / Dirección
-Venta, visitas de obra, control de stock, coordinación de obras, aprobación de presupuestos y autorización de descuentos, verificación y aprobación de órdenes de compra antes de enviarlas. Acceso total al sistema, incluyendo gestión de usuarios/roles/permisos y auditoría.
+Venta, visitas de obra, control de stock, coordinación de obras, aprobación de presupuestos y autorización de descuentos. Acceso total al sistema, incluyendo compras, gestión de usuarios/roles/permisos y auditoría. Las órdenes de compra no requieren una aprobación obligatoria previa: la capacidad de emitir o enviar se controla por permisos.
 
 ### Rodrigo — Ventas y Presupuestos
-Maneja presupuestos y venta, crea órdenes de compra, entrega a depósito el listado de materiales a separar para una obra o venta de mostrador. Acceso a: clientes, presupuestos (ciclo completo), catálogo (solo lectura), proveedores (crear fichas y órdenes de compra, no aprobarlas), precios (solo ver costo/venta, no configurar márgenes), trabajos (crear a partir de presupuesto aceptado y ver materiales), stock (solo ver).
+Maneja presupuestos y venta, crea órdenes de compra, entrega a depósito el listado de materiales a separar para una obra o venta de mostrador. Acceso a: clientes, presupuestos (ciclo completo), catálogo (solo lectura), proveedores y órdenes de compra según sus permisos, precios (solo ver costo/venta, no configurar márgenes), trabajos (crear a partir de presupuesto aceptado y ver materiales), stock (solo ver).
 
 ### Gabriel — Service y Repuestos
 Maneja el service técnico, venta de repuestos, pasa precios de repuestos a los técnicos, controla el stock de repuestos, genera órdenes de compra de repuestos. Es un módulo bastante autónomo y separado del resto del catálogo/obra. Puede crear/editar productos de su línea, gestionar su propio stock de repuestos (entradas y salidas), y marcar material de service como "pendiente de devolución" (para controlar lo que se lleva y no siempre vuelve).
@@ -201,7 +201,7 @@ Instalación (termostatos, puesta en marcha, pruebas de presión), busca materia
 4. **Importación de listas de proveedores** (Excel primero, después PDF/Word): nunca se actualizan productos automáticamente sin mostrar antes una vista previa de los cambios (nuevos, existentes, para revisar, errores) para que el usuario confirme.
 5. **Márgenes configurables**: general, por categoría, por marca o por producto específico. Se calcula: costo + flete + costo financiero/tarjeta + margen = precio de venta. Solo Diego configura márgenes.
 6. **Margen bajo por descuento**: si un descuento deja el margen por debajo del mínimo configurado, el sistema muestra una alerta visual (⚠️), pero NO bloquea el envío del presupuesto. Se registra en auditoría igual (queda constancia de quién lo envió con margen bajo).
-7. **Órdenes de compra con aprobación**: Rodrigo, Gabriel y Andrés pueden crear órdenes de compra, pero Diego debe aprobarlas antes de que se envíen al proveedor. Esto SÍ es un bloqueo real (a diferencia del punto anterior sobre márgenes).
+7. **Órdenes de compra sin aprobación obligatoria**: no debe existir un checkbox o paso obligatorio de aprobación antes del envío. El flujo será Borrador → Emitida → Enviada / Recibida / Cancelada, y la capacidad de emitir o enviar se controla por permisos. El envío debe generar la orden oficial en PDF y preparar/enviar el correo al proveedor con trazabilidad.
 8. **Presupuestos con precios congelados**: una vez creado, el presupuesto conserva los precios del momento aunque después cambien los costos. Se puede duplicar y recalcular con precios actuales si se quiere.
 9. **Estructura simplificada de presupuesto** (sin "etapas" rígidas como entidad del sistema):
    - Un presupuesto tiene **secciones opcionales** (agrupadores con título libre, ej. "1era etapa", "2da etapa", o ninguna si es simple).
@@ -230,6 +230,23 @@ Instalación (termostatos, puesta en marcha, pruebas de presión), busca materia
 7. **Stock**: entradas, salidas, ajustes, alertas de stock mínimo (stock general y stock de repuestos).
 8. **Trabajos**: presupuesto aceptado → trabajo → materiales → consumo real. Incluye órdenes de compra con aprobación de Diego.
 9. **Reportes y automatizaciones**: dashboards, seguimiento automático de presupuestos, métricas comerciales/rentabilidad/stock/clientes/empleados.
+
+## Continuidad del rediseño y endurecimiento — Etapa 11
+
+La Etapa 11 se continúa en bloques pequeños y verificables, sin agrupar cambios grandes en un único commit:
+
+- **11E — Identidad visual**: usar únicamente el logo corporativo real de ARQCLIMA en desktop, móvil, login y documentos.
+- **11F — Presupuestos / clientes**: reemplazar el desplegable de clientes por búsqueda server-side y permitir alta rápida de cliente desde el nuevo presupuesto.
+- **11G — Compras / productos**: reemplazar el desplegable de productos por búsqueda server-side por código o nombre al armar una orden.
+- **11J — Interfaz cliqueable**: hacer cliqueable la fila o bloque completo en listados, preservando acciones internas.
+- **11K — Simplificar órdenes de compra**: eliminar aprobación obligatoria/checkbox y adaptar estados, dashboard, permisos y pruebas.
+- **11L — Emisión y envío de OC**: generar PDF oficial y enviar/preparar correo al proveedor, guardando destinatario, usuario, fecha y documento enviado.
+- **11I — Reportes visuales**: incorporar KPIs y gráficos útiles, evitando gráficos decorativos sin información.
+- **11H — Importación masiva de productos**: Excel/CSV primero y luego PDF/Word, siempre con análisis, vista previa, validación y confirmación antes de modificar la base.
+- **11M — Auditoría de roles**: revisar la matriz real de permisos de Administrador, Ventas y Presupuestos, Service y Repuestos, Depósito y Técnico de Campo contra el trabajo real de la empresa.
+- **11N — Rediseño de permisos**: mostrar permisos en español y con lenguaje de negocio, diferenciando claramente permisos heredados por rol y permisos individuales extra.
+
+Regla de implementación: **11M debe realizarse antes de 11N** para no maquillar una matriz de permisos todavía no validada.
 
 ## Lo que necesito que hagas ahora (Etapa 1)
 
