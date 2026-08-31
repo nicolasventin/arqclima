@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 
 from apps.catalog.models import Producto, Proveedor
+from apps.pricing.models import Moneda
 
 
 class ImportacionListaPrecios(models.Model):
@@ -21,6 +22,7 @@ class ImportacionListaPrecios(models.Model):
     class TipoArchivo(models.TextChoices):
         XLSX = "xlsx", "Excel (.xlsx)"
         XLS = "xls", "Excel antiguo (.xls)"
+        XLSM = "xlsm", "Excel con macros (.xlsm)"
         CSV = "csv", "CSV"
         PDF = "pdf", "PDF"
         DOCX = "docx", "Word (.docx)"
@@ -128,6 +130,7 @@ class ImportacionFila(models.Model):
     descripcion_texto = models.TextField(blank=True)
     costo_texto = models.CharField(max_length=100, blank=True)
     costo = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    moneda = models.CharField(max_length=3, choices=Moneda.choices, default=Moneda.ARS)
     codigo_proveedor_texto = models.CharField(max_length=100, blank=True)
     unidad_texto = models.CharField(max_length=50, blank=True)
     categoria_texto = models.CharField(max_length=100, blank=True)

@@ -49,6 +49,18 @@ def _imagen_png_bytes(color=(80, 120, 160), size=(240, 160)):
     return buffer.getvalue()
 
 
+def _xlsx_bytes_simple():
+    libro = openpyxl.Workbook()
+    hoja = libro.active
+    hoja.title = "Precios"
+    hoja.append(["Marca", "Código", "Nombre", "Costo"])
+    hoja.append(["Vulcano", "XLSM-1", "Producto con macros", "999,99"])
+    buffer = BytesIO()
+    libro.save(buffer)
+    buffer.seek(0)
+    return buffer.read()
+
+
 def _xlsx_con_imagen():
     libro = openpyxl.Workbook()
     hoja = libro.active
@@ -229,7 +241,27 @@ class AnalisisMultiformatoTests(TestCase):
         self.assertGreater(imagen.ancho, 0)
         self.assertGreater(imagen.alto, 0)
 
+    def test_xlsm_se_clasifica_y_resuelve_via_el_mismo_parser_que_xlsx(self):
+        """
+        .xlsm es el mismo contenedor zip/XML que .xlsx (la única diferencia
+        real es el proyecto VBA embebido, que ni se lee ni se preserva) —
+        no hace falta un archivo con macros reales para probar el routing:
+        alcanza con reempaquetar el mismo xlsx simple bajo extensión .xlsm.
+        """
+        archivo = SimpleUploadedFile(
+            "lista-con-macros.xlsm",
+            _xlsx_bytes_simple(),
+            content_type="application/vnd.ms-excel.sheet.macroEnabled.12",
+        )
+        self.assertEqual(tipo_archivo_por_nombre(archivo.name), "xlsm")
 
+        importacion = self._crear_importacion(archivo)
+
+        self.assertEqual(importacion.tipo_archivo, ImportacionListaPrecios.TipoArchivo.XLSM)
+        fila = importacion.filas.get()
+        self.assertEqual(fila.codigo, "XLSM-1")
+        self.assertEqual(fila.nombre_texto, "Producto con macros")
+        self.assertEqual(fila.costo, Decimal("999.99"))
 
     def test_excel_por_bloques_detecta_codigo_nombre_y_precio_bonificado(self):
         importacion = self._crear_importacion(_xlsx_lista_comercial_por_bloques())
@@ -592,6 +624,7 @@ class VistasMultiformatoTests(TestCase):
                 "nombre": "Producto",
                 "descripcion": "",
                 "costo": "100.00",
+                "moneda": "ars",
                 "codigo_proveedor": "",
                 "unidad": "unidad",
                 "categoria": "",
@@ -625,10 +658,25 @@ class VistasMultiformatoTests(TestCase):
 
         self.assertRedirects(response, reverse("imports:detalle", args=[importacion.pk]))
         self.assertFalse(importacion.filas.filter(marca_texto="").exists())
+        # Estas filas vienen del fallback por bloques, que desde el cambio de
+        # confianza queda siempre en MEDIA (código/nombre inferidos por
+        # heurística, no por alias exacto). asignar_marca_filas_sin_marca()
+        # no fuerza incluir=True para confianza media/baja (mismo criterio
+        # que cualquier otra fila de confianza media en el sistema): las 3
+        # NUEVO_PRODUCTO quedan reclasificadas pero destildadas, esperando
+        # revisión manual del usuario.
         self.assertEqual(
             importacion.filas.filter(
                 categoria=ImportacionFila.Categoria.NUEVO_PRODUCTO,
                 incluir=True,
+            ).count(),
+            0,
+        )
+        self.assertEqual(
+            importacion.filas.filter(
+                categoria=ImportacionFila.Categoria.NUEVO_PRODUCTO,
+                confianza=ImportacionFila.Confianza.MEDIA,
+                incluir=False,
             ).count(),
             3,
         )

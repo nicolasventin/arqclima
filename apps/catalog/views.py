@@ -94,6 +94,10 @@ class ProductoDetailView(PermisoRequeridoMixin, DetailView):
                 filas_precio.append({
                     "relacion": pp,
                     "costo": historial.costo if historial else None,
+                    # precio_venta es costo × margen, sin conversión: queda
+                    # en la MISMA moneda que costo (no hay una etiqueta
+                    # separada para esa columna).
+                    "moneda": historial.moneda if historial else None,
                     "fecha": historial.vigente_desde if historial else None,
                     "precio_venta": precio_venta,
                     "es_mas_conveniente": mejor_pp is not None and pp.pk == mejor_pp.pk,

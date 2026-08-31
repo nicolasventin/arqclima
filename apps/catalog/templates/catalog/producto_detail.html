@@ -94,9 +94,9 @@
                 {% for fila in filas_precio %}
                 <tr>
                     <td>{{ fila.relacion.proveedor.nombre_comercial }} {% if fila.es_mas_conveniente %}<span class="status-pill status-pill-success ms-1">Más conveniente</span>{% endif %}</td>
-                    <td>{% if fila.costo %}&#36;{{ fila.costo }}{% else %}<span class="text-muted">Sin costo</span>{% endif %}</td>
+                    <td>{% if fila.costo %}{% if fila.moneda == "usd" %}U$S{% else %}&#36;{% endif %} {{ fila.costo }}{% else %}<span class="text-muted">Sin costo</span>{% endif %}</td>
                     <td>{{ fila.fecha|date:"d/m/Y"|default:"—" }}</td>
-                    <td>{% if fila.precio_venta %}<strong>&#36;{{ fila.precio_venta }}</strong>{% else %}—{% endif %}</td>
+                    <td>{% if fila.precio_venta %}<strong>{% if fila.moneda == "usd" %}U$S{% else %}&#36;{% endif %} {{ fila.precio_venta }}</strong>{% else %}—{% endif %}</td>
                     {% if puede_registrar_costo %}<td><form method="post" action="{% url 'pricing:registrar_costo' producto.pk fila.relacion.pk %}" class="d-flex gap-1">{% csrf_token %}{{ costo_form.costo }}<button type="submit" class="btn btn-sm btn-outline-primary">Cargar</button></form></td>{% endif %}
                 </tr>
                 {% empty %}<tr><td colspan="5" class="empty-table">Todavía no tiene proveedores para cotizar.</td></tr>{% endfor %}

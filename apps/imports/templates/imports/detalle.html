@@ -220,7 +220,7 @@
                             </span>
                             {% endif %}
                         </td>
-                        <td>{% if fila.costo %}<strong>$ {{ fila.costo }}</strong>{% else %}—{% endif %}</td>
+                        <td>{% if fila.costo %}<strong>{% if fila.moneda == "usd" %}U$S{% else %}${% endif %} {{ fila.costo }}</strong>{% else %}—{% endif %}</td>
                         <td>
                             {% if fila.confianza == "revisada" %}
                             <span class="status-pill status-pill-success">Revisada</span>

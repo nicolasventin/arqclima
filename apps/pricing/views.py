@@ -47,6 +47,9 @@ class RegistrarCostoView(UserPassesTestMixin, View):
     def post(self, request, producto_pk, relacion_pk):
         form = RegistrarCostoForm(request.POST)
         if form.is_valid():
+            # moneda queda en el default ARS de registrar_costo(): esta es
+            # carga manual directa (Diego tipeando un costo), sin ningún
+            # archivo ni texto de origen del que detectar la moneda.
             registrar_costo(self.relacion, form.cleaned_data["costo"], request.user)
             log_action(
                 request.user,

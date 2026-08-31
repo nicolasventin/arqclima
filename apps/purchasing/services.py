@@ -251,6 +251,11 @@ def recibir_linea(linea, cantidad, costo_real, usuario):
     if cantidad > pendiente:
         raise ValueError(f"No puede superar lo pendiente ({pendiente}).")
 
+    # moneda queda en el default ARS de registrar_costo(): costo_real lo
+    # tipea a mano quien recibe la mercadería, y OrdenDeCompra/
+    # LineaOrdenCompra no tienen ningún campo de moneda hoy del que
+    # heredarla (aunque el proveedor de la orden cotice en USD). Resolverlo
+    # es un cambio de alcance distinto (moneda en compras), no de imports.
     registrar_costo(
         linea_bloqueada.producto_proveedor,
         costo_real,

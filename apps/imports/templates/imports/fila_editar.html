@@ -66,6 +66,13 @@
                     </div>
 
                     <div class="form-field form-field-half">
+                        <label>Moneda</label>
+                        {{ form.moneda }}
+                        {{ form.moneda.errors }}
+                        <div class="field-help">Detectada automáticamente cuando es posible; corregila si no coincide.</div>
+                    </div>
+
+                    <div class="form-field form-field-half">
                         <label>Código del proveedor</label>
                         {{ form.codigo_proveedor }}
                         {{ form.codigo_proveedor.errors }}
@@ -113,6 +120,7 @@
             <div class="detail-kv-row"><dt>Fila</dt><dd>{{ fila.numero_fila }}</dd></div>
             <div class="detail-kv-row"><dt>Confianza original</dt><dd>{{ fila.get_confianza_display }}</dd></div>
             <div class="detail-kv-row"><dt>Costo leído</dt><dd>{{ fila.costo_texto|default:"—" }}</dd></div>
+            <div class="detail-kv-row"><dt>Moneda detectada</dt><dd>{{ fila.get_moneda_display }}</dd></div>
             <div class="detail-kv-row"><dt>Producto asociado</dt><dd>{{ fila.producto|default:"—" }}</dd></div>
         </dl>
 

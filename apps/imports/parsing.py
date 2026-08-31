@@ -40,7 +40,7 @@ ALIAS_NOMBRE = {
 ALIAS_COSTO = {
     "costo", "precio", "precio neto", "precio unitario", "importe",
     "precio de costo", "neto", "precio lista", "precio de lista", "price",
-    "unit price", "p. unitario", "precio bonif", "precio bonificado",
+    "unit price", "p. unitario", "precio unit.", "precio bonif", "precio bonificado",
     "precio final", "costo neto", "costo bonificado",
 }
 ALIAS_CODIGO_PROVEEDOR = {
@@ -169,9 +169,9 @@ def tipo_archivo_por_nombre(nombre):
     extension = Path(nombre or "").suffix.lower().lstrip(".")
     if extension in EXTENSIONES_IMAGEN:
         return "imagen"
-    if extension not in {"xlsx", "xls", "csv", "pdf", "docx"}:
+    if extension not in {"xlsx", "xls", "xlsm", "csv", "pdf", "docx"}:
         raise ArchivoImportacionInvalido(
-            "Formato no soportado. Usá .xlsx, .xls, .csv, .pdf, .docx, .jpg, .jpeg, .png o .webp."
+            "Formato no soportado. Usá .xlsx, .xls, .xlsm, .csv, .pdf, .docx, .jpg, .jpeg, .png o .webp."
         )
     return extension
 
@@ -294,7 +294,7 @@ def _texto_celda(valor):
     return str(valor).strip()
 
 
-def extraer_filas_con_mapeo(matriz_restante, origen, mapeo, confianza="alta"):
+def extraer_filas_con_mapeo(matriz_restante, origen, mapeo, confianza="alta", formato_moneda=None):
     """
     Lee filas de datos dado un mapeo campo→índice de columna ya resuelto —
     por detectar_columnas() (camino clásico) o por ai.mapear_columnas()
@@ -303,6 +303,11 @@ def extraer_filas_con_mapeo(matriz_restante, origen, mapeo, confianza="alta"):
     Es la ÚNICA función que interpreta filas de producto a partir de un
     mapeo de columnas; tanto _extraer_filas_matriz como el resolutor de
     PendienteIA en services.py pasan por acá para no duplicar esta lógica.
+
+    formato_moneda: dict disperso {(fila, columna): True} armado por
+    _analizar_xlsx() para celdas con number_format de USD — None para
+    CSV o para el camino Haiku resuelto en services.py (ahí no hay hoja
+    de Excel abierta, ver limitación documentada en _analizar_xlsx).
     """
     advertencias = []
     filas = []
@@ -330,6 +335,7 @@ def extraer_filas_con_mapeo(matriz_restante, origen, mapeo, confianza="alta"):
             return valores[indice]
 
         costo_crudo = obtener("costo")
+        moneda = _moneda_desde_formato(formato_moneda, numero, mapeo.get("costo"))
         filas.append(
             FilaAnalizada(
                 numero=max(1, int(numero)),
@@ -341,6 +347,7 @@ def extraer_filas_con_mapeo(matriz_restante, origen, mapeo, confianza="alta"):
                     "nombre": _texto_celda(obtener("nombre")),
                     "descripcion": _texto_celda(obtener("descripcion")),
                     "costo_crudo": costo_crudo,
+                    "moneda": moneda,
                     "codigo_proveedor": _texto_celda(obtener("codigo_proveedor")),
                     "unidad": _texto_celda(obtener("unidad")),
                     "categoria": _texto_celda(obtener("categoria")),
@@ -350,7 +357,7 @@ def extraer_filas_con_mapeo(matriz_restante, origen, mapeo, confianza="alta"):
     return filas, advertencias
 
 
-def _extraer_filas_matriz(matriz, origen, confianza="alta"):
+def _extraer_filas_matriz(matriz, origen, confianza="alta", formato_moneda=None):
     if not matriz:
         return [], []
 
@@ -363,7 +370,11 @@ def _extraer_filas_matriz(matriz, origen, confianza="alta"):
         )
 
     filas, adv_filas = extraer_filas_con_mapeo(
-        matriz[posicion_header + 1 :], origen, mapeo, confianza=confianza
+        matriz[posicion_header + 1 :],
+        origen,
+        mapeo,
+        confianza=confianza,
+        formato_moneda=formato_moneda,
     )
     advertencias.extend(adv_filas)
     return filas, advertencias
@@ -464,6 +475,128 @@ def _fila_parece_producto(valores):
     )
 
 
+_SIMBOLOS_MONEDA = ("$", "ars", "usd", "u$s")
+# Miles agrupados ("1.500,00" / "1,500.00") o al menos 3 dígitos enteros
+# antes del separador decimal ("1500,50").
+_PATRON_NUMERO_PRECIO = re.compile(r"\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{2})?|\d{3,}[.,]\d{2}")
+
+
+def _parece_costo_confiable(valor):
+    """
+    Señal de "costo" más estricta que parsear_costo(): solo la usa el
+    último recurso de _analizar_matriz_con_posible_ia (hoja sin ni un
+    header candidato ni bloques), donde parsear_costo() acepta CUALQUIER
+    número de Excel — exactamente lo que expuso la hoja "MARA" del
+    Cotizador Base real (un extracto tipo SAP de ~9600 filas, sin ninguna
+    columna de precio, pero con ID/EAN/peso numéricos que sí matcheaban
+    parsear_costo() en 9569 de esas filas). Acá se exige que la celda
+    tenga pinta real de precio: un valor numérico nativo de Excel
+    (int/float) no alcanza, y tampoco alcanza un número con separador de
+    miles/decimales que esté embebido dentro de un texto más largo — la
+    celda entera (descontando solo el símbolo de moneda) tiene que ser el
+    número, nada más. Ese último punto importa: sin él, una medida
+    embebida en una descripción ("...2.00 m", "...100.000") o una
+    potencia entre paréntesis ("(112.660 Kcal/h)") — frecuentes en la
+    columna de nombre/descripción de un extracto tipo SAP — también
+    matchean un separador decimal/de miles y reintroducen el falso
+    positivo que este filtro existe para evitar.
+
+    Tradeoff aceptado a propósito: una columna de precio genuina que
+    llegue como número puro sin formatear (sin "$" ni separador) tampoco
+    va a calificar acá, y esa hoja se va a resolver a mano en vez de
+    escalar sola a Sonnet. Es el lado seguro del error: perder un envío
+    automático a IA cuesta revisión manual; un falso positivo como el de
+    MARA cuesta tokens reales por una hoja que no tiene precios.
+
+    Caso concreto de falso negativo aceptado: un proveedor real que cotice
+    en enteros simples sin separador ni símbolo (ej. "15000" en vez de
+    "$ 15.000,00") no va a calificar como costo acá, y toda su hoja podría
+    terminar filtrada como "sin precios" sin llegar nunca a Sonnet, aunque
+    sí los tenga. Se aceptó ese riesgo a cambio de evitar el gasto real
+    que exponía MARA — la diferencia clave es que esta falla queda VISIBLE
+    (la advertencia "no se detectó ninguna fila con estructura de
+    producto..." en la importación) en vez de silenciosa: quien revisa la
+    importación ve que no se generó ninguna fila y por qué. Si en algún
+    momento aparece un proveedor real así, hay que revisar este criterio
+    puntual, no asumir sin mirar que el archivo simplemente no tenía
+    precios.
+    """
+    if isinstance(valor, (int, float, Decimal)):
+        return False
+    texto = _texto_celda(valor).strip()
+    if not texto:
+        return False
+    resto = texto.lower()
+    for simbolo in _SIMBOLOS_MONEDA:
+        resto = resto.replace(simbolo, "")
+    resto = resto.strip()
+    if not resto:
+        return False
+    return bool(_PATRON_NUMERO_PRECIO.fullmatch(resto)) and parsear_costo(valor) is not None
+
+
+def _fila_parece_producto_confiable(valores):
+    """
+    Variante de _fila_parece_producto() con la señal de costo endurecida
+    (_parece_costo_confiable en vez de parsear_costo directo). Solo para
+    decidir si vale la pena gastar una llamada a Sonnet en el último
+    recurso de _analizar_matriz_con_posible_ia — no reemplaza a
+    _fila_parece_producto() en ningún otro lado del archivo.
+    """
+    return (
+        any(_parece_codigo(v) for v in valores)
+        and any(_parece_nombre_producto(v) for v in valores)
+        and any(_parece_costo_confiable(v) for v in valores)
+    )
+
+
+# Distinto de _SIMBOLOS_MONEDA (esa es "¿esto parece un precio?", acepta
+# "$" pelado porque en Argentina un precio en pesos casi nunca se escribe
+# con símbolo explícito de moneda). Para "¿qué moneda es?", un "$" solo
+# significa pesos (el default), nunca dólares — usar esa lista acá
+# generaría falsos USD sobre cualquier precio en pesos escrito "$ 1.500".
+_MARCADORES_USD_TEXTO = ("usd", "u$s", "us$")
+
+
+def detectar_moneda_texto(valor):
+    """
+    Señal de moneda a partir de texto crudo: para CSV (sin ningún concepto
+    de formato de celda) y para el camino Sonnet (costo_texto, la
+    transcripción textual que hace la IA del documento original) es la
+    ÚNICA señal disponible. También sirve de respaldo para Excel cuando el
+    número no viene con number_format de moneda pero sí trae el símbolo
+    escrito a mano en la celda.
+
+    Devuelve "usd" o None — nunca "ars": el default ARS lo decide el
+    caller cuando no hay ninguna señal (ni texto ni number_format), no
+    esta función.
+    """
+    if valor is None:
+        return None
+    texto = str(valor).lower()
+    return "usd" if any(marcador in texto for marcador in _MARCADORES_USD_TEXTO) else None
+
+
+def _es_formato_usd(number_format):
+    """Mismos marcadores que detectar_moneda_texto(), aplicados al number_format de una celda Excel."""
+    texto = (number_format or "").lower()
+    return any(marcador in texto for marcador in _MARCADORES_USD_TEXTO)
+
+
+def _moneda_desde_formato(formato_moneda, numero, indice):
+    """
+    Busca en el dict disperso formato_moneda (ver _analizar_xlsx) si la
+    celda (numero, indice) tenía number_format de USD. formato_moneda es
+    None para CSV/IA (no hay concepto de celda ahí) y para cualquier hoja
+    donde nunca se detectó ningún número con formato de moneda — en
+    cualquiera de esos casos, no hay señal "confiable" de este tipo y el
+    caller cae al chequeo de texto (detectar_moneda_texto) o al default.
+    """
+    if not formato_moneda or indice is None:
+        return None
+    return "usd" if formato_moneda.get((numero, indice)) else None
+
+
 def _contar_filas_header(matriz, tope=2):
     """
     Cuenta filas de TODA la matriz (no solo las primeras 25) donde
@@ -556,7 +689,7 @@ def _categoria_bloque(fila_cabecera, indice_precio):
     return max(candidatos, key=len)
 
 
-def _extraer_filas_excel_por_bloques(matriz, origen):
+def _extraer_filas_excel_por_bloques(matriz, origen, formato_moneda=None):
     """
     Fallback estructural para listas Excel armadas por secciones.
 
@@ -566,6 +699,12 @@ def _extraer_filas_excel_por_bloques(matriz, origen):
 
     En estas planillas Código y Nombre no aparecen como encabezados
     explícitos, por lo que el detector tabular clásico no puede encontrarlos.
+
+    formato_moneda: ver extraer_filas_con_mapeo(). Acá hay una columna de
+    precio "ganadora" por FILA (indices_precio_fallback prioriza precio
+    bonificado, pero cae al siguiente candidato si esa celda puntual no
+    parsea como costo) — la moneda se busca en la columna que realmente
+    ganó para esa fila, no en indice_precio a ciegas.
     """
     cabeceras = []
     for posicion, (_, valores) in enumerate(matriz):
@@ -627,12 +766,14 @@ def _extraer_filas_excel_por_bloques(matriz, origen):
             codigo = _texto_celda(valores[indice_codigo])
             nombre = _texto_celda(valores[indice_nombre])
             costo_crudo = None
+            indice_costo_ganador = None
             for indice_costo in indices_precio_fallback:
                 if indice_costo >= len(valores):
                     continue
                 candidato = valores[indice_costo]
                 if parsear_costo(candidato) is not None:
                     costo_crudo = candidato
+                    indice_costo_ganador = indice_costo
                     break
 
             if not _parece_codigo(codigo) or not _parece_nombre_producto(nombre):
@@ -640,17 +781,27 @@ def _extraer_filas_excel_por_bloques(matriz, origen):
             if costo_crudo is None:
                 continue
 
+            moneda = _moneda_desde_formato(formato_moneda, numero, indice_costo_ganador)
             filas_resultado.append(
                 FilaAnalizada(
                     numero=max(1, int(numero)),
                     origen=f"{origen} · {categoria}" if categoria else origen,
-                    confianza="alta",
+                    # Nunca "alta": código y nombre acá se infieren por
+                    # heurística posicional (_inferir_columnas_bloque), no
+                    # por alias exacto. Un margen de scoring amplio no es
+                    # garantía de que la columna elegida sea la correcta
+                    # (confirmado con un archivo real: "Código EAN" le ganó
+                    # 188 a 164 a la columna "Código" real y era la
+                    # equivocada) — así que la degradación es incondicional,
+                    # no depende de qué tan reñido estuvo el scoring.
+                    confianza="media",
                     datos={
                         "marca": "",
                         "codigo": codigo,
                         "nombre": nombre,
                         "descripcion": "",
                         "costo_crudo": costo_crudo,
+                        "moneda": moneda,
                         "codigo_proveedor": "",
                         "unidad": "",
                         "categoria": categoria,
@@ -717,13 +868,18 @@ def construir_texto_celdas_no_vacias(matriz, origen=""):
     return texto, advertencia
 
 
-def _analizar_matriz_con_posible_ia(matriz, origen):
+def _analizar_matriz_con_posible_ia(matriz, origen, formato_moneda=None):
     """
     Intenta primero los caminos 100% locales (clásico y fallback por
     bloques, ambos ya existentes desde 11H). Si un header único no alcanza
     para explicar el archivo, arma un PendienteIA en vez de llamar a la IA
     desde acá — parsing.py nunca hace red ni DB; eso lo resuelve
     services.py. Devuelve (filas, advertencias, pendiente_ia | None).
+
+    formato_moneda: ver extraer_filas_con_mapeo(). None para CSV/.xls (sin
+    concepto de celda) y para el camino "mapeo_columnas"/Haiku (PendienteIA
+    resuelto en services.py, sin la hoja de Excel abierta) — limitación
+    documentada, no cubierta en este cambio.
     """
     if _contar_filas_header(matriz) >= 2:
         texto, advertencia_recorte = construir_texto_celdas_no_vacias(matriz, origen)
@@ -741,14 +897,18 @@ def _analizar_matriz_con_posible_ia(matriz, origen):
 
     mensaje_clasico = None
     try:
-        filas, adv = _extraer_filas_matriz(matriz, origen, confianza="alta")
+        filas, adv = _extraer_filas_matriz(
+            matriz, origen, confianza="alta", formato_moneda=formato_moneda
+        )
         return filas, adv, None
     except ColumnasNoDetectadas as exc_clasico:
         # Python borra la variable del "except ... as" al salir del bloque:
         # el mensaje se guarda acá para poder usarlo más abajo.
         mensaje_clasico = str(exc_clasico)
 
-    filas_bloques, adv_bloques = _extraer_filas_excel_por_bloques(matriz, origen)
+    filas_bloques, adv_bloques = _extraer_filas_excel_por_bloques(
+        matriz, origen, formato_moneda=formato_moneda
+    )
     candidatas = sum(1 for _, valores in matriz if _fila_parece_producto(valores))
     if filas_bloques and (candidatas == 0 or len(filas_bloques) >= candidatas * 0.5):
         return filas_bloques, adv_bloques, None
@@ -781,6 +941,21 @@ def _analizar_matriz_con_posible_ia(matriz, origen):
 
     # Hay filas que parecen producto pero ni siquiera un header candidato
     # débil: último recurso antes de rendirse, extracción completa con IA.
+    # Antes de gastar esa llamada, un pre-filtro local más estricto que
+    # `candidatas` (que ya usa parsear_costo() y acepta cualquier número
+    # de Excel, ver _parece_costo_confiable): si ninguna fila de la hoja
+    # completa tiene código+nombre+costo con pinta real de precio, no vale
+    # la pena mandarla a Sonnet.
+    if not any(_fila_parece_producto_confiable(valores) for _, valores in matriz):
+        return (
+            [],
+            [
+                f"{origen}: no se detectó ninguna fila con estructura de "
+                "producto (código+nombre+precio); no se envió a IA."
+            ],
+            None,
+        )
+
     texto, advertencia_recorte = construir_texto_celdas_no_vacias(matriz, origen)
     advertencias = [advertencia_recorte] if advertencia_recorte else []
     return (
@@ -888,21 +1063,48 @@ def _agregar_imagen(resultado, contenido, origen, nombre="", numero_fila=None):
 
 
 def _analizar_xlsx(datos):
+    """
+    También sirve para .xlsm (Excel con macros): mismo contenedor zip/XML,
+    mismas celdas, así que analizar_archivo() mapea ambas extensiones acá
+    sin duplicar lógica.
+    """
     _validar_zip_seguro(datos)
     resultado = ResultadoAnalisis()
 
+    # keep_vba=False (el default) a propósito, incluso para un .xlsm: nunca
+    # hace falta preservar ni ejecutar el proyecto VBA de un archivo subido
+    # por un proveedor para leer una lista de precios, y retenerlo sería
+    # superficie de ataque de más sin ningún beneficio. No "agregarlo para
+    # poder leer .xlsm" — no hace falta, openpyxl igual lee las celdas.
     libro = openpyxl.load_workbook(BytesIO(datos), data_only=True, read_only=True)
     try:
         for hoja in libro.worksheets:
             matriz = []
-            for numero, fila in enumerate(hoja.iter_rows(values_only=True), start=1):
-                matriz.append((numero, list(fila)))
+            # Una sola pasada, sin values_only=True: hace falta el Cell
+            # para leer number_format (moneda), no solo el valor. openpyxl
+            # ya construye ese objeto internamente aunque uses
+            # values_only=True (es un wrapper liviano con __slots__, no una
+            # segunda pasada) — medido contra el archivo real completo
+            # (4 hojas, ~9600 filas en la más grande): 0.256s vs 0.312s.
+            # formato_moneda queda disperso: solo se guarda una entrada
+            # para la celda con número de moneda USD, no una por celda.
+            formato_moneda = {}
+            for numero, fila in enumerate(hoja.iter_rows(), start=1):
+                valores = []
+                for indice, celda in enumerate(fila):
+                    valor = celda.value
+                    valores.append(valor)
+                    if valor is not None and _es_formato_usd(celda.number_format):
+                        formato_moneda[(numero, indice)] = True
+                matriz.append((numero, valores))
                 if numero >= MAX_FILAS + 30:
                     break
             if not any(any(_texto_celda(v) for v in valores) for _, valores in matriz):
                 continue
             origen = f"Hoja {hoja.title}"
-            filas, adv, pendiente = _analizar_matriz_con_posible_ia(matriz, origen)
+            filas, adv, pendiente = _analizar_matriz_con_posible_ia(
+                matriz, origen, formato_moneda=formato_moneda
+            )
             resultado.filas.extend(filas)
             resultado.advertencias.extend(adv)
             if pendiente is not None:
@@ -1290,6 +1492,7 @@ def analizar_archivo(archivo, tipo_archivo=None):
 
     parsers = {
         "xlsx": _analizar_xlsx,
+        "xlsm": _analizar_xlsx,
         "xls": _analizar_xls,
         "csv": _analizar_csv,
         "pdf": _analizar_pdf,

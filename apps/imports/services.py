@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.catalog.models import Categoria, Marca, Producto, ProductoProveedor, UnidadMedida
 from apps.catalog.permissions import puede_crear_producto
+from apps.pricing.models import Moneda
 from apps.pricing.permissions import puede_registrar_costo
 from apps.pricing.services import costo_actual, registrar_costo
 
@@ -23,6 +24,7 @@ from .parsing import (
     ColumnasNoDetectadas,
     FilaAnalizada,
     analizar_archivo,
+    detectar_moneda_texto,
     extraer_filas_con_mapeo,
     parsear_costo,
 )
@@ -91,8 +93,17 @@ def _buscar_vinculo_por_codigo_proveedor(proveedor, codigo_proveedor):
     )
 
 
+def _etiqueta_moneda(moneda):
+    return "U$S" if moneda == Moneda.USD else "$"
+
+
 def _datos_normalizados(cruda):
     costo_crudo = cruda.get("costo_crudo", cruda.get("costo", ""))
+    # cruda.get("moneda"): señal por number_format de Excel (confiable,
+    # armada en parsing.py). Si no vino ninguna (CSV, IA, o Excel sin
+    # number_format de moneda), se cae a texto (costo_texto de Sonnet, o
+    # el símbolo escrito a mano en la celda) y por último a ARS.
+    moneda = cruda.get("moneda") or detectar_moneda_texto(costo_crudo) or Moneda.ARS
     return {
         "marca": str(cruda.get("marca") or "").strip(),
         "codigo": str(cruda.get("codigo") or "").strip(),
@@ -100,6 +111,7 @@ def _datos_normalizados(cruda):
         "descripcion": str(cruda.get("descripcion") or "").strip(),
         "costo_crudo": costo_crudo,
         "costo": parsear_costo(costo_crudo),
+        "moneda": moneda,
         "codigo_proveedor": str(cruda.get("codigo_proveedor") or "").strip(),
         "unidad": str(cruda.get("unidad") or "").strip(),
         "categoria": str(cruda.get("categoria") or "").strip(),
@@ -112,6 +124,7 @@ def _clasificar(importacion, cruda, usuario):
     codigo = datos["codigo"]
     nombre = datos["nombre"]
     costo = datos["costo"]
+    moneda = datos["moneda"]
     codigo_proveedor = datos["codigo_proveedor"]
     unidad_texto = datos["unidad"]
 
@@ -238,15 +251,16 @@ def _clasificar(importacion, cruda, usuario):
         }
 
     historial = costo_actual(vinculo)
-    if historial is not None and historial.costo == costo:
+    if historial is not None and historial.costo == costo and historial.moneda == moneda:
         categoria = ImportacionFila.Categoria.SIN_CAMBIOS
         detalle = ""
     else:
         categoria = ImportacionFila.Categoria.ACTUALIZA_COSTO
+        etiqueta_nueva = _etiqueta_moneda(moneda)
         detalle = (
-            f"$ {historial.costo} → $ {costo}"
+            f"{_etiqueta_moneda(historial.moneda)} {historial.costo} → {etiqueta_nueva} {costo}"
             if historial is not None
-            else f"Primer costo: $ {costo}"
+            else f"Primer costo: {etiqueta_nueva} {costo}"
         )
     return {
         "datos": datos,
@@ -295,6 +309,7 @@ def _crear_fila_desde_analisis(importacion, fila_analizada, usuario):
             str(datos["costo_crudo"]) if datos["costo_crudo"] is not None else ""
         ),
         costo=datos["costo"],
+        moneda=datos["moneda"],
         codigo_proveedor_texto=datos["codigo_proveedor"],
         unidad_texto=datos["unidad"],
         categoria_texto=datos["categoria"],
@@ -637,6 +652,7 @@ def reclasificar_fila(fila, usuario, datos_editados):
     fila.descripcion_texto = datos["descripcion"]
     fila.costo_texto = str(datos["costo_crudo"] or "")
     fila.costo = datos["costo"]
+    fila.moneda = datos["moneda"]
     fila.codigo_proveedor_texto = datos["codigo_proveedor"]
     fila.unidad_texto = datos["unidad"]
     fila.categoria_texto = datos["categoria"]
@@ -657,6 +673,7 @@ def reclasificar_fila(fila, usuario, datos_editados):
             "descripcion_texto",
             "costo_texto",
             "costo",
+            "moneda",
             "codigo_proveedor_texto",
             "unidad_texto",
             "categoria_texto",
@@ -802,6 +819,7 @@ def confirmar_importacion(importacion, usuario):
                 "nombre": fila.nombre_texto,
                 "descripcion": fila.descripcion_texto,
                 "costo_crudo": fila.costo,
+                "moneda": fila.moneda,
                 "codigo_proveedor": fila.codigo_proveedor_texto,
                 "unidad": fila.unidad_texto,
                 "categoria": fila.categoria_texto,
@@ -843,12 +861,17 @@ def confirmar_importacion(importacion, usuario):
             vinculo.save(update_fields=["codigo_proveedor"])
 
         historial = costo_actual(vinculo)
-        if historial is None or historial.costo != fila.costo:
+        if (
+            historial is None
+            or historial.costo != fila.costo
+            or historial.moneda != fila.moneda
+        ):
             registrar_costo(
                 vinculo,
                 fila.costo,
                 usuario,
                 origen=f"importación #{importacion.pk}",
+                moneda=fila.moneda,
             )
             if not creado:
                 contadores["actualizados"] += 1

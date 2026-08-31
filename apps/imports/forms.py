@@ -1,6 +1,7 @@
 from django import forms
 
 from apps.catalog.models import Marca, Proveedor
+from apps.pricing.models import Moneda
 
 from .models import ImportacionFila
 from .parsing import ArchivoImportacionInvalido, MAX_ARCHIVO_BYTES, tipo_archivo_por_nombre
@@ -16,7 +17,7 @@ class NuevaImportacionForm(forms.Form):
         widget=forms.ClearableFileInput(
             attrs={
                 "class": "form-control",
-                "accept": ".xlsx,.xls,.csv,.pdf,.docx,.jpg,.jpeg,.png,.webp",
+                "accept": ".xlsx,.xls,.xlsm,.csv,.pdf,.docx,.jpg,.jpeg,.png,.webp",
             }
         ),
     )
@@ -79,6 +80,11 @@ class EditarFilaImportacionForm(forms.Form):
             }
         ),
     )
+    moneda = forms.ChoiceField(
+        required=True,
+        choices=Moneda.choices,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
     codigo_proveedor = forms.CharField(
         required=False,
         max_length=100,
@@ -114,6 +120,7 @@ class EditarFilaImportacionForm(forms.Form):
                 "nombre": fila.nombre_texto,
                 "descripcion": fila.descripcion_texto,
                 "costo": fila.costo,
+                "moneda": fila.moneda,
                 "codigo_proveedor": fila.codigo_proveedor_texto,
                 "unidad": fila.unidad_texto,
                 "categoria": fila.categoria_texto,
@@ -127,6 +134,7 @@ class EditarFilaImportacionForm(forms.Form):
             "nombre": self.cleaned_data["nombre"],
             "descripcion": self.cleaned_data["descripcion"],
             "costo_crudo": self.cleaned_data["costo"],
+            "moneda": self.cleaned_data["moneda"],
             "codigo_proveedor": self.cleaned_data["codigo_proveedor"],
             "unidad": self.cleaned_data["unidad"],
             "categoria": self.cleaned_data["categoria"],

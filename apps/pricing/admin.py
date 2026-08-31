@@ -24,8 +24,8 @@ class HistorialCostoAdmin(admin.ModelAdmin):
     Postgres lo rechazaría igual.
     """
 
-    list_display = ("producto_proveedor", "costo", "vigente_desde", "cargado_por", "origen")
-    list_filter = ("origen",)
+    list_display = ("producto_proveedor", "costo", "moneda", "vigente_desde", "cargado_por", "origen")
+    list_filter = ("origen", "moneda")
     search_fields = (
         "producto_proveedor__producto__nombre",
         "producto_proveedor__producto__codigo",

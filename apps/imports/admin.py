@@ -20,6 +20,7 @@ class ImportacionFilaInline(admin.TabularInline):
         "codigo",
         "nombre_texto",
         "costo",
+        "moneda",
         "categoria",
         "detalle",
         "incluir",

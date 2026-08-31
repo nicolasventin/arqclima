@@ -23,6 +23,7 @@ from reportlab.pdfgen import canvas
 
 from apps.accounts.models import User
 from apps.catalog.models import Marca, Proveedor
+from apps.pricing.models import Moneda
 
 from .ai import ExtraccionIAError, mapear_columnas
 from .models import ImportacionFila, ImportacionListaPrecios, ProveedorColumnMapping
@@ -103,6 +104,77 @@ def _xlsx_catalogo_headers_repetidos():
                 ["TF-002", "Tubo Fusion PN20 20mm *NUEVO*", "1800,00"],
             ]
         ),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def _xlsx_producto_real_sin_encabezado_ni_bloques():
+    """
+    Filas con pinta real de producto (código+nombre+precio con formato de
+    moneda) pero SIN ningún header reconocible en toda la hoja (ni clásico
+    ni por bloques: ninguna celda es literalmente "Código"/"Nombre"/
+    "Precio" ni ningún alias conocido) — el caso genuino que sí debe
+    escalar a Sonnet por el último recurso de
+    _analizar_matriz_con_posible_ia, y que el pre-filtro nuevo (ver
+    _fila_parece_producto_confiable) no debe frenar.
+    """
+    return SimpleUploadedFile(
+        "lista-sin-encabezado.xlsx",
+        _xlsx_bytes(
+            [
+                ["Lista informal, sin columnas rotuladas"],
+                ["TF-9001", "Tubo Fusion PN12 20mm reforzado", "$ 1.850,00"],
+                ["TF-9002", "Codo 90 fusion 20mm", "$ 640,00"],
+                ["TF-9003", "Valvula esferica 1/2 pulgada", "1.200,00"],
+            ]
+        ),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def _xlsx_extracto_tipo_mara_sin_precio():
+    """
+    Réplica reducida (60 filas en vez de las ~9600 reales) del extracto SAP
+    "MARA" del Cotizador Base real que motivó el pre-filtro: sin ninguna
+    columna de precio, pero con columnas numéricas (ID de material, peso)
+    y una descripción con medidas embebidas ("...2.00 m") que antes
+    colaban como "costo" para parsear_costo()/_fila_parece_producto(), sin
+    que ningún header ni bloque de columnas fuera detectable.
+
+    Va acompañada de una segunda hoja con datos de producto normales
+    (header clásico Código/Nombre/Costo) para que la importación tenga
+    algo real que resolver — igual que el archivo real tiene, además de
+    "MARA", otras hojas ("Cotizador", "GRILLA CLIENTE") que sí se
+    resuelven local. Así el test aísla el comportamiento de la hoja tipo
+    MARA sin depender del caso borde de "todo el archivo vino vacío"
+    (procesar_importacion() lo trata como ColumnasNoDetectadas, algo
+    ortogonal a lo que este test verifica).
+    """
+    libro = openpyxl.Workbook()
+    hoja_mara = libro.active
+    hoja_mara.title = "MARA"
+    for indice in range(60):
+        hoja_mara.append(
+            [
+                10_000_000 + indice,
+                f"GA{indice:06d}",
+                f"77980811{indice:05d}",
+                "C/U",
+                0.2,
+                0.18,
+                f"TUBO COAXIAL O60/100 {(indice % 5) + 1}.00 m",
+            ]
+        )
+    hoja_normal = libro.create_sheet("Cotizador")
+    hoja_normal.append(["Código", "Nombre", "Costo"])
+    hoja_normal.append(["CAL-100", "Caldera Premium 24kW", "150000,00"])
+
+    buffer = BytesIO()
+    libro.save(buffer)
+    buffer.seek(0)
+    return SimpleUploadedFile(
+        "extracto-mara.xlsx",
+        buffer.read(),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -278,6 +350,62 @@ class ExtraccionCompletaIATests(TestCase):
         self.assertTrue(importacion.usa_ia)
 
     @patch("apps.imports.services.extraer_lista_precios")
+    def test_producto_real_sin_encabezado_sigue_escalando_a_sonnet(self, mock_extraer):
+        """
+        Regresión del pre-filtro agregado para la hoja MARA: datos con
+        pinta real de producto (código+nombre+precio con formato de
+        moneda), sin header ni bloques detectables, tienen que seguir
+        llegando al último recurso de _analizar_matriz_con_posible_ia y
+        escalar a Sonnet como antes. El pre-filtro nuevo solo debe frenar
+        hojas donde NINGUNA fila tiene esa pinta (ver el test de la hoja
+        tipo MARA), no este caso.
+        """
+        mock_extraer.return_value = (
+            [
+                {
+                    "marca": "", "codigo": "TF-9001", "nombre": "Tubo Fusion PN12 20mm reforzado",
+                    "descripcion": "", "costo_texto": "1850,00", "codigo_proveedor": "",
+                    "unidad": "", "categoria": "", "nota": "",
+                },
+            ],
+            [],
+            {"modelo": "sonnet-test", "input_tokens": 300, "output_tokens": 60},
+        )
+
+        importacion = self._importar(_xlsx_producto_real_sin_encabezado_ni_bloques(), "xlsx")
+
+        mock_extraer.assert_called_once()
+        self.assertEqual(mock_extraer.call_args.args[1], "excel_celdas")
+        self.assertTrue(importacion.usa_ia)
+
+    @patch("apps.imports.services.extraer_lista_precios")
+    def test_extracto_tipo_mara_sin_columna_de_precio_no_llama_a_sonnet(self, mock_extraer):
+        """
+        Caso real que motivó el pre-filtro: una hoja tipo extracto SAP, sin
+        ninguna columna de precio, no debe gastar una llamada a Sonnet solo
+        para que la IA concluya "esto no tiene precios" — parsear_costo()
+        ya alcanza para descartarlo localmente. Antes de este pre-filtro,
+        la hoja MARA real (~9600 filas) escalaba igual porque
+        parsear_costo() acepta cualquier número de Excel (peso, ID, EAN) y
+        una medida embebida en la descripción ("...2.00 m") también
+        matcheaba como "costo".
+        """
+        importacion = self._importar(_xlsx_extracto_tipo_mara_sin_precio(), "xlsx")
+
+        mock_extraer.assert_not_called()
+        self.assertFalse(importacion.usa_ia)
+        # Solo la fila de la hoja "Cotizador" (resuelta local, camino
+        # clásico) — la hoja "MARA" no aportó ninguna.
+        self.assertEqual(importacion.filas.count(), 1)
+        self.assertEqual(importacion.filas.get().codigo, "CAL-100")
+        self.assertTrue(
+            any(
+                "no se detectó ninguna fila con estructura de producto" in advertencia
+                for advertencia in importacion.advertencias_analisis
+            )
+        )
+
+    @patch("apps.imports.services.extraer_lista_precios")
     def test_pdf_con_tabla_local_nunca_llama_a_sonnet(self, mock_extraer):
         importacion = self._importar(_pdf_tabular(), "pdf")
         mock_extraer.assert_not_called()
@@ -429,6 +557,17 @@ class ArchivoRealListaGeneralTests(TestCase):
     _contar_filas_header/_extraer_filas_excel_por_bloques hiciera que este
     archivo dejara de resolverse localmente y pasara a depender de IA,
     este test lo va a marcar rompiendo el `assert_not_called()`.
+
+    Todas las filas quedan en confianza MEDIA (no ALTA): salen del
+    fallback por bloques, que infiere código/nombre por heurística
+    posicional en vez de leerlos de un alias exacto — la degradación de
+    _extraer_filas_excel_por_bloques() a "media" es incondicional (no
+    depende de qué tan claro haya sido el scoring), encontrada al analizar
+    Lista_de_Precios_-_Cotizador_OFITT_AGOSTO.xlsm (ver
+    ArchivoRealCotizadorOfittAgostoTests). En este archivo no cambia
+    ninguna de las categorías/conteos de arriba porque las 149 filas ya
+    eran PARA_REVISAR o ERROR (ambas fuerzan incluir=False de por sí,
+    independientemente de la confianza).
     """
 
     def setUp(self):
@@ -465,9 +604,215 @@ class ArchivoRealListaGeneralTests(TestCase):
         )
         self.assertTrue(
             all(
-                fila.confianza == ImportacionFila.Confianza.ALTA
+                fila.confianza == ImportacionFila.Confianza.MEDIA
                 for fila in importacion.filas.all()
             )
+        )
+
+
+@override_settings(MEDIA_ROOT=_MEDIA_ROOT, ANTHROPIC_API_KEY="sk-ant-test-clave-secreta")
+class ArchivoRealCotizadorBaseTests(TestCase):
+    """
+    Cotizador_Base.xlsm es el archivo .xlsm real (Importación #5) que
+    expuso el pre-filtro de _fila_parece_producto_confiable: tiene 4
+    hojas — "Cotizador" (header único en fila 6: Rubro, SubRubro, Código,
+    Descripción, Código EAN, Precio Unit., Cantidad, Total Neto),
+    "Condiciones" (texto de términos y condiciones, sin ningún dato de
+    producto) y "MARA" (un extracto tipo SAP de ~9600 filas, sin ninguna
+    columna de precio, pero con ID/EAN/peso numéricos que antes colaban
+    como "costo" para parsear_costo()). "GRILLA CLIENTE" resuelve local
+    también (marca no detectada, categoría PARA_REVISAR, sin pasar por IA).
+
+    Antes del pre-filtro, "Condiciones" y "MARA" escalaban a Sonnet
+    (confirmado contra el ia_resultado real de la Importación #5: 1.493 +
+    184.326 = 185.819 tokens de entrada, ~USD 0.37, solo para que Claude
+    concluyera "esto no tiene precios"). Mismo criterio de regresión
+    permanente que ArchivoRealListaGeneralTests para DOC-20260731-WA0188:
+    si algún cambio futuro a _fila_parece_producto_confiable o a los
+    caminos locales hiciera que este archivo dejara de resolverse sin
+    IA, este test lo va a marcar rompiendo los `assert_not_called()`.
+
+    También es el fixture real que expuso la detección de moneda: la
+    columna "Precio Unit." de "Cotizador" tiene number_format de USD
+    (`"U$S"\ #,##0.00;...`) en Excel, invisible como texto.
+
+    Este mismo fixture es, sin haberlo buscado, el que expuso el bug de
+    ALIAS_COSTO que no reconocía "Precio Unit." (encontrado analizando
+    Lista_de_Precios_-_Cotizador_OFITT_AGOSTO.xlsm, ver
+    ArchivoRealCotizadorOfittAgostoTests más abajo): antes del fix,
+    "Cotizador" caía al fallback por bloques y terminaba usando "Rubro"
+    como nombre y "Código EAN" como código para sus 1061 filas — nunca
+    se había notado acá porque este test solo verificaba cantidades y
+    moneda, no el valor de código/nombre. Con el fix, "Cotizador" resuelve
+    por el camino clásico (código→"Código", nombre→"Descripción",
+    categoria→"Rubro", todos correctos) y recupera además 17 filas que el
+    fallback por bloques descartaba por no pasar su propio filtro de
+    "parece código"/"parece nombre" (1078 en vez de 1061).
+    """
+
+    def setUp(self):
+        self.usuario = _usuario_admin("diego_cotizador")
+        self.proveedor = Proveedor.objects.create(nombre_comercial="Proveedor Cotizador", activo=True)
+
+    @patch("apps.imports.services.extraer_lista_precios")
+    @patch("apps.imports.services.mapear_columnas")
+    def test_cotizador_base_resuelve_cotizador_local_y_filtra_mara_y_condiciones(
+        self, mock_mapear, mock_extraer
+    ):
+        archivo = SimpleUploadedFile(
+            "Cotizador_Base.xlsm",
+            (_FIXTURES_DIR / "Cotizador_Base.xlsm").read_bytes(),
+            content_type="application/vnd.ms-excel.sheet.macroEnabled.12",
+        )
+        importacion = ImportacionListaPrecios.objects.create(
+            proveedor=self.proveedor,
+            archivo=archivo,
+            tipo_archivo="xlsm",
+            cargado_por=self.usuario,
+        )
+        procesar_importacion(importacion)
+
+        mock_mapear.assert_not_called()
+        mock_extraer.assert_not_called()
+        self.assertFalse(importacion.usa_ia)
+
+        advertencias = importacion.advertencias_analisis
+        self.assertTrue(
+            any(
+                adv.startswith("Hoja MARA:")
+                and "no se detectó ninguna fila con estructura de producto" in adv
+                for adv in advertencias
+            ),
+            advertencias,
+        )
+        self.assertTrue(
+            any(
+                adv.startswith("Hoja Condiciones:")
+                and "no se detectó ninguna fila con estructura de producto" in adv
+                for adv in advertencias
+            ),
+            advertencias,
+        )
+
+        # "Cotizador" (1078, camino clásico desde el fix de ALIAS_COSTO) +
+        # "GRILLA CLIENTE" (1078, clásico sin marca) resuelven local, sin
+        # depender de la IA para nada. "MARA" y "Condiciones" no aportan
+        # ninguna fila (arriba).
+        self.assertEqual(importacion.filas.count(), 2156)
+        self.assertEqual(
+            importacion.filas.filter(categoria=ImportacionFila.Categoria.PARA_REVISAR).count(),
+            1046,
+        )
+        self.assertEqual(
+            importacion.filas.filter(categoria=ImportacionFila.Categoria.ERROR).count(),
+            11,
+        )
+
+        # Detección de moneda vía number_format: las 1078 filas de
+        # "Cotizador" están en USD en la planilla real (celda por celda,
+        # no una muestra) y quedan en confianza ALTA — USD confiable no
+        # baja confianza ni fuerza revisión manual.
+        filas_cotizador = importacion.filas.filter(origen__startswith="Hoja Cotizador")
+        self.assertEqual(filas_cotizador.count(), 1078)
+        self.assertEqual(
+            filas_cotizador.filter(moneda=Moneda.USD, confianza=ImportacionFila.Confianza.ALTA).count(),
+            1078,
+        )
+
+        # Código y nombre reales (no "Rubro" ni "Código EAN" del bug que
+        # este mismo archivo tenía antes del fix de ALIAS_COSTO).
+        primera_cotizador = filas_cotizador.order_by("numero_fila").first()
+        self.assertEqual(primera_cotizador.codigo, "10000005")
+        self.assertEqual(primera_cotizador.nombre_texto, 'VALVULA 1/2""x16  REC MANUAL"')
+        self.assertEqual(primera_cotizador.categoria_texto, "Accesorio")
+        # "GRILLA CLIENTE" no tiene señal de moneda en el archivo real:
+        # queda en el default ARS.
+        self.assertEqual(
+            importacion.filas.exclude(origen__startswith="Hoja Cotizador")
+            .exclude(moneda=Moneda.ARS)
+            .count(),
+            0,
+        )
+
+
+@override_settings(MEDIA_ROOT=_MEDIA_ROOT, ANTHROPIC_API_KEY="sk-ant-test-clave-secreta")
+class ArchivoRealCotizadorOfittAgostoTests(TestCase):
+    """
+    Cotizador_OFITT_Agosto.xlsm es el archivo real que expuso el bug de
+    ALIAS_COSTO: su hoja "Cotizador" (header único en fila 6) usa
+    literalmente "Código", "Descripción" y "Precio Unit." — Código y
+    Descripción ya estaban cubiertos por ALIAS_CODIGO/ALIAS_NOMBRE, pero
+    "Precio Unit." (abreviado) no estaba en ALIAS_COSTO, que solo tenía
+    la forma larga "precio unitario". Esa única columna faltante hacía
+    fallar detectar_columnas() para toda la fila 6 (exige código+nombre+
+    costo juntos) y la hoja caía al fallback estructural por bloques
+    (_extraer_filas_excel_por_bloques / _inferir_columnas_bloque), que
+    infiere columnas por heurística posicional en vez de por alias: acá
+    elegía "SubRubro" como nombre (empate 188/188 contra "Descripción",
+    resuelto por orden de columna) y "Código EAN" como código (puntaje
+    188 contra 164 de la columna "Código" real, porque un EAN de 13
+    dígitos matchea el patrón de "parece código" con más consistencia
+    que un código alfanumérico como "MTPEX1620BL-R12"). Confirmado
+    ejecutando el parser real contra este archivo antes de escribir este
+    test, no de memoria.
+
+    Con el fix (agregar "precio unit." a ALIAS_COSTO), la hoja resuelve
+    por el camino clásico: código→"Código" (col. F), nombre→"Descripción"
+    (col. G) — nunca "Código EAN" (col. H) ni "SubRubro" (col. A).
+    """
+
+    def setUp(self):
+        self.usuario = _usuario_admin("diego_ofitt")
+        self.proveedor = Proveedor.objects.create(nombre_comercial="Proveedor OFITT", activo=True)
+
+    @patch("apps.imports.services.extraer_lista_precios")
+    @patch("apps.imports.services.mapear_columnas")
+    def test_cotizador_ofitt_agosto_resuelve_clasico_con_codigo_y_nombre_reales(
+        self, mock_mapear, mock_extraer
+    ):
+        archivo = SimpleUploadedFile(
+            "Cotizador_OFITT_Agosto.xlsm",
+            (_FIXTURES_DIR / "Cotizador_OFITT_Agosto.xlsm").read_bytes(),
+            content_type="application/vnd.ms-excel.sheet.macroEnabled.12",
+        )
+        importacion = ImportacionListaPrecios.objects.create(
+            proveedor=self.proveedor,
+            archivo=archivo,
+            tipo_archivo="xlsm",
+            cargado_por=self.usuario,
+        )
+        procesar_importacion(importacion)
+
+        mock_mapear.assert_not_called()
+        mock_extraer.assert_not_called()
+        self.assertFalse(importacion.usa_ia)
+
+        advertencias = importacion.advertencias_analisis
+        self.assertFalse(
+            any("bloque(s) comerciales" in adv for adv in advertencias),
+            advertencias,
+        )
+
+        filas_cotizador = importacion.filas.filter(origen__startswith="Hoja Cotizador").order_by(
+            "numero_fila"
+        )
+        self.assertEqual(filas_cotizador.count(), 188)
+
+        primera = filas_cotizador.first()
+        self.assertEqual(primera.codigo, "MTPEX1620BL-R12")
+        self.assertEqual(
+            primera.nombre_texto, "TUBO PE-X 5 CAPAS Ø16X2,0 - 120M - BLANC"
+        )
+
+        ultima = filas_cotizador.last()
+        self.assertEqual(ultima.codigo, "VALV.ZONA")
+        self.assertEqual(ultima.nombre_texto, "VÁLVULA DE ZONA DE 3 VÍAS UNIVERSAL")
+
+        # Ningún código real quedó tomado de la columna "Código EAN"
+        # (siempre 13 dígitos numéricos) ni ningún nombre quedó tomado de
+        # "SubRubro" (categorías cortas repetidas como "PE-X").
+        self.assertFalse(
+            any(len(f.codigo) == 13 and f.codigo.isdigit() for f in filas_cotizador)
         )
 
 

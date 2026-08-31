@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from .models import ConfiguracionGeneral, HistorialCosto
+from .models import ConfiguracionGeneral, HistorialCosto, Moneda
 
 
 def margen_efectivo(producto):
@@ -73,11 +73,21 @@ def calcular_precio_venta(producto, costo):
     return precio.quantize(Decimal("0.01")), origen_margen
 
 
-def registrar_costo(producto_proveedor, costo, usuario, origen="manual"):
-    """Única forma soportada de escribir en HistorialCosto: siempre INSERT."""
+def registrar_costo(producto_proveedor, costo, usuario, origen="manual", moneda=Moneda.ARS):
+    """
+    Única forma soportada de escribir en HistorialCosto: siempre INSERT.
+
+    moneda default ARS: solo apps.imports.services.confirmar_importacion()
+    tiene una fuente real de detección automática (fila.moneda, resuelta en
+    preview) y pasa moneda= explícito. Los demás callers (carga manual de
+    costo, recepción de orden de compra) no tienen ningún documento del que
+    detectar moneda — ARS es lo correcto ahí, no un default silencioso sin
+    revisar.
+    """
     return HistorialCosto.objects.create(
         producto_proveedor=producto_proveedor,
         costo=costo,
         cargado_por=usuario,
         origen=origen,
+        moneda=moneda,
     )

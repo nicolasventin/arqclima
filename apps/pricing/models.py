@@ -4,6 +4,11 @@ from django.db import models
 from apps.catalog.models import ProductoProveedor
 
 
+class Moneda(models.TextChoices):
+    ARS = "ars", "Pesos (ARS)"
+    USD = "usd", "Dólares (USD)"
+
+
 class HistorialCosto(models.Model):
     """
     Historial de costos — regla de negocio 3: nunca se borra un costo
@@ -26,6 +31,7 @@ class HistorialCosto(models.Model):
         ProductoProveedor, on_delete=models.PROTECT, related_name="historial_costos"
     )
     costo = models.DecimalField(max_digits=12, decimal_places=2)
+    moneda = models.CharField(max_length=3, choices=Moneda.choices, default=Moneda.ARS)
     vigente_desde = models.DateTimeField(auto_now_add=True)
     cargado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -42,6 +48,10 @@ class HistorialCosto(models.Model):
                 check=models.Q(costo__gte=0),
                 name="historialcosto_costo_no_negativo",
             ),
+            models.CheckConstraint(
+                check=models.Q(moneda__in=Moneda.values),
+                name="historialcosto_moneda_valida",
+            ),
         ]
         verbose_name = "Historial de costo"
         verbose_name_plural = "Historial de costos"
@@ -57,7 +67,8 @@ class HistorialCosto(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.producto_proveedor} — ${self.costo} ({self.vigente_desde:%Y-%m-%d})"
+        etiqueta = "U$S" if self.moneda == Moneda.USD else "$"
+        return f"{self.producto_proveedor} — {etiqueta} {self.costo} ({self.vigente_desde:%Y-%m-%d})"
 
 
 class ConfiguracionGeneral(models.Model):
