@@ -651,6 +651,16 @@ def _inferir_columnas_bloque(filas_bloque, indice_precio):
             if indice < len(valores) and _parece_nombre_producto(valores[indice])
         )
 
+    if not puntajes_codigo:
+        # indice_precio == 0 (o cualquier caso sin columnas a su izquierda):
+        # no hay dónde buscar código/nombre, esta fila no es un header de
+        # bloque real. Caso real que lo expuso: una hoja de notas de una
+        # sola columna con una oración que arranca con "Costo:"/"Precio:"
+        # (matchea el prefijo de _indice_precio_bloque en la columna 0) —
+        # sin este guard, max() sobre un dict vacío explotaba y tumbaba
+        # toda la importación con un ValueError sin relación con el archivo.
+        return None, None
+
     indice_codigo = max(puntajes_codigo, key=puntajes_codigo.get)
     if puntajes_codigo[indice_codigo] == 0:
         return None, None

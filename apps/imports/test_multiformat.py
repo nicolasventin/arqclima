@@ -143,6 +143,39 @@ def _xlsx_lista_comercial_por_bloques():
     )
 
 
+def _xlsx_con_hoja_de_notas_que_empieza_con_costo():
+    """
+    Réplica del caso real (Uriarte_Taldea_06-26_transcripto.xlsx) que
+    tumbaba toda la importación con un ValueError sin relación con el
+    archivo: una hoja de datos normal + una segunda hoja de notas de una
+    sola columna, cuya primera fila con contenido es una oración que
+    arranca con "Costo:" (matchea el prefijo de _indice_precio_bloque en
+    la columna 0, sin ninguna columna a la izquierda para inferir
+    código/nombre — _inferir_columnas_bloque debe descartar esa fila en
+    vez de explotar).
+    """
+    libro = openpyxl.Workbook()
+    hoja_datos = libro.active
+    hoja_datos.title = "Datos"
+    hoja_datos.append(["Marca", "Código", "Nombre", "Costo", "Unidad", "Categoría"])
+    hoja_datos.append(["Orkli", "VDR 01", "LLAVE ESCUADRA ORKLI", "USD 11.04", "caja: 48", "Calefaccion"])
+    hoja_datos.append(["Asua", "VDR 03", "LLAVE RECTA ASUA 1/2", "USD 6.87", "caja: 120", "Calefaccion"])
+
+    hoja_notas = libro.create_sheet("Notas")
+    hoja_notas.append(["Notas sobre esta transcripción"])
+    hoja_notas.append([None])
+    hoja_notas.append(["Costo: se conservó el prefijo 'USD' tal cual figura en el original."])
+
+    buffer = BytesIO()
+    libro.save(buffer)
+    buffer.seek(0)
+    return SimpleUploadedFile(
+        "lista-con-notas.xlsx",
+        buffer.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 def _docx_con_tabla_e_imagen():
     documento = Document()
     tabla = documento.add_table(rows=2, cols=5)
@@ -296,6 +329,29 @@ class AnalisisMultiformatoTests(TestCase):
         self.assertIn("101203108200001", codigos)
         self.assertNotIn("200", codigos)
         self.assertNotIn("300", codigos)
+
+    def test_hoja_de_notas_que_empieza_con_costo_no_tumba_la_importacion(self):
+        """
+        Regresión del bug real de Uriarte_Taldea_06-26_transcripto.xlsx:
+        una hoja de notas de una sola columna, con una oración que arranca
+        con "Costo:", hacía explotar _inferir_columnas_bloque() con
+        ValueError ("max() arg is an empty sequence") y tumbaba toda la
+        importación — incluida la hoja de datos real, que ya resolvía bien
+        por el camino clásico.
+        """
+        importacion = self._crear_importacion(_xlsx_con_hoja_de_notas_que_empieza_con_costo())
+
+        filas = list(importacion.filas.order_by("numero_fila"))
+        self.assertEqual(len(filas), 2)
+        self.assertEqual({f.codigo for f in filas}, {"VDR 01", "VDR 03"})
+        self.assertTrue(
+            any(
+                adv.startswith("Hoja Notas:")
+                and "No se pudieron reconocer las columnas" in adv
+                for adv in importacion.advertencias_analisis
+            ),
+            importacion.advertencias_analisis,
+        )
 
 
     def test_word_extrae_tabla_e_imagen(self):

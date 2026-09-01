@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.http import FileResponse, Http404
@@ -26,6 +28,8 @@ from .services import (
     procesar_importacion,
     reclasificar_fila,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _contexto_nueva_importacion(user, form):
@@ -114,6 +118,20 @@ class NuevaImportacionView(UserPassesTestMixin, View):
                 _contexto_nueva_importacion(request.user, form),
             )
         except Exception:
+            # Este except es deliberadamente genérico (cualquier excepción no
+            # prevista no debe tumbar la request con un 500), pero eso mismo
+            # disfraza bugs reales de código como si fueran problemas del
+            # archivo del usuario — pasó en la práctica con un ValueError de
+            # parsing.py sin ninguna relación con el archivo. El traceback
+            # completo queda logueado con logger.exception() ANTES del
+            # mensaje genérico, para que quede registrado para quien lo
+            # audite después; el mensaje al usuario se mantiene genérico
+            # a propósito.
+            logger.exception(
+                "Fallo inesperado al analizar la importación %s (archivo=%r)",
+                importacion.pk,
+                importacion.archivo.name,
+            )
             _borrar_importacion_fallida(importacion)
             form.add_error(
                 "archivo",

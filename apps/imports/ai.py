@@ -159,7 +159,22 @@ _SISTEMA_EXTRACCION = (
     "producto ningún bloque que sea solo ruido (datos del cliente, fecha, "
     "condiciones comerciales, totales). Usá 'advertencias' para cualquier "
     "problema general de lectura (páginas o secciones ilegibles, dudas sobre "
-    "la estructura del documento)."
+    "la estructura del documento).\n\n"
+    "No todos los catálogos son una tabla de filas y columnas: muchos "
+    "proveedores arman el documento como una GRILLA DE TARJETAS/RECUADROS, "
+    "con un producto por caja (imagen + nombre + código + precio dentro de "
+    "un recuadro propio, ej. 'VDR 01 / USD 11.04'), varias cajas por página "
+    "en dos o más columnas. Extraé de esa estructura exactamente igual que "
+    "de una tabla: cada recuadro con código y precio es una fila de "
+    "producto. Es común que el margen tenga columnas decorativas de texto "
+    "vertical, una letra por línea (ej. 'L / L / A / V / E / Y / ...') — "
+    "son títulos de sección deformados por el diseño, no son productos ni "
+    "categorías; ignoralos.\n\n"
+    "Si el documento parece ser una lista de precios pero terminás sin "
+    "poder extraer ningún producto, NUNCA devuelvas 'productos' y "
+    "'advertencias' vacíos a la vez: contá siempre en 'advertencias' por "
+    "qué no pudiste (estructura no reconocida, tipo de layout, calidad de "
+    "imagen, u otro motivo concreto)."
 )
 
 
@@ -168,17 +183,33 @@ class ExtraccionIAError(RuntimeError):
     "limit, error del servidor, o una respuesta que no se pudo interpretar."""
 
 
+MAX_REINTENTOS = 1
+
+
 def _cliente():
     api_key = settings.ANTHROPIC_API_KEY
     if not api_key:
         raise ExtraccionIAError(
             "No hay una ANTHROPIC_API_KEY configurada; no se puede usar IA para esta importación."
         )
-    return anthropic.Anthropic(api_key=api_key).with_options(timeout=TIMEOUT_SEGUNDOS)
+    # max_retries explícito (no el default implícito del SDK, que es 2):
+    # mismo criterio de "nada implícito" del resto del proyecto. Con el
+    # default, un timeout podía generar hasta 3 requests HTTP reales sin
+    # que quedara ningún rastro de cuántas veces pegó realmente a la API
+    # (encontrado al intentar contar llamadas reales durante el diagnóstico
+    # de Uriarte Taldea). Con 1, como máximo son 2: el intento inicial más
+    # un reintento — alcanza para no perder la corrida por un error
+    # transitorio de red sin volver la cuenta de llamadas reales opaca.
+    return anthropic.Anthropic(api_key=api_key).with_options(
+        timeout=TIMEOUT_SEGUNDOS, max_retries=MAX_REINTENTOS
+    )
 
 
-def _llamar_tool_forzado(*, model, system, content, tool, max_tokens):
+def _llamar_tool_forzado(*, model, system, content, tool, max_tokens, thinking=None):
     cliente = _cliente()
+    kwargs = {}
+    if thinking is not None:
+        kwargs["thinking"] = thinking
     try:
         respuesta = cliente.messages.create(
             model=model,
@@ -187,6 +218,7 @@ def _llamar_tool_forzado(*, model, system, content, tool, max_tokens):
             tools=[tool],
             tool_choice={"type": "tool", "name": tool["name"]},
             messages=[{"role": "user", "content": content}],
+            **kwargs,
         )
     except anthropic.RateLimitError as exc:
         raise ExtraccionIAError(
@@ -317,8 +349,38 @@ def extraer_lista_precios(contenido, tipo_contenido, *, extension_imagen=None):
         system=_SISTEMA_EXTRACCION,
         content=content,
         tool=TOOL_EXTRAER_LISTA_PRECIOS,
-        max_tokens=16000,
+        # 64000 (no 16000): el límite real del modelo es 128k y el costo es
+        # por tokens generados, no por el techo configurado — no cuesta de
+        # más a menos que haga falta ese volumen. Encontrado con un caso
+        # real (Uriarte Taldea, catálogo en grilla de ~150 productos) que
+        # cortaba por stop_reason="max_tokens" con el límite viejo.
+        max_tokens=64000,
+        # thinking: se probó deshabilitado acá (la hipótesis era que en
+        # Sonnet 5 el razonamiento extendido comparte presupuesto con
+        # max_tokens y compite con el output de una extracción estructurada
+        # con tool_choice forzado) y salió MAL en la práctica, no en teoría:
+        # contra Uriarte Taldea (catálogo denso de ~150 ítems en tarjetas
+        # repartidas en 10 páginas) devolvió solo 2 productos, uno de ellos
+        # un objeto vacío, y una advertencia sin sentido ("placeholder") —
+        # confirmado con la API real, no una suposición. Para un documento
+        # visualmente simple el thinking no aporta nada, pero para uno denso
+        # y disperso como este parece ser lo que evita que el modelo se
+        # conforme con una extracción parcial. Se deja sin pasar el
+        # parámetro (comportamiento adaptativo por default de Sonnet 5) — no
+        # volver a deshabilitarlo acá sin repetir esta medición.
     )
     productos = entrada.get("productos") or []
     advertencias = list(entrada.get("advertencias") or [])
+    if not productos and not advertencias:
+        # Red de contención: el prompt le pide a Claude que siempre explique
+        # en 'advertencias' por qué no extrajo productos, pero no depende de
+        # que esa instrucción funcione — un modelo puede devolver los dos
+        # arrays vacíos igual (caso real: Importación #10, Uriarte Taldea,
+        # catálogo en grilla de tarjetas). Sin esto, el preview queda
+        # silenciosamente vacío de contexto y el usuario ve 0 filas sin
+        # ninguna pista de qué pasó.
+        advertencias = [
+            "Claude no extrajo productos de este documento y no indicó el "
+            "motivo; revisar manualmente el archivo original."
+        ]
     return productos, advertencias, meta

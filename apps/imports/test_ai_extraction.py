@@ -25,7 +25,7 @@ from apps.accounts.models import User
 from apps.catalog.models import Marca, Proveedor
 from apps.pricing.models import Moneda
 
-from .ai import ExtraccionIAError, mapear_columnas
+from .ai import ExtraccionIAError, extraer_lista_precios, mapear_columnas
 from .models import ImportacionFila, ImportacionListaPrecios, ProveedorColumnMapping
 from .services import procesar_importacion
 
@@ -868,3 +868,78 @@ class LlamarToolForzadoErroresTests(TestCase):
                 ["Marca", "Código", "Nombre", "Costo"],
                 [["Vulcano", "1", "Producto", "10"]],
             )
+
+
+class ExtraerListaPreciosRedDeContencionTests(TestCase):
+    """
+    Caso real: Importación #10 (Uriarte Taldea, catálogo en grilla de
+    tarjetas) — Sonnet devolvió productos:[] Y advertencias:[] a la vez,
+    sin explicar por qué. Confirmado ejecutando extraer_lista_precios()
+    contra el PDF real con la API real (no de memoria): input_tokens
+    coincidía casi exacto con el ia_resultado guardado en la Importación
+    #10 (26915), y la respuesta también vino con los dos arrays vacíos.
+
+    El ajuste de _SISTEMA_EXTRACCION (grillas de tarjetas + instrucción de
+    siempre explicarse) apunta a que esto no vuelva a pasar, pero esta red
+    de contención en extraer_lista_precios() no depende de que el prompt
+    funcione: mockea el cliente de anthropic directamente (mismo patrón
+    que LlamarToolForzadoErroresTests) para forzar el caso "los dos arrays
+    vacíos" sin pegarle a la API real, y confirma que nunca llega vacío de
+    contexto al resto del pipeline.
+    """
+
+    def _mockear_respuesta_vacia(self, mock_anthropic_cls):
+        bloque = MagicMock()
+        bloque.type = "tool_use"
+        bloque.name = "extraer_lista_precios"
+        bloque.input = {"productos": [], "advertencias": []}
+
+        respuesta = MagicMock()
+        respuesta.stop_reason = "tool_use"
+        respuesta.content = [bloque]
+        respuesta.model = "claude-sonnet-5"
+        respuesta.usage.input_tokens = 26915
+        respuesta.usage.output_tokens = 59
+
+        cliente = MagicMock()
+        cliente.with_options.return_value = cliente
+        cliente.messages.create.return_value = respuesta
+        mock_anthropic_cls.return_value = cliente
+
+    @patch("apps.imports.ai.anthropic.Anthropic")
+    def test_productos_y_advertencias_vacios_sintetiza_advertencia_generica(
+        self, mock_anthropic_cls
+    ):
+        self._mockear_respuesta_vacia(mock_anthropic_cls)
+
+        productos, advertencias, meta = extraer_lista_precios(b"%PDF-1.4 ...", "pdf")
+
+        self.assertEqual(productos, [])
+        self.assertEqual(len(advertencias), 1)
+        self.assertIn("no extrajo productos", advertencias[0])
+        self.assertIn("revisar manualmente", advertencias[0])
+        self.assertEqual(meta["input_tokens"], 26915)
+
+    @patch("apps.imports.ai.anthropic.Anthropic")
+    def test_no_pisa_una_advertencia_real_del_modelo(self, mock_anthropic_cls):
+        bloque = MagicMock()
+        bloque.type = "tool_use"
+        bloque.name = "extraer_lista_precios"
+        bloque.input = {
+            "productos": [],
+            "advertencias": ["El documento es una grilla de tarjetas ilegible."],
+        }
+        respuesta = MagicMock()
+        respuesta.stop_reason = "tool_use"
+        respuesta.content = [bloque]
+        respuesta.model = "claude-sonnet-5"
+        respuesta.usage.input_tokens = 100
+        respuesta.usage.output_tokens = 20
+        cliente = MagicMock()
+        cliente.with_options.return_value = cliente
+        cliente.messages.create.return_value = respuesta
+        mock_anthropic_cls.return_value = cliente
+
+        productos, advertencias, meta = extraer_lista_precios(b"%PDF-1.4 ...", "pdf")
+
+        self.assertEqual(advertencias, ["El documento es una grilla de tarjetas ilegible."])

@@ -1,6 +1,7 @@
 import tempfile
 from decimal import Decimal
 from io import BytesIO
+from unittest.mock import patch
 
 import openpyxl
 from django.contrib.auth.models import Group, Permission
@@ -14,7 +15,12 @@ from apps.pricing.models import HistorialCosto
 from apps.pricing.services import registrar_costo
 
 from .models import ImportacionFila, ImportacionListaPrecios
-from .parsing import ColumnasNoDetectadas, detectar_columnas, parsear_costo
+from .parsing import (
+    ColumnasNoDetectadas,
+    _inferir_columnas_bloque,
+    detectar_columnas,
+    parsear_costo,
+)
 from .services import confirmar_importacion, procesar_importacion
 
 # Los tests de esta app suben archivos .xlsx reales (ImportacionListaPrecios
@@ -59,6 +65,22 @@ class ParsingTests(TestCase):
         self.assertIsNone(parsear_costo(""))
         self.assertIsNone(parsear_costo(None))
         self.assertIsNone(parsear_costo("no es un número"))
+
+    def test_inferir_columnas_bloque_sin_columnas_a_la_izquierda_no_explota(self):
+        # indice_precio=0: no hay ninguna columna a la izquierda para
+        # buscar código/nombre. La fila necesita un valor parseable como
+        # costo en la columna 0 para llegar a esa rama (si no, ya devuelve
+        # (None, None) antes, por "candidatas" vacío) — caso real:
+        # Uriarte_Taldea_06-26_transcripto.xlsx, hoja "Notas", una oración
+        # que menciona "~225 filas" en su única columna, capturada por el
+        # regex laxo de parsear_costo(). Antes del fix, esto tumbaba
+        # max() sobre un dict vacío con un ValueError sin relación con
+        # el archivo.
+        resultado = _inferir_columnas_bloque(
+            [(1, ["Con ~225 filas conviene un control humano antes de aplicar."])],
+            indice_precio=0,
+        )
+        self.assertEqual(resultado, (None, None))
 
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT_TEST)
@@ -406,4 +428,41 @@ class VistasImportacionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No se pudieron reconocer las columnas")
+        self.assertEqual(ImportacionListaPrecios.objects.count(), 0)
+
+    def test_error_inesperado_se_loguea_con_traceback_antes_del_mensaje_generico(self):
+        """
+        Regresión del diagnóstico de Uriarte_Taldea_06-26_transcripto.xlsx:
+        un ValueError real de parsing.py (sin ninguna relación con el
+        archivo del usuario) quedaba disfrazado por el except genérico
+        como "no se pudo analizar de forma segura", sin dejar ningún
+        rastro del error real. Ahora el traceback completo se loguea antes
+        de mostrar el mensaje genérico al usuario.
+        """
+        grupo_admin, _ = Group.objects.get_or_create(name="Administrador")
+        grupo_admin.permissions.add(
+            Permission.objects.get(codename="add_historialcosto", content_type__app_label="pricing")
+        )
+        diego = User.objects.create_user(username="diego_error_inesperado", password="clave12345")
+        diego.groups.add(grupo_admin)
+
+        archivo = construir_excel(["Marca", "Código", "Nombre", "Costo"], [["Vulcano", "1", "Producto", "10"]])
+        self.client.login(username="diego_error_inesperado", password="clave12345")
+
+        with patch(
+            "apps.imports.views.procesar_importacion",
+            side_effect=ValueError("max() arg is an empty sequence"),
+        ):
+            with self.assertLogs("apps.imports.views", level="ERROR") as logs:
+                response = self.client.post(
+                    reverse("imports:nueva"),
+                    {"proveedor": self.proveedor.pk, "archivo": archivo},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No se pudo analizar el archivo de forma segura")
+        self.assertTrue(
+            any("max() arg is an empty sequence" in mensaje for mensaje in logs.output),
+            logs.output,
+        )
         self.assertEqual(ImportacionListaPrecios.objects.count(), 0)
